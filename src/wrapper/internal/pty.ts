@@ -67,7 +67,7 @@ export class PtyProcess {
   private readonly child: ChildProcess
   private _pid = 0
   private _exited = false
-  private buf = new Uint8Array(0)
+  private buf: Uint8Array<ArrayBufferLike> = new Uint8Array(0)
   private dataCb: ((d: Uint8Array) => void) | null = null
   private exitCb: ((e: PtyExit) => void) | null = null
 
