@@ -1,0 +1,11 @@
+# Recursion
+
+Recursion is a problem-solving technique where a function calls itself to break a larger problem into smaller versions of the same problem. It is common in algorithms that process nested or repeated structures, such as trees, directories, and mathematical sequences.
+
+A recursive solution usually has two key parts: a base case and a recursive case. The base case stops the process, while the recursive case moves the problem closer to that stopping point. For example, a `factorial` function keeps calling itself with smaller numbers until it reaches `1`.
+
+- Base case: the condition that ends recursion
+- Recursive case: the step that calls the same function again
+- Progress: the change that moves each call closer to completion
+
+Recursion can make code elegant and concise, but it must be used carefully. Without a reliable base case, recursion can run forever or cause a stack overflow. A good recursive function is clear, bounded, and easy to reason about.
