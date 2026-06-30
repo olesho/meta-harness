@@ -61,6 +61,8 @@ export {
   readyForInput,
 } from "./ready.ts"
 
+export { Conversation, Open, resolveAdapter, type Options } from "./conversation.ts"
+
 export type {
   WrapperSession,
   Adapter,

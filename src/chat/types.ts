@@ -45,8 +45,8 @@ export const EventInputResolved: EventType = "input_resolved"
 /** A discriminated event observed on Conversation.events(). */
 export interface ConversationEvent {
   type: EventType
-  /** Populated for EventTurn; zero Turn (empty id) otherwise. */
-  turn: Turn
+  /** Populated for EventTurn; omitted (undefined) for non-turn events. */
+  turn?: Turn
   /** The interactive prompt for input events; undefined for EventTurn. */
   input?: InputRequest
   /** Non-nil for out-of-band errors (e.g. Store failures). */
