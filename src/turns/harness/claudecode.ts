@@ -2,7 +2,7 @@
 //
 // Detection signals (verified against 2.1.x):
 //   - End of an assistant turn: a "✻ <verb> for Ns" thinking-summary line.
-//   - User interrupt: a "⎿  Interrupted · What should Claude do instead?" line.
+//   - User interrupt: a "⎿  Interrupted · What should Claude do instead?" line.
 //   - Blocking startup dialogs (folder-trust, bypass acceptance).
 //
 // Embeds the generic adapter so wrapper-level status events keep flowing.
@@ -34,7 +34,7 @@ const resumeRE =
 
 // interruptMarker is the literal text after the user interrupts a reply.
 // Note the NBSP (U+00A0) between the two spaces — matched exactly.
-const interruptMarker = "⎿  Interrupted · What should Claude do instead?"
+const interruptMarker = "⎿  Interrupted · What should Claude do instead?"
 
 // Blocking-dialog anchors.
 const trustAnchor = "Do you trust the files in this folder?"
