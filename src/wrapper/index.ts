@@ -1,5 +1,14 @@
 // Public barrel for `meta-harness/wrapper`.
 //
-// Stub for Phase 0 — concrete exports land in later phases. This barrel must
-// only ever re-export from src/wrapper/** (never from src/internal/**).
-export {}
+// Exposes the classifier core public surface. Implementation details live under
+// src/wrapper/internal/** and are aggregated by ./api.ts; this barrel re-exports
+// only from non-internal modules so it never names an `internal` import path
+// (the boundary the exports-guard test enforces). isSentinel is intentionally
+// NOT re-exported here — it belongs to the internal async toolkit; callers reach
+// the wrapper's cause-chain sentinels through isBinaryNotFound and the exported
+// ErrInvalidConfig / ErrBinaryNotFound objects.
+
+export * from "./api.ts"
+
+// Diagnostic trace vocabulary.
+export * as trace from "./trace.ts"
