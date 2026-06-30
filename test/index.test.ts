@@ -1,10 +1,13 @@
 import { expect, test } from "bun:test"
-import { farewell, greet } from "../src/index.ts"
+import { VERSION } from "../src/index.ts"
 
-test("greet builds a greeting", () => {
-  expect(greet("world")).toBe("Hello, world!")
+test("library root exposes a VERSION string", () => {
+  expect(typeof VERSION).toBe("string")
+  expect(VERSION.length).toBeGreaterThan(0)
 })
 
-test("farewell builds a farewell", () => {
-  expect(farewell("world")).toBe("Goodbye, world!")
+test("library root surfaces no scaffold placeholders", async () => {
+  const mod = (await import("../src/index.ts")) as Record<string, unknown>
+  expect(mod.greet).toBeUndefined()
+  expect(mod.farewell).toBeUndefined()
 })
