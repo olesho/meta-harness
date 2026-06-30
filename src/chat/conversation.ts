@@ -141,6 +141,14 @@ class Signal {
       this.waiter = resolve
     })
   }
+  /** Non-blocking drain — true if a signal was pending (the select default). */
+  tryReceive(): boolean {
+    if (this.pending) {
+      this.pending = false
+      return true
+    }
+    return false
+  }
 }
 
 /** A buffered chat-event channel: emit drops when full; receive/tryReceive read. */
