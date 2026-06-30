@@ -1,0 +1,54 @@
+```python
+from __future__ import annotations
+
+from typing import Iterable
+
+
+def fizzbuzz(n: int) -> list[str]:
+    """Return the FizzBuzz sequence from 1 through n.
+
+    >>> fizzbuzz(5)
+    ['1', '2', 'Fizz', '4', 'Buzz']
+
+    >>> fizzbuzz(15)[-3:]
+    ['13', '14', 'FizzBuzz']
+    """
+    if n < 1:
+        return []
+
+    result: list[str] = []
+
+    # Walk through the inclusive range and map each number to its label.
+    for value in range(1, n + 1):
+        divisible_by_3 = value % 3 == 0
+        divisible_by_5 = value % 5 == 0
+
+        # Multiples of both 3 and 5 get the combined label.
+        if divisible_by_3 and divisible_by_5:
+            result.append("FizzBuzz")
+
+        # Multiples of 3 become "Fizz".
+        elif divisible_by_3:
+            result.append("Fizz")
+
+        # Multiples of 5 become "Buzz".
+        elif divisible_by_5:
+            result.append("Buzz")
+
+        # Everything else is represented by the original number.
+        else:
+            result.append(str(value))
+
+    return result
+
+
+def print_lines(lines: Iterable[str]) -> None:
+    """Print one FizzBuzz item per line."""
+    for line in lines:
+        print(line)
+
+
+if __name__ == "__main__":
+    # Run a small default example when executed directly.
+    print_lines(fizzbuzz(100))
+```
