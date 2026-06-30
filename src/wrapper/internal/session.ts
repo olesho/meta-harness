@@ -201,6 +201,20 @@ function signalName(n: number): string {
   return SIGNAL_NAMES[n] ?? `signal ${n}`
 }
 
+function isAsyncIterable(x: unknown): x is AsyncIterable<unknown> {
+  return (
+    x != null &&
+    typeof (x as { [Symbol.asyncIterator]?: unknown })[Symbol.asyncIterator] ===
+      "function"
+  )
+}
+
+function toBytes(chunk: unknown): Uint8Array {
+  if (typeof chunk === "string") return new TextEncoder().encode(chunk)
+  if (chunk instanceof Uint8Array) return chunk
+  return new Uint8Array(0)
+}
+
 /**
  * classifyExit maps a finished PTY process into the wrapper's normalized
  * status. When the run's context was cancelled it is considered interrupted
@@ -390,8 +404,36 @@ export class Session {
     if (ctx) {
       void ctx.done().then(() => this.q.push({ kind: "ctx" }))
     }
+    if (this.cfg.stdin != null) {
+      void this.forwardStdin(this.cfg.stdin)
+    }
     this.startClassifier()
     void this.supervise()
+  }
+
+  /**
+   * Forward a Config.stdin source into the harness PTY. Accepts a string,
+   * Uint8Array, or any async-iterable byte stream (e.g. a Node Readable). On
+   * EOF, sends EOT (Ctrl+D) twice — the first submits any pending unterminated
+   * line, the second is read as end-of-file by the PTY's canonical-mode line
+   * discipline — mirroring the headless behavior in session.go.
+   */
+  private async forwardStdin(stdin: unknown): Promise<void> {
+    try {
+      if (typeof stdin === "string") {
+        this.pty.write(new TextEncoder().encode(stdin))
+      } else if (stdin instanceof Uint8Array) {
+        this.pty.write(stdin)
+      } else if (isAsyncIterable(stdin)) {
+        for await (const chunk of stdin) {
+          this.pty.write(toBytes(chunk))
+        }
+      }
+    } catch {
+      /* stdin source errored; nothing more to forward */
+    } finally {
+      this.pty.write(new Uint8Array([0x04, 0x04]))
+    }
   }
 
   private onOutput(d: Uint8Array): void {
@@ -503,6 +545,12 @@ export class Session {
         signal: result.signal,
         reason: result.reason,
         pid: result.pid,
+        started_at: result.startedAt,
+        ended_at: result.endedAt,
+        duration_ms:
+          result.endedAt && result.startedAt
+            ? result.endedAt.getTime() - result.startedAt.getTime()
+            : 0,
       },
     })
 
