@@ -7,6 +7,7 @@
 import { defineSentinel, isSentinel, wrap, type Sentinel } from "../../internal/async/errors.ts"
 import { type Classifier } from "./classification.ts"
 import { harnessSupportsEffort, isSupportedEffort } from "./effort.ts"
+import { type Emitter } from "../trace.ts"
 
 /**
  * Wrapper-level sentinel errors. Callers use isSentinel(err, X) to distinguish
@@ -44,8 +45,25 @@ export interface Config {
   idleClassify?: number
   /** Stale threshold (ms). */
   staleThreshold?: number
+  /** Wait after SIGTERM before escalating to SIGKILL (ms). */
+  waitDelay?: number
   /** Optional explicit classifier overriding per-harness resolution. */
   classifier?: Classifier | null
+  /** Working directory for the harness. Defaults to the current directory. */
+  workingDir?: string
+  /** Source forwarded into the harness PTY input. */
+  stdin?: unknown
+  /** Diagnostic trace emitter. Defaults to Discard. */
+  trace?: Emitter | null
+  /**
+   * Durable internal line tap. Receives every complete line of the harness's
+   * RAW PTY output, in order, with no drops: invoked synchronously in the PTY
+   * read loop. This is the load-bearing tap for session-id capture and live
+   * transcript parsing. Bytes are split on '\n' with a trailing '\r' trimmed;
+   * a final unterminated line is flushed once when the PTY closes. ANSI/control
+   * sequences are NOT stripped.
+   */
+  onLine?: ((line: string) => void) | null
 }
 
 /**
