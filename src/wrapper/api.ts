@@ -56,3 +56,18 @@ export {
   isSupportedEffort,
 } from "./internal/effort.ts"
 export { argsWithHarnessModel } from "./internal/mode.ts"
+
+// PTY supervision surface.
+export { start, run, type RunContext } from "./internal/run.ts"
+export {
+  Session,
+  ClassifierFunc,
+  classifyExit,
+  EventChannel,
+  type Result,
+  type Snapshot,
+  type SessionEvent,
+  type StdoutSink,
+  type EventRecv,
+} from "./internal/session.ts"
+export { ErrPTYAllocation, ErrPTYRead } from "./internal/pty.ts"
