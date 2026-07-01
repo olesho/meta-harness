@@ -7,6 +7,7 @@
   "types": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
+    "./async": "./src/async/index.ts",
     "./screen": "./src/screen/index.ts",
     "./wrapper": "./src/wrapper/index.ts",
     "./turns": "./src/turns/index.ts",

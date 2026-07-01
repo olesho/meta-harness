@@ -43,3 +43,35 @@ describe("public barriers never re-export src/internal/**", () => {
     }
   })
 })
+
+// `meta-harness/async` is the deliberate exception to the rule above: the ONE
+// sanctioned bridge that re-exports the Context cancellation primitive (which
+// chat.send / chat.acquireControl demand) from src/internal/**. It is therefore
+// NOT in PUBLIC_BARRELS — but it is still governed: it may surface EXACTLY the
+// cancellation surface and nothing else from the internal toolkit.
+describe("meta-harness/async is the sanctioned public cancellation seam", () => {
+  // Runtime (value) exports the async barrel is allowed to surface. CancelFn is
+  // type-only (erased at runtime) so it does not appear here.
+  const ALLOWED = ["Context", "ctxCanceled", "ctxDeadlineExceeded", "fromAbortSignal"]
+
+  test("surfaces exactly the cancellation primitive", async () => {
+    const mod = (await import("../src/async/index.ts")) as Record<string, unknown>
+    const names = Object.keys(mod).filter((n) => n !== "default")
+    expect(names.sort()).toEqual([...ALLOWED].sort())
+  })
+
+  test("does not leak the rest of the internal async toolkit", async () => {
+    const internalNames = Object.keys(
+      await import("../src/internal/async/index.ts"),
+    )
+    const forbidden = internalNames.filter((n) => !ALLOWED.includes(n))
+    const mod = (await import("../src/async/index.ts")) as Record<string, unknown>
+    for (const name of forbidden) {
+      expect(name in mod).toBe(false)
+    }
+    // Sanity: the toolkit really does carry names we expect to stay private.
+    expect(forbidden).toContain("Channel")
+    expect(forbidden).toContain("Mutex")
+    expect(forbidden).toContain("isSentinel")
+  })
+})
