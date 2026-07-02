@@ -14,7 +14,11 @@
     "./transcript": "./src/transcript/index.ts",
     "./chat": "./src/chat/index.ts",
     "./discovery": "./src/discovery/index.ts",
-    "./versions": "./src/versions/index.ts"
+    "./versions": "./src/versions/index.ts",
+    "./oneshot": "./src/oneshot/index.ts"
+  },
+  "bin": {
+    "meta-harness-run": "./src/cli/run.ts"
   },
   "scripts": {
     "test": "bun test",
