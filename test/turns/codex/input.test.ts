@@ -2,8 +2,10 @@
 
 import { describe, expect, test } from "bun:test"
 import * as codex from "../../../src/turns/harness/codex.ts"
+import type { InputRequest } from "../../../src/turns/types.ts"
 
 const dec = new TextDecoder()
+const enc = new TextEncoder()
 
 const updateNoticeScreen = `
   ✨  Update available! 0.140.0 -> 0.141.0
@@ -98,20 +100,56 @@ describe("codex input", () => {
     expect(dec.decode(keys!)).toBe("\r")
   })
 
-  test("auto-dismiss refuses unknown menu", () => {
-    const unknownMenu = `
-  Something new happened.
+  test("multi-option notice auto-dismisses via bare Enter", () => {
+    // ORCHE-68: a "Press enter to continue" notice that is neither an update
+    // notice nor a migration — parseMenuOptions extracts its informational
+    // numbered lines, so it has >1 option and no safe-token row. Enter is the
+    // continuation codex advertises, so AutoDismissKeys clears it with a bare CR
+    // instead of surfacing it (which previously blocked the codex plan-critic).
+    const noticeMenu = `
+  What's new in Codex
 
-› 1. Delete everything
-  2. Keep it
+› 1. View the changelog
+  2. Learn about /fast
 
   Press enter to continue
 `
-    const req = codex.DetectInput(unknownMenu)
+    const req = codex.DetectInput(noticeMenu)
     expect(req).not.toBeNull()
     expect(req!.kind).toBe(codex.KindNotice)
-    const [, ok] = codex.AutoDismissKeys(req)
+    expect(req!.options!.length).toBeGreaterThan(1)
+    const [keys, ok] = codex.AutoDismissKeys(req)
+    expect(ok).toBe(true)
+    expect(dec.decode(keys!)).toBe("\r")
+  })
+
+  test("single-option notice auto-dismisses via bare Enter", () => {
+    // The DetectInput fallback (no parsed menu rows → a lone "continue" option).
+    const noticeOnly = `
+  Heads up: something changed.
+
+  Press enter to continue
+`
+    const req = codex.DetectInput(noticeOnly)
+    expect(req).not.toBeNull()
+    expect(req!.kind).toBe(codex.KindNotice)
+    const [keys, ok] = codex.AutoDismissKeys(req)
+    expect(ok).toBe(true)
+    expect(dec.decode(keys!)).toBe("\r")
+  })
+
+  test("update notice without a Skip row is NOT auto-dismissed", () => {
+    // Safety guard for the sibling KindUpdateNotice case: it must never bare-Enter
+    // (that would run the highlighted "Update now"); with no skip alias it refuses.
+    const req: InputRequest = {
+      id: "u1",
+      kind: codex.KindUpdateNotice,
+      prompt: "Update available!",
+      options: [{ id: "1", alias: "update", label: "Update now", keys: enc.encode("1\r") }],
+    }
+    const [keys, ok] = codex.AutoDismissKeys(req)
     expect(ok).toBe(false)
+    expect(keys).toBeNull()
   })
 
   test("prompt-ready is not interstitial", () => {

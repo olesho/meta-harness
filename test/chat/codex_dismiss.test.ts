@@ -29,6 +29,26 @@ describe("codex auto-dismiss", () => {
     expect(c.eventCh.tryReceive().ok).toBe(false)
   })
 
+  test("notice: multi-option 'Press enter to continue' cleared by bare Enter, nothing surfaced", () => {
+    // ORCHE-68: a codex_notice whose parsed rows carry no safe-token alias used
+    // to return [null,false] and surface, blocking the codex plan-critic's first
+    // send with ErrInputPending. tryAutoDismissCodex now clears it with a bare CR.
+    const rec = new KeyRecorder()
+    const c = newTestConv({ harness: "codex" }, rec)
+    c.handleInputRequested({
+      id: "ntc-1",
+      kind: codex.KindNotice,
+      prompt: "Press enter to continue",
+      options: [
+        { id: "1", alias: "", label: "View changelog", keys: enc.encode("1\r") },
+        { id: "2", alias: "", label: "Learn more", keys: enc.encode("2\r") },
+      ],
+    })
+    expect(rec.text()).toBe("\r")
+    expect(c.inputSurfaced).toBe(false)
+    expect(c.eventCh.tryReceive().ok).toBe(false)
+  })
+
   test("disabled: interstitial surfaces to client", () => {
     const rec = new KeyRecorder()
     const c = newTestConv({ harness: "codex", disableCodexAutoDismiss: true }, rec)
