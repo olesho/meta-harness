@@ -192,13 +192,18 @@ export function AutoDismissKeys(
       if (o) return [o.keys, true]
       return [null, false]
     }
-    case KindNotice: {
-      const opts = req.options ?? []
-      if (opts.length === 1 && opts[0]!.alias === "continue") {
-        return [enc.encode("\r"), true]
-      }
-      return [null, false]
-    }
+    case KindNotice:
+      // A KindNotice is classified only when the screen shows the "Press enter
+      // to continue" anchor and is neither an update notice nor a model
+      // migration (both are matched earlier in DetectInput and carry their own
+      // safe dismissal). Enter is the continuation codex itself advertises, so a
+      // bare CR clears the notice regardless of how many numbered body lines
+      // parseMenuOptions happened to extract — a multi-option notice with no
+      // safe-token menu row is exactly the case that previously surfaced and
+      // blocked the codex plan-critic on its first send (ORCHE-68). Genuine
+      // command-approval prompts are a different kind and are never classified as
+      // KindNotice, so they still surface and are not auto-answered.
+      return [enc.encode("\r"), true]
     case KindModelMigration:
       return [enc.encode("\r"), true]
     default:
