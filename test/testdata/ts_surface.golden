@@ -182,6 +182,7 @@ chat/index.ts
   TurnsInputRequest: type
   Watcher: type
   WrapperSession: type
+  cleanHarnessEnv: function
   newMemStore: function
   readyForInput: function
   requiresPromptReadiness: function

@@ -73,6 +73,7 @@ import {
 } from "./errors.ts"
 import { ControlQueue, newControlQueue } from "./control.ts"
 import { submitKeyForHarness, requiresPromptReadiness, readyForInput } from "./ready.ts"
+import { cleanHarnessEnv } from "./env.ts"
 
 /** Options configures a single Conversation. Mirrors chat.Options. */
 export interface Options {
@@ -878,7 +879,11 @@ export async function Open(ctx: Context | undefined, opts: Options): Promise<Con
     binaryPath: opts.binaryPath,
     args: opts.args,
     workingDir: opts.workingDir,
-    env: opts.env,
+    // Strip Claude Code's nesting markers (CLAUDECODE / CLAUDE_CODE_*) so a
+    // nested `claude` persists its JSONL transcript. When opts.env is undefined
+    // this materializes the parent env, since a PTY child would otherwise
+    // inherit the markers. Mirrors run.go's cleanedEnv().
+    env: cleanHarnessEnv(opts.env),
     stdout: scr,
     harness: opts.harness,
     effort: opts.effort,

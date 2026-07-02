@@ -42,6 +42,8 @@ export {
 export type { Store } from "./store.ts"
 export { MemStore, newMemStore } from "./memstore.ts"
 
+export { cleanHarnessEnv } from "./env.ts"
+
 export {
   ErrInvalidOptions,
   ErrUnknownHarness,

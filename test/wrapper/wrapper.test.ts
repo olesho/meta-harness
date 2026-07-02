@@ -161,6 +161,24 @@ describe("Run", () => {
     expect(result.reason).toContain("context cancelled")
   })
 
+  test("context DEADLINE interrupts with a distinct 'deadline exceeded' reason", async () => {
+    const { sink, drain } = captureStdout()
+    // A deadline (ctxDeadlineExceeded) must be distinguishable from a plain
+    // cancel so the orche side can synthesize exit-124 only for a real timeout.
+    const { ctx } = Context.withDeadline(Context.background(), 100)
+    const { result, err } = await run(ctx, {
+      binaryPath: mockHarnessBin,
+      args: ["--mode", "stuck"],
+      stdout: sink,
+      waitDelay: 500,
+    })
+    drain()
+    expect(err).toBeNull()
+    expect(result.status).toBe(StatusInterrupted)
+    expect(result.reason).toContain("context deadline exceeded")
+    expect(result.reason).not.toContain("cancelled")
+  })
+
   test("needs-input mode forwards stdin (delayed stream)", async () => {
     const { sink, drain } = captureStdout()
     const { PassThrough } = await import("node:stream")

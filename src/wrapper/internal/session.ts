@@ -31,6 +31,8 @@ import {
   type Status,
 } from "./status.ts"
 import { Discard, type Emitter } from "../trace.ts"
+import { ctxDeadlineExceeded } from "../../internal/async/context.ts"
+import { isSentinel } from "../../internal/async/errors.ts"
 
 /** A sink the wrapper writes raw PTY bytes to (the Config.stdout target). */
 export interface StdoutSink {
@@ -107,7 +109,7 @@ type SupervisorEvent =
   | { kind: "exit" }
   | { kind: "class"; c: InternalClassification }
   | { kind: "stop" }
-  | { kind: "ctx" }
+  | { kind: "ctx"; err?: unknown }
 
 class Waker<T> {
   private items: T[] = []
@@ -219,10 +221,17 @@ function toBytes(chunk: unknown): Uint8Array {
  * classifyExit maps a finished PTY process into the wrapper's normalized
  * status. When the run's context was cancelled it is considered interrupted
  * regardless of how the child happened to exit.
+ *
+ * `ctxErr` is the context's cancellation cause, when known. A deadline expiry
+ * (ctxDeadlineExceeded) surfaces reason "context deadline exceeded"; every other
+ * cancel (explicit cancel / an abort adapter / an unknown cause) stays "context
+ * cancelled". Callers rely on this to tell a real timeout from an abort — e.g.
+ * orche synthesizes exit-124 only for the deadline wording.
  */
 export function classifyExit(
   exit: PtyExit,
   ctxCancelled: boolean,
+  ctxErr?: unknown,
 ): { status: Status; exitCode: number; signal: string; reason: string } {
   if (ctxCancelled) {
     const sig = exit.signal !== 0 ? signalName(exit.signal) : ""
@@ -230,7 +239,9 @@ export function classifyExit(
       status: StatusInterrupted,
       exitCode: exit.exitCode,
       signal: sig,
-      reason: "context cancelled",
+      reason: isSentinel(ctxErr, ctxDeadlineExceeded)
+        ? "context deadline exceeded"
+        : "context cancelled",
     }
   }
   if (exit.exitCode === 0 && exit.signal === 0) {
@@ -393,7 +404,7 @@ export class Session {
   // --- internal supervision ------------------------------------------------
 
   /** Begin supervising; wires PTY callbacks and the classifier timer. */
-  start(ctx?: { done(): Promise<void> }): void {
+  start(ctx?: { done(): Promise<void>; err?(): unknown }): void {
     this.pty.onData((d) => this.onOutput(d))
     this.pty.onExit((e) => {
       if (this.exitInfo) return
@@ -402,7 +413,10 @@ export class Session {
       this.q.push({ kind: "exit" })
     })
     if (ctx) {
-      void ctx.done().then(() => this.q.push({ kind: "ctx" }))
+      // Capture the cancellation cause (deadline vs cancel) at fire time — the
+      // Context sets err() before resolving done() — so classifyExit can tell a
+      // real timeout from an abort.
+      void ctx.done().then(() => this.q.push({ kind: "ctx", err: ctx.err?.() }))
     }
     if (this.cfg.stdin != null) {
       void this.forwardStdin(this.cfg.stdin)
@@ -456,6 +470,7 @@ export class Session {
     let terminalClassDone: InternalClassification | null = null
     let lastErrClass: ErrorClass = ErrNone
     let ctxCancelled = false
+    let ctxErr: unknown = undefined
 
     for (;;) {
       const ev = await this.q.take()
@@ -480,6 +495,7 @@ export class Session {
       }
       if (ev.kind === "ctx") {
         ctxCancelled = true
+        ctxErr = ev.err
         this.terminate()
         continue
       }
@@ -505,7 +521,7 @@ export class Session {
       lastOutputAt: this.lastOutput > 0 ? new Date(this.lastOutput) : null,
     }
 
-    const ce = classifyExit(exit, ctxCancelled)
+    const ce = classifyExit(exit, ctxCancelled, ctxErr)
     result.status = ce.status
     result.exitCode = ce.exitCode
     result.signal = ce.signal
@@ -718,7 +734,7 @@ export function applyDefaults(cfg: Config): void {
 export async function startSession(
   cfg: Config,
   pty: PtyProcess,
-  ctx?: { done(): Promise<void> },
+  ctx?: { done(): Promise<void>; err?(): unknown },
 ): Promise<Session> {
   const trace = cfg.trace ?? Discard
   const startedAt = new Date()

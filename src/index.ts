@@ -1,9 +1,12 @@
 // meta-harness — library root.
 //
 // This barrel is intentional: it exports only the package VERSION and curated,
-// public re-exports. Nothing private is surfaced here. In particular, the
-// async toolkit and everything else under `src/internal/**` is NEVER exported
-// from this file or any public subpath barrel (./screen, ./wrapper, ./turns,
-// ./transcript, ./chat, ./discovery, ./versions).
+// public re-exports. Nothing private is surfaced here. The internal async
+// toolkit under `src/internal/**` stays private too — with ONE sanctioned
+// exception: the `meta-harness/async` subpath re-exports just the Context
+// cancellation primitive (Context / ctxCanceled / ctxDeadlineExceeded /
+// fromAbortSignal) that chat.send / chat.acquireControl require. No other public
+// subpath barrel (./screen, ./wrapper, ./turns, ./transcript, ./chat,
+// ./discovery, ./versions) exposes anything from `src/internal/**`.
 
 export const VERSION = "0.0.0"
