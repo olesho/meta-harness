@@ -3,8 +3,8 @@ import { readFileSync } from "node:fs"
 import { fileURLToPath } from "node:url"
 import { dirname, join } from "node:path"
 
-// The seven public subpath barrels named in package.json `exports`, plus the
-// root. None of them may re-export anything from src/internal/**.
+// The public subpath barrels named in package.json `exports`, plus the root.
+// None of them may re-export anything from src/internal/**.
 const here = dirname(fileURLToPath(import.meta.url))
 const srcRoot = join(here, "..", "src")
 
@@ -17,6 +17,7 @@ const PUBLIC_BARRELS = [
   "chat/index.ts",
   "discovery/index.ts",
   "versions/index.ts",
+  "oneshot/index.ts",
 ]
 
 // Matches `from "...internal..."` / `import("...internal...")` in any barrel.

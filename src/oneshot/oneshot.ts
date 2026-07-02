@@ -34,6 +34,10 @@ export interface OneShotConfig {
   /** Terminal geometry; defaults match chat.Open (120x40). */
   cols?: number
   rows?: number
+  /** Test-only idle-completion window override (ms). Zero/undefined = package default. */
+  idleGap?: number
+  /** Test-only marker-confirm window override (ms). Zero/undefined = package default. */
+  markerGap?: number
 }
 
 /** Thrown when the run's deadline (or an ancestor deadline) fired before completion. */
@@ -114,6 +118,8 @@ export async function runOneShot(ctx: Context, cfg: OneShotConfig): Promise<stri
     model: cfg.model,
     cols: cfg.cols,
     rows: cfg.rows,
+    idleGap: cfg.idleGap,
+    markerGap: cfg.markerGap,
     store: newMemStore(),
     inputPolicy: AutoAcceptTrust,
   })
