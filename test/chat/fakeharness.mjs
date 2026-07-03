@@ -10,9 +10,12 @@
 // optionally echo the captured prompt back. See fakeharness.ts for the script
 // format and builder.
 
-import { readFileSync } from "node:fs"
+import { readFileSync, writeFileSync } from "node:fs"
 
 const ENV_VAR = "FAKEHARNESS_SCRIPT"
+// When set, the launch argv (process.argv.slice(2)) is dumped as JSON to this
+// path on startup so resume tests can assert the harness received resume args.
+const ARGV_OUT_VAR = "FAKEHARNESS_ARGV_OUT"
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
 // A byte accumulator over stdin that resolves once its buffer matches a RegExp.
@@ -49,6 +52,15 @@ function holdUntilClosed() {
 }
 
 async function run() {
+  const argvOut = process.env[ARGV_OUT_VAR]
+  if (argvOut) {
+    try {
+      writeFileSync(argvOut, JSON.stringify(process.argv.slice(2)))
+    } catch {
+      /* best effort */
+    }
+  }
+
   const path = process.env[ENV_VAR]
   if (!path) throw new Error(`${ENV_VAR} not set`)
   const sc = JSON.parse(readFileSync(path, "utf8"))

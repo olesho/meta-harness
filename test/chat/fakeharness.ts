@@ -11,7 +11,7 @@ import { tmpdir } from "node:os"
 import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 
-import { Open, type Conversation, type Turn } from "../../src/chat/index.ts"
+import { Open, type Conversation, type Options, type Turn } from "../../src/chat/index.ts"
 import {
   EventTurn,
   RoleAssistant,
@@ -25,6 +25,9 @@ const here = dirname(fileURLToPath(import.meta.url))
 
 /** Env var the runnable reads the script-file path from. */
 export const EnvVar = "FAKEHARNESS_SCRIPT"
+
+/** Env var the runnable dumps its launch argv (argv.slice(2)) to, as JSON. */
+export const ArgvOutVar = "FAKEHARNESS_ARGV_OUT"
 
 /** Absolute path to the executable fake-harness runnable (node shebang). */
 export const fakeHarnessBin: string = join(here, "fakeharness.mjs")
@@ -319,15 +322,28 @@ export const testMarkerGap = 120
  * FAKEHARNESS_SCRIPT env var; env is the full environment so the child keeps
  * PATH/TERM (and can resolve the node shebang).
  */
-export async function openFake(script: Script): Promise<Conversation> {
+/**
+ * fakeLaunchEnv writes the script to a temp file and returns the env array a
+ * fake-harness launch needs (script path + optional argv-dump path), so callers
+ * that drive Open/Reopen directly (e.g. resume tests) can supply their own Store.
+ */
+export function fakeLaunchEnv(script: Script, argvOut?: string): string[] {
   const dir = mkdtempSync(join(tmpdir(), "fakeharness-script-"))
   const scriptPath = join(dir, "script.json")
   writeFileSync(scriptPath, JSON.stringify(script), { mode: 0o600 })
-
-  const env = [
+  return [
     ...Object.entries(process.env).map(([k, v]) => `${k}=${v ?? ""}`),
     `${EnvVar}=${scriptPath}`,
+    ...(argvOut ? [`${ArgvOutVar}=${argvOut}`] : []),
   ]
+}
+
+export async function openFake(
+  script: Script,
+  overrides: Partial<Options> & { argvOut?: string } = {},
+): Promise<Conversation> {
+  const { argvOut, ...optOverrides } = overrides
+  const env = fakeLaunchEnv(script, argvOut)
 
   return Open(undefined, {
     harness: script.harness,
@@ -338,6 +354,7 @@ export async function openFake(script: Script): Promise<Conversation> {
     rows: 40,
     idleGap: testIdleGap,
     markerGap: testMarkerGap,
+    ...optOverrides,
   })
 }
 

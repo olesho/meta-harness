@@ -63,6 +63,7 @@ turns/index.ts
   SessionIDExtractor: type
   SessionIDLocator: type
   SessionLike: type
+  SessionResumer: type
   Status: type
   StatusAPIError: string="api_error"
   StatusBinaryNotFound: string="binary_not_found"
@@ -141,8 +142,10 @@ chat/index.ts
   ErrInputPending: object{code,name}
   ErrInvalidOptions: object{code,name}
   ErrNoControl: object{code,name}
+  ErrNoHarnessSession: object{code,name}
   ErrNoInputPending: object{code,name}
   ErrQuitUnsupported: object{code,name}
+  ErrResumeUnsupported: object{code,name}
   ErrStaleInputRequest: object{code,name}
   ErrTurnInFlight: object{code,name}
   ErrUnknownHarness: object{code,name}
@@ -162,6 +165,8 @@ chat/index.ts
   MemStore: class{appendTurn,createSession,getSession,listTurns,updateSession,updateTurn}
   Open: function
   Options: type
+  Reopen: function
+  ReopenOptions: type
   Role: type
   RoleAssistant: string="assistant"
   RoleSystem: string="system"
