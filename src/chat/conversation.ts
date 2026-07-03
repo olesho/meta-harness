@@ -70,6 +70,7 @@ import {
   ErrStaleInputRequest,
   ErrUnknownOption,
   ErrQuitUnsupported,
+  ErrResumeUnsupported,
 } from "./errors.ts"
 import { ControlQueue, newControlQueue } from "./control.ts"
 import { submitKeyForHarness, requiresPromptReadiness, readyForInput } from "./ready.ts"
@@ -82,6 +83,14 @@ export interface Options {
   /** The harness executable. Required. */
   binaryPath: string
   args?: string[]
+  /**
+   * Resume a prior harness session instead of starting fresh. When set to a
+   * harness session UUID (e.g. one captured on a previous Open), the adapter
+   * must implement turns.SessionResumer — Open injects the harness-specific
+   * resume args and seeds the session's harnessSessionID. Open throws
+   * ErrResumeUnsupported if the adapter cannot resume.
+   */
+  resume?: string
   workingDir?: string
   env?: string[]
   effort?: string
@@ -742,6 +751,12 @@ export class Conversation {
     return typeof a.extractSessionIDFromLine === "function"
   }
 
+  private adapterResumeArgs(harnessSessionID: string, baseArgs: string[]): string[] | null {
+    const a = this.adapter as unknown as Record<string, unknown>
+    if (typeof a.resumeArgs !== "function") return null
+    return (a.resumeArgs as (id: string, base: string[]) => string[])(harnessSessionID, baseArgs)
+  }
+
   private async waitReadyForSend(ctx: Context): Promise<void> {
     if (this.inputAwaitingClient()) throw ErrInputPending
     if (!requiresPromptReadiness(this.opts.harness)) return
@@ -873,11 +888,24 @@ export async function Open(ctx: Context | undefined, opts: Options): Promise<Con
     },
   })
 
+  // Resume a prior harness session: let the adapter fold the harness-specific
+  // resume token into the launch args, and seed harnessSessionID so history()
+  // reads the resumed transcript and the raw-line capture does not overwrite it.
+  let launchArgs = opts.args
+  if (opts.resume) {
+    const resumed = c["adapterResumeArgs"](opts.resume, opts.args ?? [])
+    if (resumed === null) {
+      throw wrap(`chat: harness ${opts.harness} cannot resume`, ErrResumeUnsupported)
+    }
+    launchArgs = resumed
+    c.session.harnessSessionID = opts.resume
+  }
+
   const runCtx = ctx ? { done: () => ctx.done(), err: () => ctx.err() } : undefined
 
   const cfg = {
     binaryPath: opts.binaryPath,
-    args: opts.args,
+    args: launchArgs,
     workingDir: opts.workingDir,
     // Strip Claude Code's nesting markers (CLAUDECODE / CLAUDE_CODE_*) so a
     // nested `claude` persists its JSONL transcript. When opts.env is undefined

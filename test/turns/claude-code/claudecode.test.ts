@@ -1,11 +1,17 @@
 // Port of pkg/turns/harness/claudecode/claudecode_test.go.
 // Corpus replay: bytes.raw → Screen → adapter, asserting marker fire/no-fire.
 
-import { describe, expect, test } from "bun:test"
+import { afterEach, describe, expect, test } from "bun:test"
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
 import { newScreen } from "../../../src/screen/index.ts"
+import { encodedCWD } from "../../../src/transcript/claudecode/claudecode.ts"
 import * as claudecode from "../../../src/turns/harness/claudecode.ts"
 import { Errored, TurnComplete } from "../../../src/turns/index.ts"
 import { corpusBytes } from "../corpus.ts"
+
+const tmpRoots: string[] = []
 
 describe("claude-code adapter", () => {
   test("fires TurnComplete on multi-turn recording", async () => {
@@ -85,5 +91,53 @@ describe("claude-code adapter", () => {
     for (const ev of claudecode.New().onScreen(scr.snapshot())) {
       expect(ev.kind).not.toBe(TurnComplete)
     }
+  })
+})
+
+describe("claude-code readTranscript", () => {
+  afterEach(() => {
+    for (const r of tmpRoots) rmSync(r, { recursive: true, force: true })
+    tmpRoots.length = 0
+  })
+
+  test("projects the on-disk log to turns", () => {
+    const root = mkdtempSync(join(tmpdir(), "claude-projects-"))
+    tmpRoots.push(root)
+
+    const cwd = "/some/work/dir"
+    const projDir = join(root, encodedCWD(cwd))
+    mkdirSync(projDir, { recursive: true })
+    const body =
+      `{"type":"user","message":{"role":"user","content":"hello"},"timestamp":"2026-05-14T12:00:00Z"}\n` +
+      `{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"hi there"}]},"timestamp":"2026-05-14T12:00:05Z"}\n`
+    writeFileSync(join(projDir, "sess-uuid.jsonl"), body)
+
+    const a = claudecode.New()
+    a.projectsRoot = root // test seam: override default ~/.claude/projects
+    const turns = a.readTranscript("sess-uuid", cwd)
+    expect(turns).toHaveLength(2)
+    expect(turns[0]!.role).toBe("user")
+    expect(turns[0]!.text).toBe("hello")
+    expect(turns[1]!.role).toBe("assistant")
+    expect(turns[1]!.text).toBe("hi there")
+  })
+
+  test("throws for a missing session", () => {
+    const root = mkdtempSync(join(tmpdir(), "claude-projects-"))
+    tmpRoots.push(root)
+    const a = claudecode.New()
+    a.projectsRoot = root
+    expect(() => a.readTranscript("missing", "/no/such/dir")).toThrow()
+  })
+})
+
+describe("claude-code resumeArgs", () => {
+  test("appends --resume <uuid> after the base args", () => {
+    const args = claudecode.New().resumeArgs("sess-uuid", ["--model", "opus"])
+    expect(args).toEqual(["--model", "opus", "--resume", "sess-uuid"])
+  })
+
+  test("works with no base args", () => {
+    expect(claudecode.New().resumeArgs("sess-uuid", [])).toEqual(["--resume", "sess-uuid"])
   })
 })

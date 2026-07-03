@@ -63,6 +63,7 @@ turns/index.ts
   SessionIDExtractor: type
   SessionIDLocator: type
   SessionLike: type
+  SessionResumer: type
   Status: type
   StatusAPIError: string="api_error"
   StatusBinaryNotFound: string="binary_not_found"
@@ -130,7 +131,7 @@ transcript/index.ts
 chat/index.ts
   Adapter: type
   Backend: type
-  Conversation: class{acquireControl,adapterBusy,adapterQuitSequence,adapterRawSessionID,answer,assistantText,captureRawSessionID,close,consumeWatcher,emit,events,extractSessionID,getAdapter,handleInputRequested,handleInputResolved,handleTurnsEvent,history,historyWithSource,idleCompletionWatcher,idleGapDur,inputAwaitingClient,isClosed,markerGapDur,maybeExtractSessionID,maybeIdleComplete,policyOption,quit,screenSnapshot,send,sessionID,signalInputState,startPumps,tryAutoDismissCodex,tryResolveInput,waitReadyForSend,wrapper,writeAnswer,writeKeys}
+  Conversation: class{acquireControl,adapterBusy,adapterQuitSequence,adapterRawSessionID,adapterResumeArgs,answer,assistantText,captureRawSessionID,close,consumeWatcher,emit,events,extractSessionID,getAdapter,handleInputRequested,handleInputResolved,handleTurnsEvent,history,historyWithSource,idleCompletionWatcher,idleGapDur,inputAwaitingClient,isClosed,markerGapDur,maybeExtractSessionID,maybeIdleComplete,policyOption,quit,screenSnapshot,send,sessionID,signalInputState,startPumps,tryAutoDismissCodex,tryResolveInput,waitReadyForSend,wrapper,writeAnswer,writeKeys}
   ConversationEvent: type
   Disposition: type
   DispositionAnswer: string="answer"
@@ -143,6 +144,7 @@ chat/index.ts
   ErrNoControl: object{code,name}
   ErrNoInputPending: object{code,name}
   ErrQuitUnsupported: object{code,name}
+  ErrResumeUnsupported: object{code,name}
   ErrStaleInputRequest: object{code,name}
   ErrTurnInFlight: object{code,name}
   ErrUnknownHarness: object{code,name}

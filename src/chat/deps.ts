@@ -110,6 +110,8 @@ export interface Adapter {
   locateSessionID?(workingDir: string): [string, boolean]
   /** turns.TranscriptReader — read the harness's own JSONL session log. */
   readTranscript?(harnessSessionID: string, workingDir: string): TranscriptTurn[]
+  /** turns.SessionResumer — merge resume tokens into the launch args. */
+  resumeArgs?(harnessSessionID: string, baseArgs: string[]): string[]
   /** turns.MessageExtractor — isolate the clean assistant reply from the TUI. */
   extractMessage?(snap: Snapshot): [string, boolean]
   /** turns.BusyDetector — report whether the harness is still working. */

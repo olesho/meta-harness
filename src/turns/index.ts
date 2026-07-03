@@ -17,6 +17,7 @@ export type {
   RawSessionIDExtractor,
   SessionIDExtractor,
   SessionIDLocator,
+  SessionResumer,
   TranscriptReader,
   Turn,
 } from "./types.ts"

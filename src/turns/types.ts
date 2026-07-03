@@ -120,6 +120,16 @@ export interface TranscriptReader {
   readTranscript(harnessSessionID: string, workingDir: string): Turn[]
 }
 
+/**
+ * Builds the harness-specific command args that resume a prior session. The
+ * placement of the resume token is harness-specific (Claude Code appends a
+ * `--resume <uuid>` flag; Codex prepends a `resume <uuid>` subcommand), so the
+ * adapter merges it into the base args itself rather than returning a fragment.
+ */
+export interface SessionResumer {
+  resumeArgs(harnessSessionID: string, baseArgs: string[]): string[]
+}
+
 /** Surfaces the key sequence that makes the harness exit gracefully. */
 export interface Quitter {
   quitSequence(): Uint8Array

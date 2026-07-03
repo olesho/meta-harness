@@ -14,6 +14,8 @@ import { readFileSync, realpathSync, statSync } from "node:fs"
 import { readdirSync } from "node:fs"
 import { join, resolve } from "node:path"
 import type { Snapshot } from "../../screen/index.ts"
+import { CodexReader } from "../../transcript/codex/codex.ts"
+import { turnsFromEvents } from "../../transcript/event.ts"
 import { GenericAdapter } from "../generic.ts"
 import type {
   Adapter,
@@ -103,9 +105,18 @@ export class CodexAdapter extends GenericAdapter implements Adapter {
     return locateLatestSession(this.sessionsRoot, workingDir)
   }
 
-  /** Implements turns.TranscriptReader. */
-  readTranscript(_harnessSessionID: string, _workingDir: string): Turn[] {
-    throw new Error("codex transcript reader not yet ported")
+  /** Implements turns.TranscriptReader — reads the on-disk Codex session log. */
+  readTranscript(harnessSessionID: string, workingDir: string): Turn[] {
+    const evs = new CodexReader(this.sessionsRoot).read(harnessSessionID, workingDir)
+    return turnsFromEvents(evs)
+  }
+
+  /**
+   * Implements turns.SessionResumer. Codex resumes via a `resume <uuid>`
+   * subcommand that must lead the argument vector (`codex resume <uuid> …`).
+   */
+  resumeArgs(harnessSessionID: string, baseArgs: string[]): string[] {
+    return ["resume", harnessSessionID, ...baseArgs]
   }
 }
 

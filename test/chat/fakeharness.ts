@@ -11,7 +11,7 @@ import { tmpdir } from "node:os"
 import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 
-import { Open, type Conversation, type Turn } from "../../src/chat/index.ts"
+import { Open, type Conversation, type Store, type Turn } from "../../src/chat/index.ts"
 import {
   EventTurn,
   RoleAssistant,
@@ -25,6 +25,9 @@ const here = dirname(fileURLToPath(import.meta.url))
 
 /** Env var the runnable reads the script-file path from. */
 export const EnvVar = "FAKEHARNESS_SCRIPT"
+
+/** Env var the runnable writes its launch argv (JSON) to, when set. */
+export const ArgvOutEnvVar = "FAKEHARNESS_ARGV_OUT"
 
 /** Absolute path to the executable fake-harness runnable (node shebang). */
 export const fakeHarnessBin: string = join(here, "fakeharness.mjs")
@@ -319,7 +322,18 @@ export const testMarkerGap = 120
  * FAKEHARNESS_SCRIPT env var; env is the full environment so the child keeps
  * PATH/TERM (and can resolve the node shebang).
  */
-export async function openFake(script: Script): Promise<Conversation> {
+export interface OpenFakeOpts {
+  /** Resume a prior harness session (threads through to Options.resume). */
+  resume?: string
+  /** Extra launch args passed to the fake harness (and merged with resume). */
+  args?: string[]
+  /** Store to back the conversation; defaults to a fresh MemStore. */
+  store?: Store
+  /** When set, the fake harness writes its launch argv (JSON) to this path. */
+  argvOut?: string
+}
+
+export async function openFake(script: Script, extra: OpenFakeOpts = {}): Promise<Conversation> {
   const dir = mkdtempSync(join(tmpdir(), "fakeharness-script-"))
   const scriptPath = join(dir, "script.json")
   writeFileSync(scriptPath, JSON.stringify(script), { mode: 0o600 })
@@ -327,13 +341,16 @@ export async function openFake(script: Script): Promise<Conversation> {
   const env = [
     ...Object.entries(process.env).map(([k, v]) => `${k}=${v ?? ""}`),
     `${EnvVar}=${scriptPath}`,
+    ...(extra.argvOut ? [`${ArgvOutEnvVar}=${extra.argvOut}`] : []),
   ]
 
   return Open(undefined, {
     harness: script.harness,
     binaryPath: fakeHarnessBin,
+    args: extra.args,
+    resume: extra.resume,
     env,
-    store: newMemStore(),
+    store: extra.store ?? newMemStore(),
     cols: 120,
     rows: 40,
     idleGap: testIdleGap,

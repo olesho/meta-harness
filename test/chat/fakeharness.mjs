@@ -10,9 +10,12 @@
 // optionally echo the captured prompt back. See fakeharness.ts for the script
 // format and builder.
 
-import { readFileSync } from "node:fs"
+import { readFileSync, writeFileSync } from "node:fs"
 
 const ENV_VAR = "FAKEHARNESS_SCRIPT"
+// When set, the launch argv (minus node + this script) is written here as JSON
+// so resume-injection tests can assert the harness received `--resume <uuid>`.
+const ARGV_OUT_VAR = "FAKEHARNESS_ARGV_OUT"
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
 // A byte accumulator over stdin that resolves once its buffer matches a RegExp.
@@ -52,6 +55,10 @@ async function run() {
   const path = process.env[ENV_VAR]
   if (!path) throw new Error(`${ENV_VAR} not set`)
   const sc = JSON.parse(readFileSync(path, "utf8"))
+
+  // Record the launch args (past `node fakeharness.mjs`) for resume tests.
+  const argvOut = process.env[ARGV_OUT_VAR]
+  if (argvOut) writeFileSync(argvOut, JSON.stringify(process.argv.slice(2)))
 
   // A real TUI switches its PTY slave to raw so it can read control bytes — the
   // CSI-13u submit carries no newline, so canonical mode would block forever —

@@ -55,6 +55,7 @@ export {
   ErrStaleInputRequest,
   ErrUnknownOption,
   ErrQuitUnsupported,
+  ErrResumeUnsupported,
 } from "./errors.ts"
 
 export {

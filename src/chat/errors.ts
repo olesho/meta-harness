@@ -66,4 +66,10 @@ export const ErrQuitUnsupported: Sentinel = defineSentinel(
   "chat: harness has no graceful-quit sequence",
 )
 
+/** Returned by Open when Options.resume is set but the adapter can't resume. */
+export const ErrResumeUnsupported: Sentinel = defineSentinel(
+  "chat/resume-unsupported",
+  "chat: harness cannot resume a prior session",
+)
+
 export { isSentinel }
