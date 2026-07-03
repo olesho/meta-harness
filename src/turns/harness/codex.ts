@@ -13,14 +13,15 @@ import { createHash } from "node:crypto"
 import { readFileSync, realpathSync, statSync } from "node:fs"
 import { readdirSync } from "node:fs"
 import { join, resolve } from "node:path"
+import type { TranscriptTurn } from "../../chat/deps.ts"
 import type { Snapshot } from "../../screen/index.ts"
+import { CodexReader, turnsFromEvents } from "../../transcript/index.ts"
 import { GenericAdapter } from "../generic.ts"
 import type {
   Adapter,
   Event,
   InputOption,
   InputRequest,
-  Turn,
 } from "../types.ts"
 import { InputRequested, InputResolved, TurnComplete } from "../types.ts"
 
@@ -109,8 +110,19 @@ export class CodexAdapter extends GenericAdapter implements Adapter {
   }
 
   /** Implements turns.TranscriptReader. */
-  readTranscript(_harnessSessionID: string, _workingDir: string): Turn[] {
-    throw new Error("codex transcript reader not yet ported")
+  readTranscript(
+    harnessSessionID: string,
+    workingDir: string,
+  ): TranscriptTurn[] {
+    const events = new CodexReader(this.sessionsRoot).read(
+      harnessSessionID,
+      workingDir,
+    )
+    return turnsFromEvents(events).map((t) => ({
+      role: t.role,
+      text: t.text,
+      timestamp: t.timestamp ?? new Date(0),
+    }))
   }
 }
 
