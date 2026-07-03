@@ -99,7 +99,22 @@ export class CodexAdapter extends GenericAdapter implements Adapter {
     return [m[1]!, true]
   }
 
-  /** Implements turns.SessionIDLocator (disk fallback for 0.142+). */
+  /**
+   * Implements turns.SessionIDLocator (disk fallback for 0.142+).
+   *
+   * Resume session-id fork — VERIFIED against codex-cli 0.142.5 (2026-07-03):
+   * `codex resume <uuid>` CONTINUES the same session id; it does NOT fork. The
+   * resume writes a fresh `rollout-<newTs>-<uuid>.jsonl` (new mtime, migrating
+   * the prior turns) whose first-line `session_meta.payload.session_id` still
+   * equals the original <uuid> — confirmed both from the banner ("session id:
+   * <uuid>") and by reading the rollout envelope (shape per readSessionMeta,
+   * src/transcript/codex/locate.ts). Because the id is preserved, this locator
+   * (newest rollout for the cwd) always returns the same <uuid> after a resume,
+   * so no id refresh is needed. Accordingly resumeForksSessionID() returns false
+   * and the chat layer's provisional-refresh latch never arms for Codex. Should
+   * a future Codex change fork the id, flip that method to true — the disk
+   * locator here is already the refresh source, no new latest-session logic.
+   */
   locateSessionID(workingDir: string): [string, boolean] {
     return locateLatestSession(this.sessionsRoot, workingDir)
   }
@@ -107,6 +122,15 @@ export class CodexAdapter extends GenericAdapter implements Adapter {
   /** Implements turns.SessionResumer — `codex resume <uuid>`. */
   resumeArgs(harnessSessionID: string): string[] {
     return ["resume", harnessSessionID]
+  }
+
+  /**
+   * Implements turns.SessionForkResumer. False: `codex resume <uuid>` continues
+   * the same session id (verified 0.142.5 — see locateSessionID above), so the
+   * chat layer must NOT arm its one-shot provisional id refresh.
+   */
+  resumeForksSessionID(): boolean {
+    return false
   }
 
   /** Implements turns.TranscriptReader. */

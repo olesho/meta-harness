@@ -143,6 +143,17 @@ export interface SessionResumer {
 }
 
 /**
+ * Reports whether resuming forks the harness session id — i.e. `resume <id>`
+ * starts a NEW session with a freshly-minted id rather than continuing <id>.
+ * Implemented only by adapters whose harness forks; the chat layer arms a
+ * one-shot provisional id refresh when it returns true. Omitting the interface
+ * entirely means "does not fork" (the common case).
+ */
+export interface SessionForkResumer {
+  resumeForksSessionID(): boolean
+}
+
+/**
  * One message read from a harness session log. Mirrors transcript.Turn; kept
  * here as a structural type until the transcript layer is ported.
  */

@@ -238,6 +238,18 @@ export class Conversation {
   queue: ControlQueue
   session: Session
 
+  /**
+   * Resume-only, one-shot latch. Armed by openWithSession ONLY when the session
+   * was seeded from an Options.resume id AND the resolved adapter reports
+   * resumeForksSessionID() === true (i.e. `resume` mints a NEW harness session id
+   * rather than continuing the old one). While set, maybeExtractSessionID is
+   * allowed to overwrite the seeded (now-stale) id EXACTLY ONCE with the freshly
+   * located id, after which it clears itself. It never arms for non-forking
+   * harnesses (Claude Code, Codex per the verified finding), so the general
+   * first-write-wins guards remain in force for every other session.
+   */
+  harnessSessionIDProvisional = false
+
   eventCh: EventBus
 
   currentTurn: Turn | null = null
@@ -655,6 +667,21 @@ export class Conversation {
   // ── Session-id capture ───────────────────────────────────────────────────
 
   maybeExtractSessionID(): void {
+    // Resume-fork refresh: the id was seeded from a resume into a harness that
+    // forks (mints a new id) on `resume`, so the seeded value is provisional.
+    // Locate the freshly-minted id from disk and adopt it once, then disarm. We
+    // only consume the latch on a genuine change: until the forked rollout lands
+    // the locator still returns the old id, and we keep retrying. This is the
+    // ONLY path that overwrites an already-set harnessSessionID.
+    if (this.harnessSessionIDProvisional) {
+      const [id, ok] = this.extractSessionID()
+      if (ok && id !== "" && id !== this.session.harnessSessionID) {
+        this.session.harnessSessionID = id
+        this.harnessSessionIDProvisional = false
+        void this.store.updateSession({ ...this.session })
+      }
+      return
+    }
     if (this.session.harnessSessionID !== "") return
     const [id, ok] = this.extractSessionID()
     if (!ok) return
@@ -914,6 +941,13 @@ async function openWithSession(
     session,
   })
 
+  // Arm the one-shot resume-fork latch only when we seeded from a resume id AND
+  // the adapter reports that `resume` forks (mints a new id). Non-forking
+  // harnesses leave it disarmed, preserving strict first-write-wins.
+  if (opts.resume && adapterResumeForks(adapter)) {
+    c.harnessSessionIDProvisional = true
+  }
+
   const runCtx = ctx ? { done: () => ctx.done(), err: () => ctx.err() } : undefined
 
   const cfg = {
@@ -1007,6 +1041,18 @@ function adapterResumeArgs(adapter: Adapter, harnessSessionID: string): string[]
   const a = adapter as unknown as Record<string, unknown>
   if (typeof a.resumeArgs !== "function") return null
   return (a.resumeArgs as (id: string) => string[])(harnessSessionID)
+}
+
+/**
+ * Structurally probes an adapter for the optional SessionForkResumer capability.
+ * Returns true only when the adapter explicitly reports that `resume` forks the
+ * harness session id (mints a new one). Adapters that omit the method — Claude
+ * Code, and Codex per the verified finding — default to no-fork.
+ */
+export function adapterResumeForks(adapter: Adapter): boolean {
+  const a = adapter as unknown as Record<string, unknown>
+  if (typeof a.resumeForksSessionID !== "function") return false
+  return (a.resumeForksSessionID as () => boolean)() === true
 }
 
 function wrapInvalid(msg: string): Error {

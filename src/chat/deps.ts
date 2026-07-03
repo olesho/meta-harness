@@ -116,6 +116,13 @@ export interface Adapter {
   busy?(snap: Snapshot): boolean
   /** turns.Quitter — the graceful-exit keystroke sequence. */
   quitSequence?(): Uint8Array
+  /**
+   * turns.SessionForkResumer — reports whether `resume` mints a NEW harness
+   * session id (forks) rather than continuing the old one. When true, the chat
+   * layer arms a one-shot provisional refresh of the seeded id. Omitted =>
+   * no-fork (Claude Code; Codex, per the empirically-verified 0.142 finding).
+   */
+  resumeForksSessionID?(): boolean
 }
 
 /**
