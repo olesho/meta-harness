@@ -66,4 +66,16 @@ export const ErrQuitUnsupported: Sentinel = defineSentinel(
   "chat: harness has no graceful-quit sequence",
 )
 
+/** Returned by Open/Reopen when the harness adapter cannot build resume args. */
+export const ErrResumeUnsupported: Sentinel = defineSentinel(
+  "chat/resume-unsupported",
+  "chat: harness has no resume sequence",
+)
+
+/** Returned by Reopen when the stored session carries no harness session id. */
+export const ErrNoHarnessSession: Sentinel = defineSentinel(
+  "chat/no-harness-session",
+  "chat: session has no harness session id",
+)
+
 export { isSentinel }

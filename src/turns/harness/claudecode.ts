@@ -187,6 +187,11 @@ export class ClaudeCodeAdapter extends GenericAdapter implements Adapter {
     return quitCommand
   }
 
+  /** Implements turns.SessionResumer — `claude --resume <uuid>`. */
+  resumeArgs(harnessSessionID: string): string[] {
+    return ["--resume", harnessSessionID]
+  }
+
   /** Implements turns.RawSessionIDExtractor. */
   extractSessionIDFromLine(line: string): [string, boolean] {
     const m = resumeRE.exec(line)

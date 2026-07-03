@@ -136,6 +136,12 @@ export interface BusyDetector {
   busy(snap: Snapshot): boolean
 }
 
+/** Builds the launch args that make the harness resume a prior session. */
+export interface SessionResumer {
+  /** Returns the argv fragment resuming the given harness session id. */
+  resumeArgs(harnessSessionID: string): string[]
+}
+
 /**
  * One message read from a harness session log. Mirrors transcript.Turn; kept
  * here as a structural type until the transcript layer is ported.
