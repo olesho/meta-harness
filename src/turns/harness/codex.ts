@@ -103,6 +103,11 @@ export class CodexAdapter extends GenericAdapter implements Adapter {
     return locateLatestSession(this.sessionsRoot, workingDir)
   }
 
+  /** Implements turns.SessionResumer — `codex resume <uuid>`. */
+  resumeArgs(harnessSessionID: string): string[] {
+    return ["resume", harnessSessionID]
+  }
+
   /** Implements turns.TranscriptReader. */
   readTranscript(_harnessSessionID: string, _workingDir: string): Turn[] {
     throw new Error("codex transcript reader not yet ported")

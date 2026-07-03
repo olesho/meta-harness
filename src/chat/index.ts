@@ -55,6 +55,8 @@ export {
   ErrStaleInputRequest,
   ErrUnknownOption,
   ErrQuitUnsupported,
+  ErrResumeUnsupported,
+  ErrNoHarnessSession,
 } from "./errors.ts"
 
 export {
@@ -63,7 +65,14 @@ export {
   readyForInput,
 } from "./ready.ts"
 
-export { Conversation, Open, resolveAdapter, type Options } from "./conversation.ts"
+export {
+  Conversation,
+  Open,
+  Reopen,
+  resolveAdapter,
+  type Options,
+  type ReopenOptions,
+} from "./conversation.ts"
 
 export type {
   WrapperSession,

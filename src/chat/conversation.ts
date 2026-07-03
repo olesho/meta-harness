@@ -70,6 +70,8 @@ import {
   ErrStaleInputRequest,
   ErrUnknownOption,
   ErrQuitUnsupported,
+  ErrResumeUnsupported,
+  ErrNoHarnessSession,
 } from "./errors.ts"
 import { ControlQueue, newControlQueue } from "./control.ts"
 import { submitKeyForHarness, requiresPromptReadiness, readyForInput } from "./ready.ts"
@@ -82,6 +84,14 @@ export interface Options {
   /** The harness executable. Required. */
   binaryPath: string
   args?: string[]
+  /**
+   * When set, resumes the named *harness* session id (not the chat session id):
+   * the resolved adapter must implement SessionResumer, whose resumeArgs are
+   * prepended to `args` at launch, and the new chat Session's harnessSessionID
+   * is seeded with this value. Open throws ErrResumeUnsupported if the harness
+   * cannot resume. Prefer Reopen to derive this from a stored Session.
+   */
+  resume?: string
   workingDir?: string
   env?: string[]
   effort?: string
@@ -847,6 +857,30 @@ export async function Open(ctx: Context | undefined, opts: Options): Promise<Con
   if (!opts.store) {
     throw wrapInvalid("Store is required (pass newMemStore() for the default)")
   }
+  const session: Session = {
+    id: newID(),
+    harness: opts.harness,
+    workingDir: opts.workingDir ?? "",
+    createdAt: new Date(),
+    // When resuming, seed with the harness session id so history/session-id
+    // capture reflect the resumed session immediately rather than starting empty.
+    harnessSessionID: opts.resume ?? "",
+  }
+  return openWithSession(ctx, opts, session, /* persist */ true)
+}
+
+/**
+ * openWithSession is the shared launch/wiring body behind Open and Reopen. It
+ * attaches the supplied chat Session (Open mints a fresh one; Reopen reuses the
+ * stored record) and, when `persist` is set, inserts it via store.createSession.
+ * Reopen skips persistence because the record already exists.
+ */
+async function openWithSession(
+  ctx: Context | undefined,
+  opts: Options,
+  session: Session,
+  persist: boolean,
+): Promise<Conversation> {
   const cols = opts.cols && opts.cols > 0 ? opts.cols : 120
   const rows = opts.rows && opts.rows > 0 ? opts.rows : 40
 
@@ -857,6 +891,19 @@ export async function Open(ctx: Context | undefined, opts: Options): Promise<Con
     throw err
   }
 
+  // Resolve resume args up front so an unsupported harness fails before launch.
+  let resumeArgs: string[] = []
+  if (opts.resume) {
+    const ra = adapterResumeArgs(adapter, opts.resume)
+    if (ra === null) {
+      throw wrap(
+        `chat: harness ${opts.harness} cannot resume`,
+        ErrResumeUnsupported,
+      )
+    }
+    resumeArgs = ra
+  }
+
   const scr = newScreen(cols, rows)
 
   const c = new Conversation({
@@ -864,20 +911,14 @@ export async function Open(ctx: Context | undefined, opts: Options): Promise<Con
     store: opts.store,
     adapter,
     screen: scr,
-    session: {
-      id: newID(),
-      harness: opts.harness,
-      workingDir: opts.workingDir ?? "",
-      createdAt: new Date(),
-      harnessSessionID: "",
-    },
+    session,
   })
 
   const runCtx = ctx ? { done: () => ctx.done(), err: () => ctx.err() } : undefined
 
   const cfg = {
     binaryPath: opts.binaryPath,
-    args: opts.args,
+    args: resumeArgs.length > 0 ? [...resumeArgs, ...(opts.args ?? [])] : opts.args,
     workingDir: opts.workingDir,
     // Strip Claude Code's nesting markers (CLAUDECODE / CLAUDE_CODE_*) so a
     // nested `claude` persists its JSONL transcript. When opts.env is undefined
@@ -903,12 +944,69 @@ export async function Open(ctx: Context | undefined, opts: Options): Promise<Con
 
   sess.resize(cols, rows)
 
-  await opts.store.createSession({ ...c.session })
+  if (persist) await opts.store.createSession({ ...c.session })
 
   c.watcher = Watch(sess as unknown as Parameters<typeof Watch>[0], scr, adapter)
   c.startPumps()
 
   return c
+}
+
+/**
+ * ReopenOptions configures Reopen. `harness` and `workingDir` are omitted because
+ * they are derived from the stored Session; `resume` is omitted because it is
+ * derived from the stored harnessSessionID. Every other launch knob (binaryPath,
+ * env, args, effort, model, cols, rows, inputPolicy, onInputRequest, …) must be
+ * supplied by the caller — the stored Session persists ONLY harness, workingDir,
+ * and harnessSessionID, so it cannot reconstruct them.
+ */
+export type ReopenOptions = Omit<Options, "harness" | "workingDir" | "resume"> & {
+  /** The chat session id (as returned by Conversation.sessionID()) to reopen. */
+  sessionID: string
+}
+
+/**
+ * Reopen loads a stored chat Session by id and relaunches its harness in resume
+ * mode, reusing the SAME chat session id rather than minting a new one — so the
+ * returned Conversation's sessionID() and history reflect the resumed session.
+ *
+ * It derives `harness` and `workingDir` from the stored record and `resume` from
+ * the stored harnessSessionID. The stored Session persists only those three
+ * fields, so binaryPath, env, and all other launch knobs must be supplied by the
+ * caller via ReopenOptions.
+ *
+ * Throws ErrNoHarnessSession when the stored session never captured a harness
+ * session id, and surfaces ErrResumeUnsupported unchanged when the derived
+ * harness has no SessionResumer.
+ */
+export async function Reopen(
+  ctx: Context | undefined,
+  opts: ReopenOptions,
+): Promise<Conversation> {
+  if (!opts.store) {
+    throw wrapInvalid("Store is required (pass newMemStore() for the default)")
+  }
+  const stored = await opts.store.getSession(opts.sessionID)
+  if (stored.harnessSessionID === "") {
+    throw wrap(
+      `chat: session ${opts.sessionID} has no harness session id`,
+      ErrNoHarnessSession,
+    )
+  }
+  const launch: Options = {
+    ...opts,
+    harness: stored.harness,
+    workingDir: stored.workingDir,
+    resume: stored.harnessSessionID,
+  }
+  return openWithSession(ctx, launch, { ...stored }, /* persist */ false)
+}
+
+/** Structurally probes an adapter for SessionResumer; null when unsupported. */
+function adapterResumeArgs(adapter: Adapter, harnessSessionID: string): string[] | null {
+  const a = adapter as unknown as Record<string, unknown>
+  if (typeof a.resumeArgs !== "function") return null
+  return (a.resumeArgs as (id: string) => string[])(harnessSessionID)
 }
 
 function wrapInvalid(msg: string): Error {
