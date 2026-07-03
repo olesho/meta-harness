@@ -17,7 +17,7 @@ import {
 import { newMemStore } from "../../src/chat/memstore.ts"
 import { newScreen } from "../../src/screen/index.ts"
 import { codex } from "../../src/turns/index.ts"
-import type { Adapter } from "../../src/chat/deps.ts"
+import type { Adapter } from "../../src/turns/types.ts"
 import { type Session } from "../../src/chat/types.ts"
 
 const tmps: string[] = []
@@ -169,9 +169,12 @@ describe("resume session-id fork refresh", () => {
 
   test("a forking adapter arms the latch via adapterResumeForks", () => {
     // Structural capability probe: an adapter that reports the fork is detected.
-    const forking: Adapter = {
+    const forking = {
+      name: () => "forking",
+      onScreen: () => [],
+      onWrapperStatus: () => [],
       resumeForksSessionID: () => true,
-    }
+    } as unknown as Adapter
     expect(adapterResumeForks(forking)).toBe(true)
   })
 })
