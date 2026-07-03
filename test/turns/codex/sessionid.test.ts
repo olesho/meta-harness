@@ -60,4 +60,39 @@ describe("codex session id", () => {
     expect(ok).toBe(true)
     expect(id).toBe(uuid)
   })
+
+  test("readTranscript projects the on-disk log to turns", () => {
+    const root = mkdtempSync(join(tmpdir(), "codex-sessions-"))
+    tmpRoots.push(root)
+    const uuid = "019f0263-cdb9-7013-a43a-4eb1f65d94f1"
+
+    const dir = join(root, "2026", "06", "26")
+    mkdirSync(dir, { recursive: true })
+    const body =
+      `{"type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"hello"}]}}\n` +
+      `{"type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"hi there"}]}}\n`
+    writeFileSync(join(dir, `rollout-2026-06-26T07-25-23-${uuid}.jsonl`), body)
+
+    const a = codex.New()
+    a.sessionsRoot = root // test seam: override default ~/.codex/sessions
+    const turns = a.readTranscript(uuid, "/unused")
+    expect(turns).toHaveLength(2)
+    expect(turns[0]!.role).toBe("user")
+    expect(turns[0]!.text).toBe("hello")
+    expect(turns[1]!.role).toBe("assistant")
+    expect(turns[1]!.text).toBe("hi there")
+  })
+
+  test("readTranscript throws for a missing session", () => {
+    const root = mkdtempSync(join(tmpdir(), "codex-sessions-"))
+    tmpRoots.push(root)
+    const a = codex.New()
+    a.sessionsRoot = root
+    expect(() => a.readTranscript("no-such-uuid", "/unused")).toThrow()
+  })
+
+  test("resumeArgs leads with the `resume <uuid>` subcommand", () => {
+    const args = codex.New().resumeArgs("sess-uuid")
+    expect(args).toEqual(["resume", "sess-uuid"])
+  })
 })

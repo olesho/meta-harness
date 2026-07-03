@@ -10,6 +10,8 @@
 
 import { createHash } from "node:crypto"
 import type { Snapshot } from "../../screen/index.ts"
+import { ClaudeCodeReader } from "../../transcript/claudecode/claudecode.ts"
+import { turnsFromEvents } from "../../transcript/event.ts"
 import { GenericAdapter } from "../generic.ts"
 import type {
   Adapter,
@@ -63,6 +65,9 @@ const quitCommand = enc.encode("/quit\x1b[13u")
 
 /** Adapter implements turns.Adapter for Claude Code. */
 export class ClaudeCodeAdapter extends GenericAdapter implements Adapter {
+  /** Overrides ~/.claude/projects for the on-disk transcript reader. */
+  projectsRoot = ""
+
   private lastFingerprint = ""
   private lastInterruptSeen = false
   private lastInputID = ""
@@ -199,9 +204,10 @@ export class ClaudeCodeAdapter extends GenericAdapter implements Adapter {
     return [m[1]!, true]
   }
 
-  /** Implements turns.TranscriptReader. */
-  readTranscript(_harnessSessionID: string, _workingDir: string): Turn[] {
-    throw new Error("claude-code transcript reader not yet ported")
+  /** Implements turns.TranscriptReader — reads the on-disk Claude Code log. */
+  readTranscript(harnessSessionID: string, workingDir: string): Turn[] {
+    const evs = new ClaudeCodeReader(this.projectsRoot).read(harnessSessionID, workingDir)
+    return turnsFromEvents(evs)
   }
 }
 
