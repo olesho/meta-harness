@@ -3,7 +3,7 @@ import { mkdirSync, writeFileSync } from "node:fs"
 import path from "node:path"
 
 import { isSentinel } from "../../src/internal/async/index.ts"
-import { ErrEmptySessionID } from "../../src/transcript/errors.ts"
+import { ErrEmptySessionID, ErrSessionNotFound } from "../../src/transcript/errors.ts"
 import { PiReader, slugForCwd } from "../../src/transcript/pi/pi.ts"
 import { tempDir } from "./tmp.ts"
 
@@ -92,6 +92,41 @@ test("PI_CODING_AGENT_DIR env override", () => {
   process.env.PI_CODING_AGENT_DIR = root
   const turns = new PiReader().read(sessionUUID, "/work/proj")
   expect(turns).toHaveLength(3)
+})
+
+test("missing sessions dir throws ErrSessionNotFound sentinel", () => {
+  const root = path.join(tempDir(), "no-such-config")
+  let caught: unknown
+  try {
+    new PiReader(root).read(sessionUUID, "/work/proj")
+  } catch (err) {
+    caught = err
+  }
+  expect(caught).toBeDefined()
+  expect(isSentinel(caught, ErrSessionNotFound)).toBe(true)
+})
+
+test("direct sessionsDir input resolves the session", () => {
+  const root = writeSession(
+    slugForCwd("/work/proj"),
+    "20241203T140000_" + sessionUUID + ".jsonl",
+    canonicalBody,
+  )
+  const sessionsDir = path.join(root, "sessions")
+  const turns = new PiReader({ sessionsDir }).read(sessionUUID, "/work/proj")
+  expect(turns).toHaveLength(3)
+})
+
+test("constructor back-compat: string root and {root} resolve identically", () => {
+  const root = writeSession(
+    slugForCwd("/work/proj"),
+    "20241203T140000_" + sessionUUID + ".jsonl",
+    canonicalBody,
+  )
+  const a = new PiReader(root).read(sessionUUID, "/work/proj")
+  const b = new PiReader({ root }).read(sessionUUID, "/work/proj")
+  expect(a).toEqual(b)
+  expect(a).toHaveLength(3)
 })
 
 test("slugForCwd cases", () => {

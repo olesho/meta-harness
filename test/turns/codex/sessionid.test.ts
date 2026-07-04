@@ -36,29 +36,59 @@ describe("codex session id", () => {
     expect(ok).toBe(false)
   })
 
-  test("adapter implements SessionIDLocator", () => {
-    const a = codex.New()
-    expect(typeof a.locateSessionID).toBe("function")
-  })
-
-  test("recovers session id from disk", () => {
-    const root = mkdtempSync(join(tmpdir(), "codex-sessions-"))
-    tmpRoots.push(root)
-    const cwd = "/work/proj"
+  test("scrapes the /status box Session row", async () => {
     const uuid = "019f0263-cdb9-7013-a43a-4eb1f65d94f1"
-
-    const dir = join(root, "2026", "06", "26")
-    mkdirSync(dir, { recursive: true })
-    const body =
-      `{"timestamp":"2026-06-26T05:25:23.303Z","type":"session_meta","payload":{"session_id":"${uuid}","cwd":"${cwd}","cli_version":"0.142.0"}}` +
-      "\n"
-    writeFileSync(join(dir, `rollout-2026-06-26T07-25-23-${uuid}.jsonl`), body)
-
-    const a = codex.New()
-    a.sessionsRoot = root // test seam: override default ~/.codex/sessions
-    const [id, ok] = a.locateSessionID(cwd)
+    const scr = newScreen(120, 40)
+    const box =
+      "\x1b[H\x1b[2J" +
+      "╭──────────────────────────────────────────────────────────╮\r\n" +
+      "│ >_ OpenAI Codex (v0.142.5)                                 │\r\n" +
+      "│ Session:  " + uuid + "               │\r\n" +
+      "│ Model:    gpt-5.5                                          │\r\n" +
+      "╰──────────────────────────────────────────────────────────╯\r\n" +
+      "› \r\n"
+    await scr.write(box)
+    const [id, ok] = codex.New().extractSessionID(scr.snapshot())
     expect(ok).toBe(true)
     expect(id).toBe(uuid)
+  })
+
+  test("scrapes the /quit resume hint", async () => {
+    const uuid = "019f0287-aaaa-7013-a43a-4eb1f65d94f1"
+    const scr = newScreen(120, 40)
+    await scr.write(
+      "\x1b[H\x1b[2JTo continue this session, run codex resume " + uuid + "\r\n",
+    )
+    const [id, ok] = codex.New().extractSessionID(scr.snapshot())
+    expect(ok).toBe(true)
+    expect(id).toBe(uuid)
+  })
+
+  test("does not mis-capture a Session:-shaped string in reply prose", async () => {
+    const uuid = "019f0263-cdb9-7013-a43a-4eb1f65d94f1"
+    const scr = newScreen(120, 40)
+    // No box borders, no /status header — an assistant reply that merely mentions
+    // a Session: <uuid> string must not be captured.
+    await scr.write(
+      "\x1b[H\x1b[2JThe log line reads: Session: " + uuid + " started.\r\n› \r\n",
+    )
+    const [, ok] = codex.New().extractSessionID(scr.snapshot())
+    expect(ok).toBe(false)
+  })
+
+  test("does not capture a wrapped /status box (narrow terminal)", async () => {
+    const uuid = "019f0263-cdb9-7013-a43a-4eb1f65d94f1"
+    const scr = newScreen(30, 40)
+    // The UUID wraps onto a second physical row, so the border-anchored row regex
+    // cannot match — no false capture; the width dependency is documented here.
+    await scr.write(
+      "\x1b[H\x1b[2J" +
+        "│ >_ OpenAI Codex (v0.142.5) │\r\n" +
+        "│ Session:  " + uuid.slice(0, 12) + "\r\n" +
+        uuid.slice(12) + " │\r\n",
+    )
+    const [, ok] = codex.New().extractSessionID(scr.snapshot())
+    expect(ok).toBe(false)
   })
 
   test("readTranscript projects the on-disk log to turns", () => {

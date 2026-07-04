@@ -175,6 +175,9 @@ describe("run CLI subprocess", () => {
     const sentinel = "CLI-CODEX-9"
     const script = New("codex")
       .Idle()
+      // Absorb the startup /status prime, then drive the real turn.
+      .AwaitSubmit()
+      .Idle()
       .AwaitSubmit()
       .CodexWorking(30, "Working")
       .CodexReply(40, "Result: " + PromptRef())

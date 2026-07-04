@@ -19,9 +19,21 @@ export class PiReader {
   // root overrides the pi agent config directory (the ~/.pi/agent equivalent).
   // Empty means consult PI_CODING_AGENT_DIR then fall back to ~/.pi/agent.
   root: string
+  // sessionsDir_ pins the exact sessions dir the launcher used (highest
+  // precedence). Empty means derive from root/env.
+  private sessionsDir_: string
 
-  constructor(root = "") {
-    this.root = root
+  // The constructor accepts either the legacy positional `root` string or an
+  // options bag, kept backward-compatible so existing `new PiReader(root)` /
+  // `new PiReader()` callers keep working.
+  constructor(opts: string | { root?: string; sessionsDir?: string } = "") {
+    if (typeof opts === "string") {
+      this.root = opts
+      this.sessionsDir_ = ""
+    } else {
+      this.root = opts.root ?? ""
+      this.sessionsDir_ = opts.sessionsDir ?? ""
+    }
   }
 
   // read returns the ordered list of turns for the given pi session UUID.
@@ -41,6 +53,12 @@ export class PiReader {
   }
 
   private sessionsDir(): string {
+    // Precedence: pinned launch dir › root/sessions › PI_CODING_AGENT_SESSION_DIR
+    // › ${PI_CODING_AGENT_DIR||~/.pi/agent}/sessions.
+    if (this.sessionsDir_ !== "") return this.sessionsDir_
+    if (this.root !== "") return path.join(this.root, "sessions")
+    const direct = process.env.PI_CODING_AGENT_SESSION_DIR
+    if (direct) return direct
     return path.join(this.configDir(), "sessions")
   }
 
@@ -62,6 +80,15 @@ export class PiReader {
         .filter((e) => e.isDirectory())
         .map((e) => e.name)
     } catch (err) {
+      // A missing sessions dir is the fresh-session case — surface it as the
+      // ErrSessionNotFound sentinel so callers can fall back to store history.
+      // Genuine failures (permissions, etc.) keep propagating raw.
+      if ((err as NodeJS.ErrnoException)?.code === "ENOENT") {
+        throw wrap(
+          `pi transcript: no session file for ${sessionID} under ${sessionsDir}`,
+          ErrSessionNotFound,
+        )
+      }
       throw wrap(`pi transcript: read ${sessionsDir}`, err)
     }
     for (const name of entries) {

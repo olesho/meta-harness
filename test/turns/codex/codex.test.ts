@@ -54,6 +54,11 @@ describe("codex adapter", () => {
     expect(codex.New().name()).toBe("codex")
   })
 
+  test("primeSessionIDKeys is /status + CSI 13 u", () => {
+    const keys = codex.New().primeSessionIDKeys()
+    expect(new TextDecoder().decode(keys)).toBe("/status\x1b[13u")
+  })
+
   test("adversarial scenarios do not fire", async () => {
     for (const scenario of [
       "adversarial/prefix-only-marker",

@@ -1,18 +1,20 @@
 // Turn-detection adapter for the Codex CLI (github.com/openai/codex).
 //
 // Legacy (≤0.141): every turn ended with a "Token usage:" footer — a per-turn
-// fingerprint that drove TurnComplete. Codex 0.142+ removed that footer (and the
-// "codex resume <uuid>" hint), so OnScreen stays silent on current Codex and the
-// session id is recovered from disk (LocateSessionID). The legacy path is kept
-// for any codex still emitting the footer and is locked in by the corpus tests.
+// fingerprint that drove TurnComplete. Codex 0.142+ removed that footer, so
+// OnScreen stays silent on current Codex. The legacy path is kept for any codex
+// still emitting the footer and is locked in by the corpus tests.
 //
-// Port of pkg/turns/harness/codex/{codex.go,input.go} + the LocateLatestSession
-// disk fallback from pkg/transcript/codex/locate.go.
+// Session-id capture is an own-output `/status` scrape: the chat layer primes
+// the session at first idle by writing `/status`, which renders a box containing
+// `│ Session: <uuid> │`; extractSessionID reads that (and the legacy / `/quit`
+// `codex resume <uuid>` hint). Reading a process's own output cannot collide
+// with another process, so capture is race-free by construction — the old
+// disk-locate fallback (racy across sessions sharing a cwd) was removed. The
+// transcript reader (readTranscript / CodexReader) still reads disk, but that is
+// keyed on an already-captured id and is a separate concern.
 
 import { createHash } from "node:crypto"
-import { readFileSync, realpathSync, statSync } from "node:fs"
-import { readdirSync } from "node:fs"
-import { join, resolve } from "node:path"
 import type { TranscriptTurn } from "../../chat/deps.ts"
 import type { Snapshot } from "../../screen/index.ts"
 import { CodexReader, turnsFromEvents } from "../../transcript/index.ts"
@@ -32,13 +34,46 @@ const enc = new TextEncoder()
 const tokenUsageRE =
   /Token usage: total=[\d,]+ input=[\d,]+ \(\+ [\d,]+ cached\) output=[\d,]+(?: \(reasoning \d+\))?/g
 
-// resumeRE matches the "codex resume <uuid>" hint Codex printed on ≤0.141.
+// resumeRE matches the "codex resume <uuid>" hint — the legacy ≤0.141 footer AND
+// the 0.142+ `/quit` / `/exit` hint ("To continue this session, run codex resume
+// <uuid>"). Already-specific text, low spoof risk, so it is scanned ungated.
 const resumeRE =
   /codex resume ([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})/
 
+const UUID_RE_SRC =
+  "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
+
+// statusSessionRE matches the `Session: <uuid>` row INSIDE the `/status` box,
+// anchored on the vertical box borders (│ … │) on the SAME physical row. Only the
+// rendered `/status` box draws those borders around the label, so this excludes a
+// bare `Session: <uuid>` string appearing in reply prose. It assumes the row
+// renders unwrapped on one screen line — see CODEX_STATUS_MIN_COLS.
+const statusSessionRE = new RegExp(
+  "│[^\\S\\r\\n]*Session:[^\\S\\r\\n]+(" +
+    UUID_RE_SRC +
+    ")[^\\S\\r\\n]*│",
+)
+
+// statusBoxHeaderRE gates statusSessionRE on the `/status` box header so a lone
+// spoofed box row (borders around a "Session:" line in some other context) cannot
+// match. The header is the Codex banner the `/status` box renders above the rows.
+const statusBoxHeaderRE = />_ OpenAI Codex \(v/
+
+/**
+ * CODEX_STATUS_MIN_COLS is the minimum terminal width at which the `/status` box
+ * renders the `│ Session: <uuid> │` row unwrapped on a single line. The UUID (36
+ * chars) plus the "Session: " label, the two `│` borders, and box padding needs
+ * ~50 columns; the observed real 0.142.5 `/status` box is wider still, so the
+ * primer requires at least this many columns before writing `/status`. Below it
+ * the row wraps and the scrape silently fails, so the primer skips the write
+ * (records a `too_narrow` outcome) and leaves the `/quit` hint as the backstop.
+ * Set from the observed box width during the manual smoke.
+ */
+export const CODEX_STATUS_MIN_COLS = 60
+
 /** Adapter implements turns.Adapter for Codex CLI. */
 export class CodexAdapter extends GenericAdapter implements Adapter {
-  /** Overrides ~/.codex/sessions for the on-disk session-id fallback. */
+  /** Overrides ~/.codex/sessions for the transcript reader (readTranscript). */
   sessionsRoot = ""
 
   private lastFingerprint = ""
@@ -92,31 +127,37 @@ export class CodexAdapter extends GenericAdapter implements Adapter {
     return out
   }
 
-  /** Implements turns.SessionIDExtractor (legacy ≤0.141 screen scrape). */
+  /**
+   * Implements turns.SessionIDExtractor — an own-output screen scrape.
+   *
+   * Two signals, tried in order:
+   *   1. resumeRE — the `codex resume <uuid>` hint (legacy footer AND the 0.142+
+   *      `/quit` hint). Already specific text, scanned ungated.
+   *   2. statusSessionRE — the `│ Session: <uuid> │` row inside the `/status`
+   *      box. Gated on statusBoxHeaderRE so a lone spoofed box row cannot match.
+   *
+   * Called on arbitrary later snapshots too (the TurnComplete path), so the
+   * status match is border-anchored AND header-gated to avoid mis-capturing a
+   * `Session: <uuid>`-shaped string in reply prose.
+   */
   extractSessionID(snap: Snapshot): [string, boolean] {
     const m = resumeRE.exec(snap.text)
-    if (!m) return ["", false]
-    return [m[1]!, true]
+    if (m) return [m[1]!, true]
+    if (statusBoxHeaderRE.test(snap.text)) {
+      const s = statusSessionRE.exec(snap.text)
+      if (s) return [s[1]!, true]
+    }
+    return ["", false]
   }
 
   /**
-   * Implements turns.SessionIDLocator (disk fallback for 0.142+).
-   *
-   * Resume session-id fork — VERIFIED against codex-cli 0.142.5 (2026-07-03):
-   * `codex resume <uuid>` CONTINUES the same session id; it does NOT fork. The
-   * resume writes a fresh `rollout-<newTs>-<uuid>.jsonl` (new mtime, migrating
-   * the prior turns) whose first-line `session_meta.payload.session_id` still
-   * equals the original <uuid> — confirmed both from the banner ("session id:
-   * <uuid>") and by reading the rollout envelope (shape per readSessionMeta,
-   * src/transcript/codex/locate.ts). Because the id is preserved, this locator
-   * (newest rollout for the cwd) always returns the same <uuid> after a resume,
-   * so no id refresh is needed. Accordingly resumeForksSessionID() returns false
-   * and the chat layer's provisional-refresh latch never arms for Codex. Should
-   * a future Codex change fork the id, flip that method to true — the disk
-   * locator here is already the refresh source, no new latest-session logic.
+   * Implements turns.SessionIDPrimer — the keystrokes that make Codex print its
+   * session id on screen: the `/status` slash command followed by the CSI 13 u
+   * submit key (unmodified Enter under the kitty keyboard protocol; mirrors
+   * submitKeyForHarness("codex") and the quit sequence's hardcoded submit).
    */
-  locateSessionID(workingDir: string): [string, boolean] {
-    return locateLatestSession(this.sessionsRoot, workingDir)
+  primeSessionIDKeys(): Uint8Array {
+    return enc.encode("/status" + "\x1b[13u")
   }
 
   /** Implements turns.SessionResumer — `codex resume <uuid>`. */
@@ -126,8 +167,10 @@ export class CodexAdapter extends GenericAdapter implements Adapter {
 
   /**
    * Implements turns.SessionForkResumer. False: `codex resume <uuid>` continues
-   * the same session id (verified 0.142.5 — see locateSessionID above), so the
-   * chat layer must NOT arm its one-shot provisional id refresh.
+   * the same session id — VERIFIED against codex-cli 0.142.5 (2026-07-03): the
+   * resume banner reports the same "session id: <uuid>" and the migrated rollout
+   * envelope keeps the original session_id. Because the id is preserved on
+   * resume, the chat layer must NOT arm its one-shot provisional id refresh.
    */
   resumeForksSessionID(): boolean {
     return false
@@ -300,102 +343,4 @@ function inputID(req: InputRequest): string {
   const parts = [req.kind, req.prompt, ...(req.options ?? []).map((o) => o.label)]
   const sum = createHash("sha256").update(parts.join("\0")).digest()
   return sum.subarray(0, 8).toString("hex")
-}
-
-// ── Disk-based session-id fallback (locate.go) ───────────────────────────────
-
-/**
- * Returns the session UUID of the most recently modified rollout whose
- * session_meta cwd matches workingDir, or ["", false]. Paths are compared after
- * resolving symlinks so a symlinked workingDir still matches the recorded cwd.
- */
-export function locateLatestSession(
-  sessionsRoot: string,
-  workingDir: string,
-): [string, boolean] {
-  if (workingDir === "") return ["", false]
-  const want = canonicalDir(workingDir)
-  const root = resolveSessionsRoot(sessionsRoot)
-  if (root === null) return ["", false]
-
-  let bestID = ""
-  let bestMod = 0
-  let found = false
-
-  const walk = (dir: string): void => {
-    let entries
-    try {
-      entries = readdirSync(dir, { withFileTypes: true })
-    } catch {
-      return // skip unreadable subtrees
-    }
-    for (const e of entries) {
-      const path = join(dir, e.name)
-      if (e.isDirectory()) {
-        walk(path)
-        continue
-      }
-      if (!e.name.endsWith(".jsonl")) continue
-      const meta = readSessionMeta(path)
-      if (!meta || meta.sessionID === "" || canonicalDir(meta.cwd) !== want) {
-        continue
-      }
-      let mod: number
-      try {
-        mod = statSync(path).mtimeMs
-      } catch {
-        continue
-      }
-      if (!found || mod > bestMod) {
-        bestID = meta.sessionID
-        bestMod = mod
-        found = true
-      }
-    }
-  }
-  walk(root)
-  return [bestID, found]
-}
-
-function resolveSessionsRoot(sessionsRoot: string): string | null {
-  if (sessionsRoot !== "") return sessionsRoot
-  const home = process.env.HOME
-  if (!home) return null
-  return join(home, ".codex", "sessions")
-}
-
-function canonicalDir(p: string): string {
-  try {
-    return realpathSync(p)
-  } catch {
-    return resolve(p)
-  }
-}
-
-interface SessionMeta {
-  sessionID: string
-  cwd: string
-}
-
-function readSessionMeta(path: string): SessionMeta | null {
-  let content: string
-  try {
-    content = readFileSync(path, "utf8")
-  } catch {
-    return null
-  }
-  const nl = content.indexOf("\n")
-  const firstLine = nl >= 0 ? content.slice(0, nl) : content
-  if (firstLine.trim() === "") return null
-  let env: { type?: string; payload?: { session_id?: string; cwd?: string } }
-  try {
-    env = JSON.parse(firstLine)
-  } catch {
-    return null
-  }
-  if (env.type !== "session_meta" || !env.payload) return null
-  return {
-    sessionID: env.payload.session_id ?? "",
-    cwd: env.payload.cwd ?? "",
-  }
 }

@@ -1,9 +1,13 @@
 // Port of pkg/turns/harness/pi/pi_test.go.
 
 import { describe, expect, test } from "bun:test"
+import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs"
+import { tmpdir } from "node:os"
+import path from "node:path"
 import { newScreen } from "../../../src/screen/index.ts"
 import type { Snapshot } from "../../../src/screen/index.ts"
 import * as pi from "../../../src/turns/harness/pi.ts"
+import { slugForCwd } from "../../../src/transcript/pi/pi.ts"
 import { TurnComplete } from "../../../src/turns/index.ts"
 import { StatusWaitingForInput } from "../../../src/turns/index.ts"
 
@@ -84,5 +88,43 @@ describe("pi adapter", () => {
 
   test("QuitSequence", () => {
     expect(new TextDecoder().decode(pi.New().quitSequence())).toBe("/quit\r")
+  })
+
+  const uuidRE =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
+
+  test("initSession mints --session-id <uuid>", () => {
+    const [argv, id] = pi.New().initSession()
+    expect(argv[0]).toBe("--session-id")
+    expect(argv[1]).toBe(id)
+    expect(id).toMatch(uuidRE)
+  })
+
+  test("resumeArgs", () => {
+    const id = "0281fd4a-0a10-4dfe-adca-9b61b3777255"
+    expect(pi.New().resumeArgs(id)).toEqual(["--session", id])
+  })
+
+  test("readTranscript reads a fixture and forwards missing timestamp", () => {
+    const sessionUUID = "0281fd4a-0a10-4dfe-adca-9b61b3777255"
+    const workingDir = "/work/proj"
+    const root = mkdtempSync(path.join(tmpdir(), "pi-turns-"))
+    const sessDir = path.join(root, "sessions", slugForCwd(workingDir))
+    mkdirSync(sessDir, { recursive: true })
+    // Second message line carries no timestamp field.
+    const body = `{"type":"session","version":3,"id":"${sessionUUID}","timestamp":"2024-12-03T14:00:00.000Z","cwd":"${workingDir}"}
+{"type":"message","id":"a","timestamp":"2024-12-03T14:00:01.000Z","message":{"role":"user","content":"hi"}}
+{"type":"message","id":"b","message":{"role":"assistant","content":"yo"}}
+`
+    writeFileSync(
+      path.join(sessDir, "20241203T140000_" + sessionUUID + ".jsonl"),
+      body,
+    )
+    const a = pi.New()
+    a.root = root
+    const turns = a.readTranscript(sessionUUID, workingDir)
+    expect(turns).toHaveLength(2)
+    expect(turns[0]!.timestamp).toBeInstanceOf(Date)
+    expect(turns[1]!.timestamp).toBeUndefined()
   })
 })

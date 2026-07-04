@@ -115,6 +115,12 @@ export interface SessionIDLocator {
   locateSessionID(workingDir: string): [string, boolean]
 }
 
+/** Supplies keystrokes that make the harness print its session id on screen. */
+export interface SessionIDPrimer {
+  /** Full keystrokes (command + submit) that surface the session id once. */
+  primeSessionIDKeys(): Uint8Array
+}
+
 /** Provides access to the harness's persisted conversation log. */
 export interface TranscriptReader {
   readTranscript(harnessSessionID: string, workingDir: string): Turn[]
@@ -140,6 +146,18 @@ export interface BusyDetector {
 export interface SessionResumer {
   /** Returns the argv fragment resuming the given harness session id. */
   resumeArgs(harnessSessionID: string): string[]
+}
+
+/** Mints a fresh harness session id and the launch args that pin it. */
+export interface SessionInitializer {
+  /** Returns [args, id]: an argv fragment that creates session <id>, plus <id>. */
+  initSession(): [string[], string]
+}
+
+/** Lists caller argv flags that conflict with chat-managed session control. */
+export interface SessionControlFlags {
+  /** Flags (e.g. "--session", "--fork") that must not appear in Options.args. */
+  sessionControlFlags(): string[]
 }
 
 /**
