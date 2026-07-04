@@ -39,7 +39,7 @@ describe("cleanHarnessEnv", () => {
   })
 
   test("materializes and cleans process.env when env is undefined", () => {
-    const KEEP = "__ORCHE57_KEEP__"
+    const KEEP = "__MH57_KEEP__"
     const saved = {
       code: process.env.CLAUDECODE,
       ep: process.env.CLAUDE_CODE_ENTRYPOINT,

@@ -1,8 +1,8 @@
 # Packaging the `run` CLI (META-HARNESS-12)
 
 `src/cli/run.ts` is the separate-process one-shot mode: a disposable CLI baked
-into a container image and `exec`'d once per turn by the orche OpenShell backend.
-This note documents what the image-build ticket (orche side) must materialize.
+into a container image and `exec`'d once per turn by the orchestrator's OpenShell backend.
+This note documents what the image-build ticket (orchestrator side) must materialize.
 
 ## What the CLI is
 
@@ -10,10 +10,10 @@ A thin wrapper around the shared one-shot loop (`meta-harness/oneshot`):
 
 - prompt on **stdin** → clean reply on **stdout**
 - grammar `run [--effort E] [--model M] <name> -- <harness args...>`
-- exit codes matching orche's `packages/agent/src/harness/headless.ts` parser:
+- exit codes matching the orchestrator's `packages/agent/src/harness/headless.ts` parser:
   `0` ok · `1` errored/fatal/stdin-fail · `2` usage/resolve/empty-prompt ·
   `124` deadline (+ the literal stderr line `harness-wrapper run: context
-  deadline exceeded`, which fires BOTH of orche's timeout signals).
+  deadline exceeded`, which fires BOTH of the orchestrator's timeout signals).
 
 Run directly with Bun:
 

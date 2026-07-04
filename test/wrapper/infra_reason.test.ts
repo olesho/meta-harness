@@ -1,8 +1,8 @@
-// Lock the infra-failure reason wording. orche's INFRA_CAUSE_PATTERNS classify a
+// Lock the infra-failure reason wording. The orchestrator's INFRA_CAUSE_PATTERNS classify a
 // harness failure as INFRASTRUCTURE (so it bypasses the runaway guard) by
 // matching tokens in the reason string — /pty/i, /not found/i, /enoent/i,
 // /spawn .* failed/i. These assertions freeze the meta-harness wording so a
-// refactor can't silently break that classification on the orche side.
+// refactor can't silently break that classification on the orchestrator side.
 
 import { describe, expect, test } from "bun:test"
 import {
@@ -12,7 +12,7 @@ import {
 } from "../../src/wrapper/index.ts"
 import { newScreen } from "../../src/screen/index.ts"
 
-describe("infra-failure reasons match orche INFRA_CAUSE_PATTERNS", () => {
+describe("infra-failure reasons match the orchestrator INFRA_CAUSE_PATTERNS", () => {
   test("ErrBinaryNotFound message contains 'not found'", () => {
     expect(ErrBinaryNotFound.message.toLowerCase()).toContain("not found")
   })

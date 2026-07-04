@@ -164,7 +164,7 @@ describe("Run", () => {
   test("context DEADLINE interrupts with a distinct 'deadline exceeded' reason", async () => {
     const { sink, drain } = captureStdout()
     // A deadline (ctxDeadlineExceeded) must be distinguishable from a plain
-    // cancel so the orche side can synthesize exit-124 only for a real timeout.
+    // cancel so the orchestrator side can synthesize exit-124 only for a real timeout.
     const { ctx } = Context.withDeadline(Context.background(), 100)
     const { result, err } = await run(ctx, {
       binaryPath: mockHarnessBin,

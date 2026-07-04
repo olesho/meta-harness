@@ -241,7 +241,7 @@ export function AutoDismissKeys(
       // bare CR clears the notice regardless of how many numbered body lines
       // parseMenuOptions happened to extract — a multi-option notice with no
       // safe-token menu row is exactly the case that previously surfaced and
-      // blocked the codex plan-critic on its first send (ORCHE-68). Genuine
+      // blocked the codex plan-critic on its first send. Genuine
       // command-approval prompts are a different kind and are never classified as
       // KindNotice, so they still surface and are not auto-answered.
       return [enc.encode("\r"), true]

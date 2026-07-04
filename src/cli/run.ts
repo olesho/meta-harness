@@ -11,12 +11,12 @@
 // Flags sit between `run` and <name>; everything after `--` is forwarded verbatim
 // to the harness. <name> is a short alias (claude → claude-code, codex → codex).
 //
-// Exit codes (must match orche's packages/agent/src/harness/headless.ts parser):
+// Exit codes (must match the orchestrator's packages/agent/src/harness/headless.ts parser):
 //   0   — turn completed; clean reply on stdout
 //   1   — turn errored / fatal / stdin read failure
 //   2   — usage: bad args, unknown harness, or empty prompt
 //   124 — deadline: prints the literal `harness-wrapper run: context deadline
-//         exceeded` on stderr (fires BOTH of orche's timeout signals)
+//         exceeded` on stderr (fires BOTH of the orchestrator's timeout signals)
 //
 // Packaging caveat: `bun build --compile` does NOT yield a self-contained binary
 // here. node-pty under Bun spawns a `node ptyHost.mjs` bridge and loads a native
@@ -32,13 +32,13 @@ import {
 } from "../oneshot/index.ts"
 import { Context } from "../internal/async/index.ts"
 
-/** Exit codes — kept in lockstep with orche's headless reply() parser. */
+/** Exit codes — kept in lockstep with the orchestrator's headless reply() parser. */
 export const ExitOK = 0
 export const ExitError = 1
 export const ExitUsage = 2
 export const ExitDeadline = 124
 
-/** The literal stderr anchor orche's isWrapperDeadline regex matches on a 124 exit. */
+/** The literal stderr anchor the orchestrator's isWrapperDeadline regex matches on a 124 exit. */
 export const DeadlineLine = "harness-wrapper run: context deadline exceeded"
 
 /** Default one-shot deadline when HARNESS_WRAPPER_RUN_TIMEOUT is unset (Go: 15m). */
@@ -255,7 +255,7 @@ export async function main(argv: string[]): Promise<number> {
     return ExitOK
   } catch (err) {
     if (err instanceof DeadlineError) {
-      // 124 + the literal anchor line fires BOTH of orche's timeout signals.
+      // 124 + the literal anchor line fires BOTH of the orchestrator's timeout signals.
       process.stderr.write(DeadlineLine + "\n")
       return ExitDeadline
     }

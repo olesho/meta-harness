@@ -1,7 +1,7 @@
 // Unit + subprocess tests for the `run` CLI (src/cli/run.ts). The subprocess
 // tests exec the real CLI under `bun`, driving one fake-harness turn end to end
 // (prompt on stdin → clean reply on stdout, exit 0) and a forced deadline
-// (exit 124 + the literal `harness-wrapper run:` stderr anchor orche greps for).
+// (exit 124 + the literal `harness-wrapper run:` stderr anchor the orchestrator greps for).
 
 import { describe, expect, test } from "bun:test"
 import { mkdtempSync, writeFileSync } from "node:fs"
