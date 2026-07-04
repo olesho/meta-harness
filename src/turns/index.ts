@@ -18,6 +18,7 @@ export type {
   SessionControlFlags,
   SessionIDExtractor,
   SessionIDLocator,
+  SessionIDPrimer,
   SessionInitializer,
   SessionResumer,
   TranscriptReader,

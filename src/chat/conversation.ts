@@ -113,6 +113,8 @@ export interface Options {
   idleGap?: number
   /** Test-only marker-confirm window override (ms). Zero = package default. */
   markerGap?: number
+  /** Test-only session-id prime deadline override (ms). Zero = package default. */
+  primeBound?: number
 }
 
 const enc = new TextEncoder()
@@ -123,6 +125,9 @@ const idleCompletionGap = 8000
 // markerConfirmGap — the shorter quiet window used once an end-of-turn marker has
 // been seen. (ms)
 const markerConfirmGap = 2000
+// primeBoundGap — the overall wall-clock bound on the startup session-id prime,
+// so Open can never hang on the /status scrape. (ms)
+const primeBoundGap = 800
 
 function concat(a: Uint8Array, b: Uint8Array): Uint8Array {
   const out = new Uint8Array(a.length + b.length)
@@ -250,6 +255,19 @@ export class Conversation {
    * first-write-wins guards remain in force for every other session.
    */
   harnessSessionIDProvisional = false
+
+  /**
+   * Diagnostic outcome of the startup session-id prime (primeSessionID). Read by
+   * tests via a structural escape; NOT a public accessor and NOT walked by the
+   * contract golden (private instance field). Undefined when priming did not run
+   * (resume, non-codex, id already set).
+   */
+  private primeOutcome?:
+    | "captured"
+    | "too_narrow"
+    | "not_written"
+    | "written_uncaptured"
+    | "persist_failed"
 
   eventCh: EventBus
 
@@ -547,7 +565,7 @@ export class Conversation {
     }
 
     if (ev.kind === TurnComplete) {
-      this.maybeExtractSessionID()
+      await this.maybeExtractSessionID()
 
       if (this.opts.harness === "claude-code") {
         const pending = this.currentTurn !== null
@@ -648,7 +666,7 @@ export class Conversation {
     this.currentTurn = null
     this.endMarkerSeen = false
 
-    this.maybeExtractSessionID()
+    await this.maybeExtractSessionID()
 
     turn.state = TurnStateComplete
     turn.completedAt = new Date()
@@ -667,7 +685,7 @@ export class Conversation {
 
   // ── Session-id capture ───────────────────────────────────────────────────
 
-  maybeExtractSessionID(): void {
+  async maybeExtractSessionID(): Promise<void> {
     // Resume-fork refresh: the id was seeded from a resume into a harness that
     // forks (mints a new id) on `resume`, so the seeded value is provisional.
     // Locate the freshly-minted id from disk and adopt it once, then disarm. We
@@ -677,17 +695,166 @@ export class Conversation {
     if (this.harnessSessionIDProvisional) {
       const [id, ok] = this.extractSessionID()
       if (ok && id !== "" && id !== this.session.harnessSessionID) {
-        this.session.harnessSessionID = id
-        this.harnessSessionIDProvisional = false
-        void this.store.updateSession({ ...this.session })
+        // Persist-before-set: on a persist failure keep the latch armed and the
+        // old id so the next TurnComplete retries.
+        const done = await this.captureAndPersistSessionID(id, /* replace */ true)
+        if (done) this.harnessSessionIDProvisional = false
       }
       return
     }
     if (this.session.harnessSessionID !== "") return
     const [id, ok] = this.extractSessionID()
     if (!ok) return
+    await this.captureAndPersistSessionID(id, /* replace */ false)
+  }
+
+  /**
+   * Persists `id` then, only on a committed write, sets it in memory. Ordering
+   * matters: the first-write-wins guards short-circuit once the in-memory id is
+   * non-empty, so setting in memory before a failed persist would wedge the id
+   * empty in the store forever. Persist-first means a failed updateSession leaves
+   * the in-memory id unchanged, so the next TurnComplete legitimately retries.
+   *
+   * `replace=false` (first-write mode): a no-op once the id is already set.
+   * `replace=true` (provisional-refresh mode): overwrites a non-empty seeded id
+   * only when `id` genuinely differs. Returns true iff the id was persisted+set.
+   * The store rejection is caught here so it can never surface as unhandled.
+   */
+  private async captureAndPersistSessionID(id: string, replace: boolean): Promise<boolean> {
+    if (id === "") return false
+    const current = this.session.harnessSessionID
+    if (replace) {
+      if (id === current) return false
+    } else if (current !== "") {
+      return false
+    }
+    try {
+      await this.store.updateSession({ ...this.session, harnessSessionID: id })
+    } catch {
+      return false // leave in-memory unchanged; retry on the next turn
+    }
     this.session.harnessSessionID = id
-    void this.store.updateSession({ ...this.session })
+    return true
+  }
+
+  /** Extract the id from the current screen and first-write it. True once set. */
+  private async captureFromScreen(): Promise<boolean> {
+    if (this.session.harnessSessionID !== "") return true
+    const [id, ok] = this.extractSessionID()
+    if (!ok) return false
+    return this.captureAndPersistSessionID(id, /* replace */ false)
+  }
+
+  private primeBoundDur(): number {
+    return this.opts.primeBound && this.opts.primeBound > 0
+      ? this.opts.primeBound
+      : primeBoundGap
+  }
+
+  /**
+   * Primes the harness session id at first idle by writing the adapter's
+   * primeSessionIDKeys (Codex: `/status`), which renders the id on screen, then
+   * capturing it — all before Open returns the handle, so no public method can
+   * race the primer (they need the handle; send/answer also need the control
+   * token, which the primer holds). Bounded by an internal deadline so Open can
+   * never hang; a capture miss is non-fatal (the `/quit` hint and the first
+   * TurnComplete re-scrape remain backstops). Only lifecycle/IO failures — ctx
+   * cancellation, ErrClosed, or a writeKeys throw — are fatal and propagate to
+   * openWithSession's cleanup. Records the outcome in primeOutcome for tests.
+   */
+  private async primeSessionID(ctx: Context): Promise<void> {
+    const a = this.adapter as unknown as { primeSessionIDKeys?: () => Uint8Array }
+    if (typeof a.primeSessionIDKeys !== "function") return
+    if (this.session.harnessSessionID !== "") return
+
+    // The row-anchored /status scrape needs the box to render unwrapped; below
+    // the documented minimum width the box wraps and the scrape can't parse it,
+    // so skip the write entirely and let the /quit hint backstop.
+    const cols = this.opts.cols && this.opts.cols > 0 ? this.opts.cols : 120
+    if (cols < codex.CODEX_STATUS_MIN_COLS) {
+      this.primeOutcome = "too_narrow"
+      return
+    }
+
+    const release = await this.queue.acquire(ctx)
+    const bound = this.primeBoundDur()
+    const deadline = sleep(bound)
+    const half = sleep(bound / 2)
+    const never = new Promise<void>(() => {})
+    let wrote = false
+    try {
+      // Step 3: wait past interstitials/auto-dismiss for a ready prompt.
+      const w0 = await this.awaitPromptReadyUntil(ctx, deadline.promise)
+      if (w0 === "deadline") {
+        this.primeOutcome = "not_written"
+        return
+      }
+
+      // Step 4: surface the id. A writeKeys throw is fatal (writer/PTY dead).
+      this.writeKeys(a.primeSessionIDKeys())
+      wrote = true
+
+      // Step 5: check-before-wait (a render landing right after the write, before
+      // any subscription delivery, is otherwise missed), then poll under one
+      // subscription until captured or the deadline fires.
+      const [notify, unsubscribe] = this.screen.subscribe()
+      try {
+        if (await this.captureFromScreen()) {
+          this.primeOutcome = "captured"
+          return
+        }
+        let resent = false
+        for (;;) {
+          const which = await Promise.race([
+            ctx.done().then(() => "ctx" as const),
+            this.closedPromise.then(() => "closed" as const),
+            notify.receive().then((r) => (r.ok ? ("changed" as const) : ("closed" as const))),
+            (resent ? never : half.promise).then(() => "half" as const),
+            deadline.promise.then(() => "deadline" as const),
+          ])
+          if (which === "ctx") throw ctx.err()
+          if (which === "closed") throw ErrClosed
+          if (which === "changed") {
+            if (await this.captureFromScreen()) {
+              this.primeOutcome = "captured"
+              return
+            }
+            continue
+          }
+          if (which === "half") {
+            // One-shot resend at the halfway mark: only when still empty and the
+            // composer prompt is ready. Consume the latch either way (at most one).
+            resent = true
+            if (readyForInput(this.opts.harness, this.screen.snapshot().text)) {
+              this.writeKeys(a.primeSessionIDKeys())
+            }
+            continue
+          }
+          break // deadline
+        }
+        // Distinguish a persist failure (box rendered + parsed, but the store
+        // rejected, so the id is still empty) from a plain poll miss.
+        const [, parsed] = this.extractSessionID()
+        this.primeOutcome =
+          parsed && this.session.harnessSessionID === ""
+            ? "persist_failed"
+            : "written_uncaptured"
+      } finally {
+        unsubscribe()
+      }
+    } catch (err) {
+      // Capture misses are non-fatal; lifecycle/IO failures propagate. A
+      // client-facing prompt we can't auto-dismiss is a miss, not a failure.
+      if (err === ErrInputPending) {
+        this.primeOutcome = wrote ? "written_uncaptured" : "not_written"
+        return
+      }
+      throw err
+    } finally {
+      deadline.cancel()
+      half.cancel()
+      release()
+    }
   }
 
   private extractSessionID(): [string, boolean] {
@@ -703,15 +870,15 @@ export class Conversation {
     return ["", false]
   }
 
-  captureRawSessionID(line: string): void {
+  async captureRawSessionID(line: string): Promise<void> {
     if (this.session.harnessSessionID !== "") return
     const a = this.adapter as unknown as Record<string, unknown>
     if (typeof a.extractSessionIDFromLine !== "function") return
     const [id, ok] = (a.extractSessionIDFromLine as (l: string) => [string, boolean])(line)
     if (!ok) return
-    if (this.session.harnessSessionID !== "") return
-    this.session.harnessSessionID = id
-    void this.store.updateSession({ ...this.session })
+    // Route through the shared persist-before-set path (first-write mode) so raw
+    // line capture gets the same correctness as the screen-scrape path.
+    await this.captureAndPersistSessionID(id, /* replace */ false)
   }
 
   // ── History ──────────────────────────────────────────────────────────────
@@ -795,7 +962,16 @@ export class Conversation {
   private async waitReadyForSend(ctx: Context): Promise<void> {
     if (this.inputAwaitingClient()) throw ErrInputPending
     if (!requiresPromptReadiness(this.opts.harness)) return
+    return this.awaitPromptReady(ctx)
+  }
 
+  /**
+   * Blocks until the composer prompt is ready for a message. Owns its screen
+   * subscription in a try/finally so it always unsubscribes. Throws ctx.err() on
+   * cancellation, ErrClosed on close, ErrInputPending on a client-facing prompt.
+   * Extracted verbatim from waitReadyForSend's loop.
+   */
+  private async awaitPromptReady(ctx: Context): Promise<void> {
     const [notify, unsubscribe] = this.screen.subscribe()
     try {
       if (readyForInput(this.opts.harness, this.screen.snapshot().text)) return
@@ -811,6 +987,42 @@ export class Conversation {
         if (which === "notifyClosed") throw ErrClosed
         if (this.inputAwaitingClient()) throw ErrInputPending
         if (readyForInput(this.opts.harness, this.screen.snapshot().text)) return
+      }
+    } finally {
+      unsubscribe()
+    }
+  }
+
+  /**
+   * Same readiness loop as awaitPromptReady but with an extra, NON-throwing exit:
+   * when deadlinePromise resolves before the prompt is ready it returns the
+   * "deadline" sentinel instead of throwing. The screen subscription is owned in
+   * one try/finally so it never leaks on the timeout path (unlike racing a live
+   * awaitPromptReady against a timer, which would abandon a subscribed waiter).
+   * ctx cancellation still throws ctx.err(); close still throws ErrClosed;
+   * a client-facing prompt still throws ErrInputPending.
+   */
+  private async awaitPromptReadyUntil(
+    ctx: Context,
+    deadlinePromise: Promise<void>,
+  ): Promise<"ready" | "deadline"> {
+    const [notify, unsubscribe] = this.screen.subscribe()
+    try {
+      if (readyForInput(this.opts.harness, this.screen.snapshot().text)) return "ready"
+      for (;;) {
+        const which = await Promise.race([
+          ctx.done().then(() => "ctx" as const),
+          this.closedPromise.then(() => "closed" as const),
+          this.inputStateCh.receive().then(() => "input" as const),
+          notify.receive().then((r) => r.ok ? ("notify" as const) : ("notifyClosed" as const)),
+          deadlinePromise.then(() => "deadline" as const),
+        ])
+        if (which === "ctx") throw ctx.err()
+        if (which === "closed") throw ErrClosed
+        if (which === "notifyClosed") throw ErrClosed
+        if (which === "deadline") return "deadline"
+        if (this.inputAwaitingClient()) throw ErrInputPending
+        if (readyForInput(this.opts.harness, this.screen.snapshot().text)) return "ready"
       }
     } finally {
       unsubscribe()
@@ -1009,7 +1221,9 @@ async function openWithSession(
     harness: opts.harness,
     effort: opts.effort,
     model: opts.model,
-    onLine: c["adapterRawSessionID"]() ? (line: string) => c.captureRawSessionID(line) : undefined,
+    onLine: c["adapterRawSessionID"]()
+      ? (line: string) => { void c.captureRawSessionID(line).catch(() => {}) }
+      : undefined,
   }
 
   const sess = await wrapperStart(runCtx, cfg)
@@ -1028,6 +1242,20 @@ async function openWithSession(
 
   c.watcher = Watch(sess as unknown as Parameters<typeof Watch>[0], scr, adapter)
   c.startPumps()
+
+  // Prime the harness session id before returning the handle (Codex /status
+  // scrape). Suppressed on resume (the id is already seeded). A capture miss is
+  // non-fatal; a fatal lifecycle/IO failure tears the half-built session down.
+  if (!opts.resume) {
+    try {
+      await c["primeSessionID"](ctx ?? Context.background())
+    } catch (err) {
+      // ctx-less close awaits actual termination (Session.stop with the cancelled
+      // Open ctx would return before the process exits and leak it).
+      await c.close()
+      throw err
+    }
+  }
 
   return c
 }

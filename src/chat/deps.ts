@@ -109,6 +109,8 @@ export interface Adapter {
   extractSessionID?(snap: Snapshot): [string, boolean]
   /** turns.SessionIDLocator — locate the id from the on-disk session log. */
   locateSessionID?(workingDir: string): [string, boolean]
+  /** turns.SessionIDPrimer — keystrokes that surface the session id on screen. */
+  primeSessionIDKeys?(): Uint8Array
   /** turns.TranscriptReader — read the harness's own JSONL session log. */
   readTranscript?(harnessSessionID: string, workingDir: string): TranscriptTurn[]
   /** turns.MessageExtractor — isolate the clean assistant reply from the TUI. */

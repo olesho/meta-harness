@@ -141,6 +141,10 @@ describe("chat integration (real pty + fake harness)", () => {
     const script = New("codex")
       .Session(sessionID)
       .Idle()
+      // Absorb the startup /status prime (Open writes it before returning), then
+      // return to idle so the real turn drives the assertions below.
+      .AwaitSubmit()
+      .Idle()
       .AwaitSubmit()
       .CodexWorking(30, "Thinking")
       .CodexReply(40, "codex reply: " + PromptRef())
@@ -158,7 +162,8 @@ describe("chat integration (real pty + fake harness)", () => {
 
   test("codex multi-turn completes on each Token-usage footer", async () => {
     const sentinels = ["CDX-AA", "CDX-BB"]
-    let b = New("codex").Idle()
+    // Absorb the startup /status prime, then drive the real turns.
+    let b = New("codex").Idle().AwaitSubmit().Idle()
     for (const _ of sentinels) {
       b = b.AwaitSubmit().CodexWorking(20, "Thinking").CodexReply(30, "echo: " + PromptRef())
     }
