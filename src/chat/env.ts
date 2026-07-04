@@ -2,7 +2,7 @@
 //
 // Port of the Go one-shot's cleanedEnv (cmd/harness-wrapper/run.go): strip
 // Claude Code's nesting markers (CLAUDECODE / CLAUDE_CODE_*) from the env handed
-// to a harness. When the wrapper — or now orche, in-process — runs INSIDE a
+// to a harness. When the wrapper — or now the orchestrator, in-process — runs INSIDE a
 // Claude Code session, a nested `claude` sees these markers, disables session
 // persistence, and never writes the JSONL transcript the reply readers depend
 // on. Removing them makes the nested `claude` run as a top-level, persisting

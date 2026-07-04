@@ -1,5 +1,5 @@
 // Reviewer finding #5: a context DEADLINE must be distinguishable from an
-// explicit/abort CANCEL so the orche side can synthesize exit-124 only for a
+// explicit/abort CANCEL so the orchestrator side can synthesize exit-124 only for a
 // real timeout. classifyExit carries that distinction in the reason string via
 // the context's cancellation cause.
 

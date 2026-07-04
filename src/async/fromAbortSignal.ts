@@ -1,6 +1,6 @@
 // fromAbortSignal — adapt a DOM AbortSignal into a meta-harness Context.
 //
-// In-process callers (e.g. orche) drive cancellation with an AbortSignal, but
+// In-process callers (e.g. the orchestrator) drive cancellation with an AbortSignal, but
 // chat.send / chat.acquireControl require a Context. This bridges the two: the
 // returned Context cancels (cause = ctxCanceled) when the signal aborts and —
 // when a positive deadlineMs is given — auto-cancels (cause =

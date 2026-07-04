@@ -101,7 +101,7 @@ describe("codex input", () => {
   })
 
   test("multi-option notice auto-dismisses via bare Enter", () => {
-    // ORCHE-68: a "Press enter to continue" notice that is neither an update
+    // a "Press enter to continue" notice that is neither an update
     // notice nor a migration — parseMenuOptions extracts its informational
     // numbered lines, so it has >1 option and no safe-token row. Enter is the
     // continuation codex advertises, so AutoDismissKeys clears it with a bare CR

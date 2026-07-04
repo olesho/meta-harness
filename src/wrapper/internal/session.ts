@@ -226,7 +226,7 @@ function toBytes(chunk: unknown): Uint8Array {
  * (ctxDeadlineExceeded) surfaces reason "context deadline exceeded"; every other
  * cancel (explicit cancel / an abort adapter / an unknown cause) stays "context
  * cancelled". Callers rely on this to tell a real timeout from an abort — e.g.
- * orche synthesizes exit-124 only for the deadline wording.
+ * the orchestrator synthesizes exit-124 only for the deadline wording.
  */
 export function classifyExit(
   exit: PtyExit,

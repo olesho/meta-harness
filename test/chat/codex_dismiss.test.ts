@@ -30,7 +30,7 @@ describe("codex auto-dismiss", () => {
   })
 
   test("notice: multi-option 'Press enter to continue' cleared by bare Enter, nothing surfaced", () => {
-    // ORCHE-68: a codex_notice whose parsed rows carry no safe-token alias used
+    // a codex_notice whose parsed rows carry no safe-token alias used
     // to return [null,false] and surface, blocking the codex plan-critic's first
     // send with ErrInputPending. tryAutoDismissCodex now clears it with a bare CR.
     const rec = new KeyRecorder()
