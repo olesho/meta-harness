@@ -34,7 +34,8 @@ import {
   pi,
 } from "../turns/index.ts"
 import { start as wrapperStart, type Session as WrapperSession } from "../wrapper/index.ts"
-import { Context, wrap } from "../internal/async/index.ts"
+import { Context, isSentinel, wrap } from "../internal/async/index.ts"
+import { ErrEmptySessionID, ErrSessionNotFound } from "../transcript/errors.ts"
 import type { Store } from "./store.ts"
 import {
   type Session,
@@ -728,10 +729,22 @@ export class Conversation {
       const out = await this.store.listTurns(sessionCopy.id)
       return [out, HistorySourceStore]
     }
-    const tturns = (a.readTranscript as (id: string, wd: string) => { role: string; text: string; timestamp?: Date }[])(
-      sessionCopy.harnessSessionID,
-      this.opts.workingDir ?? "",
-    )
+    let tturns: { role: string; text: string; timestamp?: Date }[]
+    try {
+      tturns = (a.readTranscript as (id: string, wd: string) => { role: string; text: string; timestamp?: Date }[])(
+        sessionCopy.harnessSessionID,
+        this.opts.workingDir ?? "",
+      )
+    } catch (err) {
+      // A not-yet-flushed (or lost) transcript degrades to store history,
+      // favoring availability. Real reader failures (parse/permission/etc.)
+      // rethrow so they are not silently masked.
+      if (isSentinel(err, ErrSessionNotFound) || isSentinel(err, ErrEmptySessionID)) {
+        const out = await this.store.listTurns(sessionCopy.id)
+        return [out, HistorySourceStore]
+      }
+      throw err
+    }
     const out: Turn[] = tturns.map((tt) => ({
       id: "",
       sessionID: sessionCopy.id,
@@ -931,6 +944,31 @@ async function openWithSession(
     resumeArgs = ra
   }
 
+  // On the create path (NOT resuming), let the adapter mint its own session id
+  // and the launch args that pin it, seeding harnessSessionID before persistence.
+  let initArgs: string[] = []
+  if (!opts.resume) {
+    const init = adapterInitSession(adapter)
+    if (init) {
+      initArgs = init[0]
+      session.harnessSessionID = init[1]
+    }
+  }
+
+  // Whenever chat injects a session prefix (init OR resume), the caller must not
+  // also pass raw session-control flags in opts.args — they would diverge the
+  // real transcript from the persisted harnessSessionID. Reject before launch.
+  const prefix = resumeArgs.length > 0 ? resumeArgs : initArgs
+  if (prefix.length > 0) {
+    const banned = adapterSessionControlFlags(adapter)
+    const bad = firstSessionControlConflict(opts.args ?? [], banned)
+    if (bad) {
+      throw wrapInvalid(
+        `argument ${bad} conflicts with chat-managed session control; use Options.resume / Reopen`,
+      )
+    }
+  }
+
   const scr = newScreen(cols, rows)
 
   const c = new Conversation({
@@ -950,15 +988,23 @@ async function openWithSession(
 
   const runCtx = ctx ? { done: () => ctx.done(), err: () => ctx.err() } : undefined
 
+  // Compute the child env ONCE, before binding, so the exact array handed to the
+  // wrapper is the one the adapter parses its session dir from — binding against
+  // a different env than the child receives is thus impossible.
+  const env = cleanHarnessEnv(opts.env)
+  ;(adapter as unknown as {
+    bindLaunchEnv?: (env: string[], workingDir: string) => void
+  }).bindLaunchEnv?.(env, opts.workingDir ?? "")
+
   const cfg = {
     binaryPath: opts.binaryPath,
-    args: resumeArgs.length > 0 ? [...resumeArgs, ...(opts.args ?? [])] : opts.args,
+    args: prefix.length > 0 ? [...prefix, ...(opts.args ?? [])] : opts.args,
     workingDir: opts.workingDir,
     // Strip Claude Code's nesting markers (CLAUDECODE / CLAUDE_CODE_*) so a
     // nested `claude` persists its JSONL transcript. When opts.env is undefined
     // this materializes the parent env, since a PTY child would otherwise
     // inherit the markers. Mirrors run.go's cleanedEnv().
-    env: cleanHarnessEnv(opts.env),
+    env,
     stdout: scr,
     harness: opts.harness,
     effort: opts.effort,
@@ -1041,6 +1087,42 @@ function adapterResumeArgs(adapter: Adapter, harnessSessionID: string): string[]
   const a = adapter as unknown as Record<string, unknown>
   if (typeof a.resumeArgs !== "function") return null
   return (a.resumeArgs as (id: string) => string[])(harnessSessionID)
+}
+
+/** Structurally probes an adapter for SessionInitializer; null when unsupported. */
+function adapterInitSession(adapter: Adapter): [string[], string] | null {
+  const a = adapter as unknown as Record<string, unknown>
+  if (typeof a.initSession !== "function") return null
+  return (a.initSession as () => [string[], string])()
+}
+
+/** Structurally probes an adapter for SessionControlFlags; [] when unsupported. */
+function adapterSessionControlFlags(adapter: Adapter): string[] {
+  const a = adapter as unknown as Record<string, unknown>
+  if (typeof a.sessionControlFlags !== "function") return []
+  return (a.sessionControlFlags as () => string[])()
+}
+
+/**
+ * firstSessionControlConflict scans args (up to a bare "--" terminator) for the
+ * first token that conflicts with a chat-managed session-control flag: an exact
+ * match, or, for a long flag, the attached `--flag=value` form. Returns the
+ * offending token or undefined.
+ */
+function firstSessionControlConflict(
+  args: string[],
+  banned: string[],
+): string | undefined {
+  const set = new Set(banned)
+  const longFlags = banned.filter((f) => f.startsWith("--"))
+  for (const tok of args) {
+    if (tok === "--") break // positionals follow; never flags
+    if (set.has(tok)) return tok
+    for (const f of longFlags) {
+      if (tok.startsWith(f + "=")) return tok
+    }
+  }
+  return undefined
 }
 
 /**

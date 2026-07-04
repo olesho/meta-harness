@@ -30,7 +30,8 @@ export interface TurnsInputRequest {
 export interface TranscriptTurn {
   role: string
   text: string
-  timestamp: Date
+  /** undefined if the log had no timestamp. */
+  timestamp?: Date
 }
 
 /** The kind of a low-level turn-state transition reported by the watcher. */
@@ -123,6 +124,17 @@ export interface Adapter {
    * no-fork (Claude Code; Codex, per the empirically-verified 0.142 finding).
    */
   resumeForksSessionID?(): boolean
+  /** turns.SessionResumer — argv fragment that resumes a prior harness session. */
+  resumeArgs?(harnessSessionID: string): string[]
+  /** turns.SessionInitializer — mint a fresh session id + the argv that pins it. */
+  initSession?(): [string[], string]
+  /** turns.SessionControlFlags — flags chat manages, banned from Options.args. */
+  sessionControlFlags?(): string[]
+  /**
+   * Pi-style capability: chat calls this once at Open with the effective child
+   * env and cwd so an adapter can pin where it reads its session log from.
+   */
+  bindLaunchEnv?(env: string[], workingDir: string): void
 }
 
 /**

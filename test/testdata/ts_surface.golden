@@ -59,9 +59,11 @@ turns/index.ts
   MessageExtractor: type
   Quitter: type
   RawSessionIDExtractor: type
+  SessionControlFlags: type
   SessionEvent: type
   SessionIDExtractor: type
   SessionIDLocator: type
+  SessionInitializer: type
   SessionLike: type
   SessionResumer: type
   Status: type

@@ -142,6 +142,18 @@ export interface SessionResumer {
   resumeArgs(harnessSessionID: string): string[]
 }
 
+/** Mints a fresh harness session id and the launch args that pin it. */
+export interface SessionInitializer {
+  /** Returns [args, id]: an argv fragment that creates session <id>, plus <id>. */
+  initSession(): [string[], string]
+}
+
+/** Lists caller argv flags that conflict with chat-managed session control. */
+export interface SessionControlFlags {
+  /** Flags (e.g. "--session", "--fork") that must not appear in Options.args. */
+  sessionControlFlags(): string[]
+}
+
 /**
  * Reports whether resuming forks the harness session id — i.e. `resume <id>`
  * starts a NEW session with a freshly-minted id rather than continuing <id>.
