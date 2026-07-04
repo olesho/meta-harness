@@ -115,6 +115,12 @@ export interface SessionIDLocator {
   locateSessionID(workingDir: string): [string, boolean]
 }
 
+/** Supplies keystrokes that make the harness print its session id on screen. */
+export interface SessionIDPrimer {
+  /** Full keystrokes (command + submit) that surface the session id once. */
+  primeSessionIDKeys(): Uint8Array
+}
+
 /** Provides access to the harness's persisted conversation log. */
 export interface TranscriptReader {
   readTranscript(harnessSessionID: string, workingDir: string): Turn[]

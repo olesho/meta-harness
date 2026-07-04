@@ -17,6 +17,7 @@ export type {
   RawSessionIDExtractor,
   SessionIDExtractor,
   SessionIDLocator,
+  SessionIDPrimer,
   SessionResumer,
   TranscriptReader,
   Turn,
