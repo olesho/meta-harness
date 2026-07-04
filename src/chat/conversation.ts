@@ -29,7 +29,6 @@ import {
   generic,
   claudecode,
   codex,
-  gemini,
   opencode,
   pi,
 } from "../turns/index.ts"
@@ -1087,8 +1086,6 @@ export function resolveAdapter(name: string): Adapter {
       return codex.New()
     case "claude-code":
       return claudecode.New()
-    case "gemini":
-      return gemini.New()
     case "opencode":
       return opencode.New()
     case "pi":

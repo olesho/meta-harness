@@ -13,7 +13,6 @@ describe("classifyOutput transport failures → retry_later", () => {
   const cases: { name: string; harness: string; output: string }[] = [
     { name: "claude/connection refused", harness: "claude", output: "Mock Agent CLI\nError: connection refused" },
     { name: "codex/ECONNREFUSED", harness: "codex", output: "request failed: connect ECONNREFUSED 127.0.0.1:443" },
-    { name: "gemini/fetch failed", harness: "gemini", output: "fetch failed: read ECONNRESET" },
     { name: "unknown/connection refused", harness: "", output: "node:internal/net: connection refused" },
     { name: "cursor/socket hang up", harness: "cursor", output: "Error: socket hang up" },
   ]

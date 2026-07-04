@@ -17,7 +17,7 @@ describe("submitKeyForHarness", () => {
     ["claude vim hint", "claude-code", "ctrl+g to edit in Vim", csi13u],
     ["claude auto mode", "claude-code", "Claude Code ❯ ... auto mode on", csi13u],
     ["pi composer", "pi", "0.0%/131k (auto)  gpt-oss-120b • medium", "\r"],
-    ["unknown", "gemini", "anything", "\n"],
+    ["unknown", "some-other-harness", "anything", "\n"],
   ]
   for (const [name, harness, screen, want] of cases) {
     test(name, () => {
