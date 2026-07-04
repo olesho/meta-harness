@@ -62,6 +62,7 @@ turns/index.ts
   SessionEvent: type
   SessionIDExtractor: type
   SessionIDLocator: type
+  SessionIDPrimer: type
   SessionLike: type
   SessionResumer: type
   Status: type
@@ -82,7 +83,7 @@ turns/index.ts
   Watch: function
   Watcher: class{close,events,pumpDone,send}
   claudecode: object{ClaudeCodeAdapter,DetectInput,New}
-  codex: object{AutoDismissKeys,CodexAdapter,DetectInput,KindModelMigration,KindNotice,KindUpdateNotice,New,PromptReady,locateLatestSession}
+  codex: object{AutoDismissKeys,CODEX_STATUS_MIN_COLS,CodexAdapter,DetectInput,KindModelMigration,KindNotice,KindUpdateNotice,New,PromptReady}
   gemini: object{GeminiAdapter,New}
   generic: object{GenericAdapter,New}
   opencode: object{New,OpenCodeAdapter}
@@ -131,7 +132,7 @@ transcript/index.ts
 chat/index.ts
   Adapter: type
   Backend: type
-  Conversation: class{acquireControl,adapterBusy,adapterQuitSequence,adapterRawSessionID,answer,assistantText,captureRawSessionID,close,consumeWatcher,emit,events,extractSessionID,getAdapter,handleInputRequested,handleInputResolved,handleTurnsEvent,history,historyWithSource,idleCompletionWatcher,idleGapDur,inputAwaitingClient,isClosed,markerGapDur,maybeExtractSessionID,maybeIdleComplete,policyOption,quit,screenSnapshot,send,sessionID,signalInputState,startPumps,tryAutoDismissCodex,tryResolveInput,waitReadyForSend,wrapper,writeAnswer,writeKeys}
+  Conversation: class{acquireControl,adapterBusy,adapterQuitSequence,adapterRawSessionID,answer,assistantText,awaitPromptReady,awaitPromptReadyUntil,captureAndPersistSessionID,captureFromScreen,captureRawSessionID,close,consumeWatcher,emit,events,extractSessionID,getAdapter,handleInputRequested,handleInputResolved,handleTurnsEvent,history,historyWithSource,idleCompletionWatcher,idleGapDur,inputAwaitingClient,isClosed,markerGapDur,maybeExtractSessionID,maybeIdleComplete,policyOption,primeBoundDur,primeSessionID,quit,screenSnapshot,send,sessionID,signalInputState,startPumps,tryAutoDismissCodex,tryResolveInput,waitReadyForSend,wrapper,writeAnswer,writeKeys}
   ConversationEvent: type
   Disposition: type
   DispositionAnswer: string="answer"

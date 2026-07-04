@@ -71,16 +71,16 @@ describe("captureRawSessionID", () => {
       session: { ...sess },
     })
 
-    c.captureRawSessionID("✻ Baked for 5s")
+    await c.captureRawSessionID("✻ Baked for 5s")
     expect(c.session.harnessSessionID).toBe("")
 
-    c.captureRawSessionID("claude --resume " + id + "\x1b[22m\r")
+    // Persist-before-set: the in-memory id is committed only after the awaited
+    // store write, so the store already reflects it here.
+    await c.captureRawSessionID("claude --resume " + id + "\x1b[22m\r")
     expect(c.session.harnessSessionID).toBe(id)
-    // The store update is async (fire-and-forget); let it settle.
-    await new Promise((r) => setTimeout(r, 0))
     expect((await store.getSession(sess.id)).harnessSessionID).toBe(id)
 
-    c.captureRawSessionID("claude --resume 00000000-0000-0000-0000-000000000000")
+    await c.captureRawSessionID("claude --resume 00000000-0000-0000-0000-000000000000")
     expect(c.session.harnessSessionID).toBe(id)
   })
 })
