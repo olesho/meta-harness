@@ -111,6 +111,9 @@ export function submitKeyForHarness(harness: string, _screenText: string): Uint8
     case "codex":
       // Both run the kitty keyboard protocol unconditionally: a plain CR/LF from
       // a synthetic PTY writer is NOT a submit — CSI 13 u (unmodified Enter) is.
+      // Re-verified live against claude-code 2.1.201 (record-pty probe): the
+      // prompt + CSI 13 u submits and assistant output follows, so no
+      // per-version conditioning is needed here.
       return new TextEncoder().encode("\x1b[13u")
     case "pi":
       // pi submits on a plain carriage return; a bare "\n" leaves the prompt

@@ -46,6 +46,25 @@ describe("readyForInput(claude-code)", () => {
     "  ⏵⏵ auto mode on (shift+tab to cycle)",
   ].join("\n")
 
+  // Idle composer as captured live from 2.1.201 (record-pty probe, 2026-07-05):
+  // welcome box titled "Claude Code v2.1.201", effort indicator, then the empty
+  // "❯ " prompt line between horizontal rules.
+  const readyComposer201 = [
+    "╭─── Claude Code v2.1.201 ──────────────────────────╮",
+    "│                 Welcome back Oleh!                 │",
+    "│                       ▐▛███▜▌                      │",
+    "│   Fable 5 with high effort · Claude Max · Oleh     │",
+    "╰────────────────────────────────────────────────────╯",
+    "",
+    " ⚠ 2 MCP servers need authentication · run /mcp",
+    "",
+    "                                     ● high · /effort to change",
+    "────────────────────────────────────────────────────────────────",
+    "❯ ",
+    "────────────────────────────────────────────────────────────────",
+    "  ⏵⏵ auto mode on (shift+tab to cycle) · ← for agents",
+  ].join("\n")
+
   const bypassDialog = [
     " ▐▛███▜▌   Claude Code v2.1.201",
     "",
@@ -98,6 +117,12 @@ describe("readyForInput(claude-code)", () => {
 
   test("ready composer 2.1.185", () =>
     expect(readyForInput("claude-code", readyComposer185)).toBe(true))
+  test("ready composer 2.1.201 (live capture)", () =>
+    expect(readyForInput("claude-code", readyComposer201)).toBe(true))
+  test("submit key on the 2.1.201 ready screen stays CSI 13 u", () =>
+    expect(dec.decode(submitKeyForHarness("claude-code", readyComposer201))).toBe(
+      "\x1b[13u",
+    ))
   test("bypass permissions dialog not ready", () =>
     expect(readyForInput("claude-code", bypassDialog)).toBe(false))
   test("trust dialog not ready", () =>
