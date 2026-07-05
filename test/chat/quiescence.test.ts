@@ -9,6 +9,7 @@ import {
   RoleAssistant,
   TurnStateStreaming,
   TurnStateComplete,
+  TurnStateErrored,
   type Session,
   type Turn,
 } from "../../src/chat/types.ts"
@@ -95,5 +96,18 @@ describe("quiescence", () => {
     const c = await quiesceConv("⏺ some output\n✻ Mused for 4s\n", 10000)
     await c.maybeIdleComplete() // endMarkerSeen false → fallback
     expect(completed(c).ok).toBe(false)
+  })
+
+  // META-HARNESS-24: a ready, settled screen with NO assistant output — no "⏺"
+  // bullet, no thinking marker — means the prompt was never accepted. The idle
+  // fallback must error the turn, not complete it with the raw ready screen.
+  test("fallback errors on a swallowed prompt (ready screen, no output)", async () => {
+    const c = await quiesceConv("Claude Code\n\n❯ \n", 10000)
+    await c.maybeIdleComplete() // endMarkerSeen false → fallback
+    const { value, ok } = completed(c)
+    expect(ok).toBe(true)
+    expect(value!.turn!.state).toBe(TurnStateErrored)
+    expect(value!.turn!.reason).toContain("prompt not accepted")
+    expect(value!.turn!.text).toBe("")
   })
 })

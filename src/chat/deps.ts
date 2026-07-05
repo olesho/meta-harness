@@ -117,6 +117,12 @@ export interface Adapter {
   extractMessage?(snap: Snapshot): [string, boolean]
   /** turns.BusyDetector — report whether the harness is still working. */
   busy?(snap: Snapshot): boolean
+  /**
+   * turns.SwallowedPromptDetector — report whether a settled screen shows no
+   * assistant output for the in-flight turn (the prompt was never accepted).
+   * Consulted only on the idle-completion fallback path; omitted => never.
+   */
+  promptNotAccepted?(snap: Snapshot, sentScreenText: string): boolean
   /** turns.Quitter — the graceful-exit keystroke sequence. */
   quitSequence?(): Uint8Array
   /**

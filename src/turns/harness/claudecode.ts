@@ -187,6 +187,21 @@ export class ClaudeCodeAdapter extends GenericAdapter implements Adapter {
     return snap.text.includes(busyMarker) || workingRE.test(snap.text)
   }
 
+  /**
+   * Implements turns.SwallowedPromptDetector. True when a settled screen shows
+   * no trace of assistant activity for the in-flight turn: no "⏺" message
+   * bullet (extractMessage fails) and either the screen is byte-identical to
+   * the one the prompt was submitted on, or it carries no "✻ … for Ns"
+   * thinking marker anywhere — i.e. Claude Code never accepted the prompt and
+   * merely repainted its ready screen (observed live on 2.1.201).
+   */
+  promptNotAccepted(snap: Snapshot, sentScreenText: string): boolean {
+    const [, ok] = this.extractMessage(snap)
+    if (ok) return false
+    if (snap.text === sentScreenText) return true
+    return [...snap.text.matchAll(thinkingRE)].length === 0
+  }
+
   /** Implements turns.Quitter. */
   quitSequence(): Uint8Array {
     return quitCommand

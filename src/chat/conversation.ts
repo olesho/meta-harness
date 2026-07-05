@@ -273,6 +273,8 @@ export class Conversation {
 
   currentTurn: Turn | null = null
   endMarkerSeen = false
+  /** Rendered screen at the moment send() submitted the in-flight prompt. */
+  private sentScreenText = ""
   markerArmCh: Signal
   inputStateCh: Signal
 
@@ -401,7 +403,9 @@ export class Conversation {
     this.currentTurn = { ...assistantTurn }
     this.endMarkerSeen = false
 
-    const submitKey = submitKeyForHarness(this.opts.harness, this.screen.snapshot().text)
+    const sentScreen = this.screen.snapshot().text
+    this.sentScreenText = sentScreen
+    const submitKey = submitKeyForHarness(this.opts.harness, sentScreen)
     try {
       this.writeKeys(concat(enc.encode(text), submitKey))
     } catch (err) {
@@ -666,6 +670,24 @@ export class Conversation {
     this.currentTurn = null
     this.endMarkerSeen = false
 
+    // Kill the false-success path: on the idle-completion fallback (no marker
+    // observed), a screen the adapter recognizes as a swallowed prompt — a
+    // settled ready screen with no assistant output for this turn — errors the
+    // turn instead of completing it with the raw ready screen as the "reply".
+    if (!marker && this.adapterPromptNotAccepted(snap)) {
+      turn.state = TurnStateErrored
+      turn.completedAt = new Date()
+      turn.reason = this.opts.harness + ": prompt not accepted / no assistant output"
+      try {
+        await this.store.updateTurn(turn)
+      } catch (err) {
+        this.emit({ type: EventTurn, turn: { ...turn }, err })
+        return
+      }
+      this.emit({ type: EventTurn, turn: { ...turn } })
+      return
+    }
+
     await this.maybeExtractSessionID()
 
     turn.state = TurnStateComplete
@@ -673,7 +695,7 @@ export class Conversation {
     turn.reason = marker
       ? this.opts.harness + ": end-of-turn marker confirmed at a settled prompt"
       : this.opts.harness + ": idle-completion fallback (end-of-turn marker not observed)"
-    turn.text = this.assistantText(snap)
+    turn.text = this.assistantText(snap, /* wholeScreenFallback */ marker)
     try {
       await this.store.updateTurn(turn)
     } catch (err) {
@@ -929,13 +951,32 @@ export class Conversation {
 
   // ── Helpers ──────────────────────────────────────────────────────────────
 
-  private assistantText(snap: Snapshot): string {
+  /**
+   * `wholeScreenFallback=false` (the idle-completion, non-marker path) forbids
+   * the raw-screen fallback for adapters that CAN extract a message: when their
+   * extraction fails there, a ready screen must never be persisted as the
+   * reply. Adapters without extractMessage keep the raw-screen fallback — it is
+   * their only reply-capture mechanism.
+   */
+  private assistantText(snap: Snapshot, wholeScreenFallback = true): string {
     const a = this.adapter as unknown as Record<string, unknown>
     if (typeof a.extractMessage === "function") {
       const [msg, ok] = (a.extractMessage as (s: Snapshot) => [string, boolean])(snap)
       if (ok) return msg
+      if (!wholeScreenFallback) return ""
     }
     return snap.text
+  }
+
+  private adapterPromptNotAccepted(snap: Snapshot): boolean {
+    const a = this.adapter as unknown as Record<string, unknown>
+    if (typeof a.promptNotAccepted === "function") {
+      return (a.promptNotAccepted as (s: Snapshot, sent: string) => boolean)(
+        snap,
+        this.sentScreenText,
+      )
+    }
+    return false
   }
 
   private adapterBusy(snap: Snapshot): boolean {

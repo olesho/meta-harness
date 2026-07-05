@@ -142,6 +142,17 @@ export interface BusyDetector {
   busy(snap: Snapshot): boolean
 }
 
+/**
+ * Detects a swallowed prompt: the composer settled back to a ready screen that
+ * shows no assistant output for the in-flight turn. The chat layer consults it
+ * before its idle-completion fallback (no end-of-turn marker observed) so such
+ * a screen errors the turn instead of completing it with the raw ready screen
+ * as the "reply". `sentScreenText` is the rendered screen at submit time.
+ */
+export interface SwallowedPromptDetector {
+  promptNotAccepted(snap: Snapshot, sentScreenText: string): boolean
+}
+
 /** Builds the launch args that make the harness resume a prior session. */
 export interface SessionResumer {
   /** Returns the argv fragment resuming the given harness session id. */
