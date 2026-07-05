@@ -1,32 +1,3 @@
- ▐▛███▜▌   Claude Code v2.1.142
-Resume this session with:ontext) with low effort · Claude Max
-claude --resume 6cf0318e-ee66-493a-93ab-50023125535a
-
-❯ what is the capital of France
-
-
-⏺ Paris.
-
-✻ Baked for 5s
-
-❯ what is its population
-
-
-⏺ About 2.1 million in the city proper, and roughly 11 million in the greater metropolitan area.
-
-✻ Brewed for 4s
-
-❯ how does that compare to Berlin
-
-
-⏺ Berlin is larger as a city proper (~3.7M vs Paris's ~2.1M), but Paris's metro area (~11M) is much larger than Berlin'(
-~4.5M).
-
-✻ Crunched for 2s
-
-────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-──────────────────────────────────────────────────────────────────
-❯ /exit
-────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-──────────────────────────────────────────────────────────────────
-  ⏵⏵ auto mode on (shift+tab to cycle)
+                                                                                                                        
+Resume this session with:                                                                                               
+claude --resume 8baaf3e4-42c2-4273-816f-b5817070c03e

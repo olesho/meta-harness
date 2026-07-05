@@ -246,8 +246,16 @@ async function main(): Promise<void> {
       live.pty.write(SUBMIT)
 
       if (scenario.interrupt && i === scenario.prompts.length - 1) {
-        await waitFor(live, "streaming reply", (t) => t.includes(busyMarker), 90_000)
-        await sleep(2_000) // let some of the reply render before interrupting
+        // ESC during the thinking phase (busy marker but no reply text yet)
+        // just restores the prompt to the composer — no interrupt marker. Wait
+        // until the ⏺ reply bullet is visibly streaming before interrupting.
+        await waitFor(
+          live,
+          "streaming reply",
+          (t) => t.includes(busyMarker) && t.includes("⏺"),
+          120_000,
+        )
+        await sleep(1_500) // let a bit more of the reply render before interrupting
         console.error("[record-scenarios] sending ESC interrupt")
         live.pty.write(ESC)
         await waitFor(live, "interrupt marker", (t) => t.includes(interruptedText), 30_000)

@@ -1,8 +1,8 @@
 {
   "harness": "claude-code",
-  "binary_version": "2.1.185",
-  "recorded_at": "2026-06-21T03:03:17.119068Z",
+  "binary_version": "2.1.201",
+  "recorded_at": "2026-07-05T13:41:44.092Z",
   "cols": 120,
   "rows": 40,
-  "notes": "rebake via Makefile on 2026-06-21T03:02:51Z"
+  "notes": "record-scenarios multi-turn: three consecutive short prompts; each turn must settle before the next"
 }
