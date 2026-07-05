@@ -25,7 +25,19 @@ export const ErrPTYRead: Sentinel = defineSentinel(
   "wrapper: pty read failed",
 )
 
-const HOST = join(dirname(fileURLToPath(import.meta.url)), "ptyHost.mjs")
+/**
+ * Resolve the PTY bridge path. By default it sits next to this module, but when
+ * this module is bundled (e.g. esbuild inlines it into a consumer's server.mjs),
+ * `import.meta.url` points at the bundle — not at ptyHost.mjs. Consumers that
+ * relocate the bridge set META_HARNESS_PTY_HOST to its absolute path. Resolved
+ * lazily at spawn time (not module-eval), so the override only needs to be in the
+ * environment before {@link PtyProcess.spawn} runs — no import-order constraint.
+ */
+export function resolveHost(): string {
+  const override = process.env.META_HARNESS_PTY_HOST?.trim()
+  if (override) return override
+  return join(dirname(fileURLToPath(import.meta.url)), "ptyHost.mjs")
+}
 
 const T_READY = "r".charCodeAt(0)
 const T_OUTPUT = "o".charCodeAt(0)
@@ -86,7 +98,7 @@ export class PtyProcess {
    * bridge dies before reporting ready.
    */
   static spawn(opts: PtySpawnOptions): Promise<PtyProcess> {
-    const child = spawn("node", [HOST, JSON.stringify(opts)], {
+    const child = spawn("node", [resolveHost(), JSON.stringify(opts)], {
       stdio: ["pipe", "pipe", "inherit"],
     })
     const p = new PtyProcess(child)

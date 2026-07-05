@@ -76,7 +76,6 @@ describe("resolveHarnessName", () => {
     expect(resolveHarnessName("claude")).toBe("claude-code")
     expect(resolveHarnessName("claude-code")).toBe("claude-code")
     expect(resolveHarnessName("codex")).toBe("codex")
-    expect(resolveHarnessName("gemini")).toBeNull()
     expect(resolveHarnessName("nope")).toBeNull()
   })
 })
@@ -140,7 +139,7 @@ describe("run CLI subprocess", () => {
   })
 
   test("unknown harness exits 2", async () => {
-    const r = await execCli(["gemini"], "hi", {})
+    const r = await execCli(["notaharness"], "hi", {})
     expect(r.code).toBe(ExitUsage)
   })
 

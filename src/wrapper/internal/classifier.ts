@@ -12,7 +12,6 @@ import { HarnessAdapter, matchTransportRetry } from "./harnessAdapter.ts"
 import { Patterns as claudePatterns } from "./harness/claude.ts"
 import { Patterns as codexPatterns } from "./harness/codex.ts"
 import { Patterns as cursorPatterns } from "./harness/cursor.ts"
-import { Patterns as geminiPatterns } from "./harness/gemini.ts"
 import { Patterns as opencodePatterns } from "./harness/opencode.ts"
 import { Patterns as piPatterns } from "./harness/pi.ts"
 import { StatusBlockedByCost } from "./status.ts"
@@ -34,8 +33,6 @@ export function resolveClassifier(
       return new HarnessAdapter(claudePatterns)
     case "codex":
       return new HarnessAdapter(codexPatterns)
-    case "gemini":
-      return new HarnessAdapter(geminiPatterns)
     case "cursor":
       return new HarnessAdapter(cursorPatterns)
     case "opencode":

@@ -29,7 +29,7 @@ export interface Config {
   binaryPath?: string
   /** Destination for harness stdout (required). */
   stdout?: unknown
-  /** Harness name ("claude", "codex", "gemini", "claude-code", …). */
+  /** Harness name ("claude", "codex", "claude-code", …). */
   harness?: string
   /** Harness CLI args. */
   args?: string[]
@@ -101,7 +101,7 @@ export function validateConfig(cfg: Config): Error | null {
     }
     if (!harnessSupportsEffort(cfg.harness ?? "")) {
       return wrap(
-        "wrapper: invalid config: Effort is only supported for claude, codex, and gemini harnesses",
+        "wrapper: invalid config: Effort is only supported for claude and codex harnesses",
         ErrInvalidConfig,
       )
     }

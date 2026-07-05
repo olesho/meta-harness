@@ -16,7 +16,7 @@ export function findSemver(s: string): string {
 /**
  * Runs `<binary> --version` and extracts the first semver-shaped substring
  * from the combined output. Suitable for harnesses whose --version line
- * contains a clean X.Y.Z[-suffix] token (codex, claude-code, gemini, opencode,
+ * contains a clean X.Y.Z[-suffix] token (codex, claude-code, opencode,
  * and pi at the time of writing).
  */
 export class SemverDashVProbe implements Probe {
@@ -47,6 +47,5 @@ export class SemverDashVProbe implements Probe {
 const p = new SemverDashVProbe()
 registerProbe("codex", p)
 registerProbe("claude-code", p)
-registerProbe("gemini", p)
 registerProbe("opencode", p)
 registerProbe("pi", p)

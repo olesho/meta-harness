@@ -35,7 +35,7 @@ function expectSentinel(fn: () => unknown, sentinel: Sentinel): void {
 describe("versions", () => {
   test("all and pinned against the embedded repo file", () => {
     const entries = all()
-    for (const want of ["codex", "claude-code", "gemini", "opencode", "pi"]) {
+    for (const want of ["codex", "claude-code", "opencode", "pi"]) {
       const entry = entries.get(want)
       expect(entry).toBeDefined()
       expect(entry!.binary).not.toBe("")
@@ -50,9 +50,7 @@ describe("versions", () => {
       const [, ok] = pinned("nonexistent")
       expect(ok).toBe(false)
     }
-    // Gemini is intentionally unpinned in the initial versions.json.
-    expect(pinned("gemini")[1]).toBe(false)
-    // OpenCode is likewise unpinned until a corpus pins its version.
+    // OpenCode is intentionally unpinned until a corpus pins its version.
     expect(pinned("opencode")[1]).toBe(false)
     // pi is pinned: its adapter/profile are verified against a committed corpus.
     {

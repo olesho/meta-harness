@@ -2,7 +2,6 @@ import { describe, expect, test } from "bun:test"
 import { HarnessAdapter } from "../../src/wrapper/internal/harnessAdapter.ts"
 import { Patterns as claudePatterns } from "../../src/wrapper/internal/harness/claude.ts"
 import { Patterns as codexPatterns } from "../../src/wrapper/internal/harness/codex.ts"
-import { Patterns as geminiPatterns } from "../../src/wrapper/internal/harness/gemini.ts"
 import type { ClassifierInput } from "../../src/wrapper/internal/classification.ts"
 import {
   StatusAPIError,
@@ -12,7 +11,6 @@ import {
 } from "../../src/wrapper/internal/status.ts"
 
 const claude = new HarnessAdapter(claudePatterns)
-const gemini = new HarnessAdapter(geminiPatterns)
 const codex = new HarnessAdapter(codexPatterns)
 
 interface Case {
@@ -30,14 +28,12 @@ const cases: Case[] = [
   { name: "A1: claude api_error 529 without idle gate", adapter: claude, input: { recentOutput: "API Error: 529 Overloaded." }, wantStatus: StatusAPIError, wantCode: 529 },
   { name: "A2: claude api_error 429 carries RetryAfter", adapter: claude, input: { recentOutput: "API Error: 429 Too Many Requests. Retry after 30 seconds." }, wantStatus: StatusAPIError, wantCode: 429, wantRetry: 30_000 },
   { name: "A2b: claude transport-error variant with tree-character prefix", adapter: claude, input: { recentOutput: "  ⎿  API Error: The socket connection was closed unexpectedly." }, wantStatus: StatusAPIError, wantCode: 0, reasonHas: "socket connection was closed" },
-  { name: "A3: gemini bracket form with (Status: 429)", adapter: gemini, input: { recentOutput: "[API Error: rate limit (Status: 429)]" }, wantStatus: StatusAPIError, wantCode: 429 },
   { name: "A4: codex exceeded retry limit with explicit 503", adapter: codex, input: { recentOutput: "■ exceeded retry limit, last status: 503" }, wantStatus: StatusAPIError, wantCode: 503 },
   { name: "A5: cost path on idle", adapter: claude, input: { recentOutput: "you've hit your limit", idle: true }, wantStatus: StatusBlockedByCost },
   { name: "A6: retry path on idle", adapter: claude, input: { recentOutput: "please try again", idle: true }, wantStatus: StatusRetryLater },
   { name: "A7: prompt detection on quiet trailing line", adapter: claude, input: { recentOutput: "Some text\nContinue? [y/N]", quiet: true }, wantStatus: StatusWaitingForInput },
   { name: "A8: api_error wins over cost when both present", adapter: claude, input: { recentOutput: "you've hit your limit\nAPI Error: 529 Overloaded.", idle: true }, wantStatus: StatusAPIError, wantCode: 529 },
   { name: "A9: false-positive guard — mid-line API Error in prose", adapter: claude, input: { recentOutput: "chitchat about API Error: 500 mid-line", idle: true }, wantStatus: "" },
-  { name: "A10: gemini benign output stays unclassified", adapter: gemini, input: { recentOutput: "regular tool output without brackets", idle: true }, wantStatus: "" },
   { name: "A11: claude session-limit banner without idle gate", adapter: claude, input: { recentOutput: "  ⎿  You've hit your session limit · resets 6:40pm (Europe/Warsaw)\n     /usage-credits to finish what you're working on." }, wantStatus: StatusBlockedByCost, reasonHas: "session limit", wantResumeAtOK: true },
 ]
 

@@ -110,8 +110,8 @@ describe("discovery", () => {
   })
 
   test("lookup: unpinned treated as compatible", () => {
-    setShimPath({ name: "gemini", body: "#!/bin/sh\necho 0.1.0\n" })
-    const got = lookup("gemini")
+    setShimPath({ name: "opencode", body: "#!/bin/sh\necho 0.1.0\n" })
+    const got = lookup("opencode")
     expect(got.detectedVersion).toBe("0.1.0")
     expect(got.pinnedVersion).toBe("")
     expect(got.versionMatchesPin).toBe(true)
@@ -123,7 +123,6 @@ describe("discovery", () => {
     const want = new Map<string, boolean>([
       ["codex", false],
       ["claude-code", false],
-      ["gemini", false],
       ["opencode", false],
       ["pi", false],
     ])
@@ -138,7 +137,7 @@ describe("discovery", () => {
   })
 
   test("init ships default probes", () => {
-    for (const h of ["codex", "claude-code", "gemini", "opencode", "pi"]) {
+    for (const h of ["codex", "claude-code", "opencode", "pi"]) {
       expect(probeFor(h)).toBeDefined()
     }
   })

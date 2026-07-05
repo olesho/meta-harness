@@ -2,6 +2,16 @@
 
 TypeScript project for autonomous plan → ship → release → redeploy.
 
+## Documentation
+
+Docs live in [`docs/`](docs/README.md), split by format:
+
+- **Markdown** ([`docs/md/`](docs/md/README.md)) — the written docs: the
+  [architecture overview](docs/md/architecture.md), the [getting-started guide](docs/md/getting-started.md),
+  the [module reference](docs/md/modules/README.md), and the [task guides](docs/md/guides/README.md).
+- **HTML** ([`docs/html/`](docs/html/index.html)) — a single-page visual overview with SVG
+  architecture and turn-flow diagrams.
+
 ## Develop
 
 ```bash
@@ -55,20 +65,18 @@ if (source === HistorySourceTranscript) {
 }
 ```
 
-**Selection rule** (`src/chat/conversation.ts:688`): the transcript source is
+**Selection rule** (`src/chat/conversation.ts:891`): the transcript source is
 used **only** when the adapter implements a `readTranscript` method **and**
 `session.harnessSessionID` is non-empty. In every other case history comes from
 the `Store` and is tagged `HistorySourceStore`.
 
-> **Caveat — no production adapter reads transcripts yet.** Every harness
-> adapter's `readTranscript` is currently an unported stub that throws
-> (`"<harness> transcript reader not yet ported"`). In practice this means
-> `historyWithSource()` returns store-backed history (`HistorySourceStore`)
-> today. `historyWithSource()` invokes the reader directly with no fallback, so
-> passing a **non-empty** `harnessSessionID` to a real adapter makes it
-> **throw** rather than silently fall back to the store. Transcript-backed chat
-> history is forthcoming and tracked separately. (OpenCode defines no
-> `readTranscript` at all, so its `historyWithSource()` always uses the store.)
+> **Fallback behavior.** When the adapter has a reader but the transcript is
+> missing or not yet flushed, `historyWithSource()` degrades to store history:
+> a `readTranscript` that throws `ErrSessionNotFound` or `ErrEmptySessionID` is
+> caught and the `Store` is read instead (tagged `HistorySourceStore`). Genuine
+> reader failures (parse errors, permission problems, etc.) are **not** masked —
+> they propagate. (OpenCode defines no `readTranscript` at all, so its
+> `historyWithSource()` always uses the store.)
 
 ### Transcript reader classes
 
@@ -80,7 +88,6 @@ are public and work today:
 import {
   ClaudeCodeReader,
   CodexReader,
-  GeminiReader,
   PiReader,
   type Reader,
   ErrEmptySessionID,
@@ -100,11 +107,11 @@ missing or malformed input — including the sentinels `ErrEmptySessionID`,
 
 | Harness      | Transcript reader class (`meta-harness/transcript`) | Chat-history adapter integration (`historyWithSource()` transcript path) |
 | ------------ | :-------------------------------------------------: | :----------------------------------------------------------------------: |
-| Claude Code  | ✓ `ClaudeCodeReader`                                | not yet — `readTranscript` stub throws                                   |
-| Codex        | ✓ `CodexReader`                                     | not yet — `readTranscript` stub throws                                   |
-| Gemini       | ✓ `GeminiReader`                                    | not yet — `readTranscript` stub throws                                   |
-| pi           | ✓ `PiReader`                                        | not yet — `readTranscript` stub throws                                   |
+| Claude Code  | ✓ `ClaudeCodeReader`                                | ✓ `readTranscript` reads the on-disk log                                 |
+| Codex        | ✓ `CodexReader`                                     | ✓ `readTranscript` reads the on-disk log                                 |
+| pi           | ✓ `PiReader`                                        | ✓ `readTranscript` reads the on-disk log                                 |
 | OpenCode     | ✗                                                   | n/a — no `readTranscript`, always uses the store                         |
 
-No harness adapter is wired to the transcript path yet, so
-`historyWithSource()` is store-backed across the board today.
+Claude Code, Codex, and pi read history from the harness's on-disk transcript
+once a `harnessSessionID` has been captured, falling back to the `Store` when the
+transcript is missing or not yet flushed. OpenCode is always store-backed.

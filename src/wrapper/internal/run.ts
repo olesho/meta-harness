@@ -6,7 +6,7 @@
 
 import { isSentinel } from "../../internal/async/errors.ts"
 import { type Config, ErrBinaryNotFound, validateConfig } from "./config.ts"
-import { argsWithHarnessEffort, envWithHarnessEffort } from "./effort.ts"
+import { argsWithHarnessEffort } from "./effort.ts"
 import { argsWithHarnessModel } from "./mode.ts"
 import { binaryNotFoundError, PtyProcess, resolveBinary } from "./pty.ts"
 import {
@@ -52,7 +52,7 @@ export async function start(ctx: RunContext | undefined, cfg: Config): Promise<S
   let args = cfg.args ?? []
   args = argsWithHarnessEffort(cfg.harness ?? "", args, cfg.effort ?? "")
   args = argsWithHarnessModel(cfg.harness ?? "", args, cfg.model ?? "")
-  const env = envWithHarnessEffort(cfg.harness ?? "", cfg.env ?? null, cfg.effort ?? "")
+  const env = cfg.env ?? []
   const envRecord = envToRecord(env)
 
   // Preflight the binary: node-pty only surfaces a missing harness as an opaque

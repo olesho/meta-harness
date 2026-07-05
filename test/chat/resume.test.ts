@@ -100,9 +100,9 @@ describe("resume plumbing (Phase 1)", () => {
   })
 
   test("Open with resume against a non-resuming harness throws ErrResumeUnsupported", async () => {
-    // gemini has no SessionResumer, so Open rejects before spawning.
+    // opencode has no SessionResumer, so Open rejects before spawning.
     const p = Open(undefined, {
-      harness: "gemini",
+      harness: "opencode",
       binaryPath: fakeHarnessBin,
       store: newMemStore(),
       resume: uuid,
@@ -161,8 +161,7 @@ describe("Reopen helper (Phase 2)", () => {
 
     // The prior turn is still reachable under the REUSED chat session id — the
     // proof that Reopen attached the stored Session rather than minting a new
-    // one. (claude-code's transcript reader isn't ported, so read via the store,
-    // which historyWithSource itself falls back to once a reader exists.)
+    // one. Read via the store directly, independent of the transcript path.
     const turns = await store.listTurns(conv.sessionID())
     expect(turns.map((t) => t.text)).toContain("earlier reply")
   })
@@ -188,10 +187,10 @@ describe("Reopen helper (Phase 2)", () => {
 
   test("Reopen propagates ErrResumeUnsupported for a non-resuming harness", async () => {
     const store = newMemStore()
-    const storedID = "chat-sess-gemini"
+    const storedID = "chat-sess-opencode"
     await store.createSession({
       id: storedID,
-      harness: "gemini",
+      harness: "opencode",
       workingDir: "",
       createdAt: new Date(),
       harnessSessionID: uuid,

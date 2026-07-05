@@ -51,7 +51,6 @@ export {
 
 export {
   argsWithHarnessEffort,
-  envWithHarnessEffort,
   harnessSupportsEffort,
   isSupportedEffort,
 } from "./internal/effort.ts"

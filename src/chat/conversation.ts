@@ -29,7 +29,6 @@ import {
   generic,
   claudecode,
   codex,
-  gemini,
   opencode,
   pi,
 } from "../turns/index.ts"
@@ -416,7 +415,7 @@ export class Conversation {
     this.sentScreenText = sentScreen
     const submitKey = submitKeyForHarness(this.opts.harness, sentScreen)
     try {
-      await this.writeMessageAndSubmit(text, sentScreen, submitKey)
+      await this.writeMessageAndSubmit(text, sentScreen, submitKey, ctx)
     } catch (err) {
       this.currentTurn = null
       assistantTurn.state = TurnStateErrored
@@ -520,13 +519,14 @@ export class Conversation {
     text: string,
     preWriteScreen: string,
     submitKey: Uint8Array,
+    ctx?: Context,
   ): Promise<void> {
     if (!requiresPromptReadiness(this.opts.harness)) {
       this.writeKeys(concat(enc.encode(text), submitKey))
       return Promise.resolve()
     }
     this.writeKeys(enc.encode(text))
-    return this.awaitComposerEcho(text, preWriteScreen).then(() =>
+    return this.awaitComposerEcho(text, preWriteScreen, ctx).then(() =>
       this.writeKeys(submitKey),
     )
   }
@@ -550,11 +550,18 @@ export class Conversation {
    * Fallback signal: past the halfway mark — or immediately when the text has
    * no matchable first line — ANY screen change since the pre-write snapshot
    * counts, covering composers that transform the echo (paste placeholders,
-   * styling). On deadline or close it simply returns, degrading to the old
-   * single-burst timing: the submit is written regardless, so this can delay a
-   * send but never hang or drop it.
+   * styling). On the local echo deadline or close it simply returns, degrading
+   * to the old single-burst timing: the submit is written regardless, so this
+   * can delay a send but never hang or drop it. The run-level ctx (when given)
+   * is different: its expiry means the whole run is over, so it THROWS instead
+   * of degrading — otherwise a hung harness would let the buffered errored-turn
+   * event outrace the deadline classification (exit 1 instead of 124).
    */
-  private async awaitComposerEcho(text: string, preWriteScreen: string): Promise<void> {
+  private async awaitComposerEcho(
+    text: string,
+    preWriteScreen: string,
+    ctx?: Context,
+  ): Promise<void> {
     const needle = (text.split("\n", 1)[0] ?? "").trim().slice(0, echoNeedleLen)
     const bound = this.echoBoundDur()
     const deadline = sleep(bound)
@@ -572,7 +579,9 @@ export class Conversation {
           notify.receive().then((r) => (r.ok ? ("changed" as const) : ("closed" as const))),
           (halfDone ? never : half.promise).then(() => "half" as const),
           deadline.promise.then(() => "deadline" as const),
+          ctx ? ctx.done().then(() => "ctx" as const) : never.then(() => "ctx" as const),
         ])
+        if (which === "ctx") throw (ctx?.err() ?? new Error("chat: context done"))
         if (which === "closed" || which === "deadline") return
         if (which === "half") halfDone = true
       }
@@ -1229,8 +1238,6 @@ export function resolveAdapter(name: string): Adapter {
       return codex.New()
     case "claude-code":
       return claudecode.New()
-    case "gemini":
-      return gemini.New()
     case "opencode":
       return opencode.New()
     case "pi":

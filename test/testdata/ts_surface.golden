@@ -35,7 +35,6 @@ wrapper/index.ts
   argsWithHarnessModel: function
   classifyExit: function
   classifyOutput: function
-  envWithHarnessEffort: function
   errorClassString: function
   harnessSupportsEffort: function
   isBinaryNotFound: function
@@ -86,7 +85,6 @@ turns/index.ts
   Watcher: class{close,events,pumpDone,send}
   claudecode: object{ClaudeCodeAdapter,DetectInput,New}
   codex: object{AutoDismissKeys,CODEX_STATUS_MIN_COLS,CodexAdapter,DetectInput,KindModelMigration,KindNotice,KindUpdateNotice,New,PromptReady}
-  gemini: object{GeminiAdapter,New}
   generic: object{GenericAdapter,New}
   opencode: object{New,OpenCodeAdapter}
   pi: object{New,PiAdapter,PromptReady}
@@ -103,7 +101,6 @@ transcript/index.ts
   EventText: string="text"
   EventToolResult: string="tool_result"
   EventToolUse: string="tool_use"
-  GeminiReader: class{locate,projectSlug,read,resolveRoot}
   ParsedEvent: type
   PiReader: class{configDir,locate,read,sessionsDir}
   Reader: type
@@ -120,12 +117,10 @@ transcript/index.ts
   encodedCWD: function
   envelope: function
   eventID: function
-  geminiParseFile: function
   locateLatestSession: function
   marshalParsedEvents: function
   parseRollout: function
   readSessionMeta: function
-  sessionShort: function
   slugForCwd: function
   toPublicJSON: function
   turnsFromEvents: function

@@ -10,7 +10,7 @@ import { describe, expect, test } from "bun:test"
 
 import { Conversation, EventBus } from "../../src/chat/conversation.ts"
 import { newMemStore } from "../../src/chat/index.ts"
-import { Context } from "../../src/internal/async/index.ts"
+import { Context, ctxDeadlineExceeded, isSentinel } from "../../src/internal/async/index.ts"
 import { newScreen, type Screen } from "../../src/screen/index.ts"
 import type { InputRequest as TurnsInputRequest } from "../../src/turns/index.ts"
 
@@ -114,6 +114,31 @@ describe("send: echo-gated split submit", () => {
     expect(rec.chunks[1]).toBe(csi13u)
     expect(elapsed).toBeGreaterThanOrEqual(450) // waited for the halfway mark
     expect(elapsed).toBeLessThan(950) // but NOT for the full deadline
+  })
+
+  test("run ctx expiring during the echo wait rejects send with the deadline", async () => {
+    // META-HARNESS-26: the local echo bound degrades gracefully, but the
+    // run-level ctx must NOT — a hung harness that never echoes would
+    // otherwise let a buffered errored-turn event outrace the deadline
+    // classification downstream (run CLI exit 1 instead of 124).
+    const scr = await readyCodexScreen()
+    const rec = new ChunkRecorder()
+    // Echo bound far beyond the ctx deadline: only the ctx can end the wait.
+    const conv = await newSendConv("codex", scr, rec, 10_000)
+
+    const { ctx, cancel } = Context.withDeadline(Context.background(), 100)
+    try {
+      const err = await conv.send(ctx, "never echoed").then(
+        () => null,
+        (e: unknown) => e,
+      )
+      expect(err).not.toBeNull()
+      expect(isSentinel(err, ctxDeadlineExceeded)).toBe(true)
+      // The text went out, but the submit key must not have been written.
+      expect(rec.chunks).toEqual(["never echoed"])
+    } finally {
+      cancel()
+    }
   })
 
   test("non-readiness harness keeps the single-burst write", async () => {
