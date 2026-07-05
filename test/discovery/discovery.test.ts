@@ -47,19 +47,19 @@ describe("discovery", () => {
     expect(got.installed).toBe(false)
     expect(got.harness).toBe("codex")
     expect(got.binary).toBe("codex")
-    expect(got.pinnedVersion).toBe("0.142.2")
+    expect(got.pinnedVersion).toBe("0.142.5")
     expect(got.installHint).not.toBe("")
     expect(got.installHint).toContain("codex")
     expect(got.versionMatchesPin).toBe(true)
   })
 
   test("lookup: installed via harness key", () => {
-    setShimPath({ name: "codex", body: "#!/bin/sh\necho 0.142.2\n" })
+    setShimPath({ name: "codex", body: "#!/bin/sh\necho 0.142.5\n" })
     const got = lookup("codex")
     expect(got.installed).toBe(true)
     expect(got.harness).toBe("codex")
     expect(got.binary).toBe("codex")
-    expect(got.detectedVersion).toBe("0.142.2")
+    expect(got.detectedVersion).toBe("0.142.5")
     expect(got.versionMatchesPin).toBe(true)
   })
 
@@ -96,7 +96,7 @@ describe("discovery", () => {
     setShimPath({ name: "codex", body: "#!/bin/sh\necho 9.9.9\n" })
     const got = lookup("codex")
     expect(got.detectedVersion).toBe("9.9.9")
-    expect(got.pinnedVersion).toBe("0.142.2")
+    expect(got.pinnedVersion).toBe("0.142.5")
     expect(got.versionMatchesPin).toBe(false)
   })
 

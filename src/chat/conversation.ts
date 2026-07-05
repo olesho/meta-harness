@@ -532,9 +532,15 @@ export class Conversation {
   }
 
   private echoBoundDur(): number {
-    return this.opts.echoBound && this.opts.echoBound > 0
-      ? this.opts.echoBound
-      : submitEchoGap
+    const configured =
+      this.opts.echoBound && this.opts.echoBound > 0
+        ? this.opts.echoBound
+        : submitEchoGap
+    // The submit key must land well inside the idle-completion window: an echo
+    // wait outliving it would let the swallowed-prompt check judge (and error)
+    // the turn before the submit was even written. Matters when a caller
+    // shrinks idleGap (tests) without also shrinking the echo bound.
+    return Math.min(configured, this.idleGapDur() / 2)
   }
 
   /**
