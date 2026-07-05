@@ -26,6 +26,115 @@ describe("submitKeyForHarness", () => {
   }
 })
 
+describe("readyForInput(claude-code)", () => {
+  test("claude-code requires prompt readiness", () => {
+    expect(requiresPromptReadiness("claude-code")).toBe(true)
+  })
+
+  // Idle composer as rendered by 2.1.185 (corpus shape): empty "❯" prompt line
+  // between horizontal rules, status hint below.
+  const readyComposer185 = [
+    " ▐▛███▜▌   Claude Code v2.1.185",
+    "",
+    "⏺ Paris.",
+    "",
+    "✻ Baked for 5s",
+    "",
+    "────────────────────────────────────────",
+    "❯ ",
+    "────────────────────────────────────────",
+    "  ⏵⏵ auto mode on (shift+tab to cycle)",
+  ].join("\n")
+
+  // Idle composer as captured live from 2.1.201 (record-pty probe, 2026-07-05):
+  // welcome box titled "Claude Code v2.1.201", effort indicator, then the empty
+  // "❯ " prompt line between horizontal rules.
+  const readyComposer201 = [
+    "╭─── Claude Code v2.1.201 ──────────────────────────╮",
+    "│                 Welcome back Oleh!                 │",
+    "│                       ▐▛███▜▌                      │",
+    "│   Fable 5 with high effort · Claude Max · Oleh     │",
+    "╰────────────────────────────────────────────────────╯",
+    "",
+    " ⚠ 2 MCP servers need authentication · run /mcp",
+    "",
+    "                                     ● high · /effort to change",
+    "────────────────────────────────────────────────────────────────",
+    "❯ ",
+    "────────────────────────────────────────────────────────────────",
+    "  ⏵⏵ auto mode on (shift+tab to cycle) · ← for agents",
+  ].join("\n")
+
+  const bypassDialog = [
+    " ▐▛███▜▌   Claude Code v2.1.201",
+    "",
+    "╭────────────────────────────────────────╮",
+    "│ Bypass Permissions mode                │",
+    "│                                        │",
+    "│ In Bypass Permissions mode, Claude     │",
+    "│ Code will not ask for your approval    │",
+    "│ before running potentially dangerous   │",
+    "│ commands.                              │",
+    "│                                        │",
+    "│ ❯ 1. No, exit                          │",
+    "│   2. Yes, I accept                     │",
+    "╰────────────────────────────────────────╯",
+  ].join("\n")
+
+  const trustDialog = [
+    " ▐▛███▜▌   Claude Code v2.1.201",
+    "",
+    " Do you trust the files in this folder?",
+    "",
+    " /Users/someone/project",
+    "",
+    " ❯ 1. Yes, proceed",
+    "   2. No, exit",
+  ].join("\n")
+
+  const trustDialogAlt = [
+    " ▐▛███▜▌   Claude Code v2.1.201",
+    "",
+    " Is this a project you created or one you trust?",
+    "",
+    " ❯ 1. Yes, I created or trust this project",
+    "   2. No, exit",
+  ].join("\n")
+
+  const startupSplash = [
+    " ▐▛███▜▌   Claude Code v2.1.201",
+    "",
+    "  Loading…",
+  ].join("\n")
+
+  const busyTurn = [
+    " ▐▛███▜▌   Claude Code v2.1.201",
+    "",
+    "❯ what is the capital of France",
+    "",
+    "✻ Pondering… (3s · esc to interrupt)",
+  ].join("\n")
+
+  test("ready composer 2.1.185", () =>
+    expect(readyForInput("claude-code", readyComposer185)).toBe(true))
+  test("ready composer 2.1.201 (live capture)", () =>
+    expect(readyForInput("claude-code", readyComposer201)).toBe(true))
+  test("submit key on the 2.1.201 ready screen stays CSI 13 u", () =>
+    expect(dec.decode(submitKeyForHarness("claude-code", readyComposer201))).toBe(
+      "\x1b[13u",
+    ))
+  test("bypass permissions dialog not ready", () =>
+    expect(readyForInput("claude-code", bypassDialog)).toBe(false))
+  test("trust dialog not ready", () =>
+    expect(readyForInput("claude-code", trustDialog)).toBe(false))
+  test("trust dialog (created-or-trust variant) not ready", () =>
+    expect(readyForInput("claude-code", trustDialogAlt)).toBe(false))
+  test("startup splash not ready", () =>
+    expect(readyForInput("claude-code", startupSplash)).toBe(false))
+  test("busy turn (past prompt echoes ❯) not ready", () =>
+    expect(readyForInput("claude-code", busyTurn)).toBe(false))
+})
+
 describe("readyForInput(pi)", () => {
   test("pi requires prompt readiness", () => {
     expect(requiresPromptReadiness("pi")).toBe(true)
