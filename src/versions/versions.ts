@@ -8,7 +8,7 @@
 // Schema (one entry per harness name):
 //
 //   {
-//     "codex":       {"package": "@openai/codex",             "binary": "codex",    "pinned": "0.142.2", "verified_at": "2026-06-26"},
+//     "codex":       {"package": "@openai/codex",             "binary": "codex",    "pinned": "0.142.5", "verified_at": "2026-07-05"},
 //     "claude-code": {"package": "@anthropic-ai/claude-code", "binary": "claude",   "pinned": "2.1.201", "verified_at": "2026-07-05"},
 //     ...
 //   }

@@ -115,6 +115,8 @@ export interface Options {
   markerGap?: number
   /** Test-only session-id prime deadline override (ms). Zero = package default. */
   primeBound?: number
+  /** Test-only echo-gated submit deadline override (ms). Zero = package default. */
+  echoBound?: number
 }
 
 const enc = new TextEncoder()
@@ -128,6 +130,13 @@ const markerConfirmGap = 2000
 // primeBoundGap — the overall wall-clock bound on the startup session-id prime,
 // so Open can never hang on the /status scrape. (ms)
 const primeBoundGap = 800
+// submitEchoGap — the wall-clock bound on the wait between writing a message's
+// text and writing its submit key, while the composer echoes the text. (ms)
+const submitEchoGap = 1500
+// echoNeedleLen — how much of the message's first line the echo wait matches
+// on. Short enough that the composer cannot soft-wrap it mid-needle at any
+// supported terminal width.
+const echoNeedleLen = 24
 
 function concat(a: Uint8Array, b: Uint8Array): Uint8Array {
   const out = new Uint8Array(a.length + b.length)
@@ -407,7 +416,7 @@ export class Conversation {
     this.sentScreenText = sentScreen
     const submitKey = submitKeyForHarness(this.opts.harness, sentScreen)
     try {
-      this.writeKeys(concat(enc.encode(text), submitKey))
+      await this.writeMessageAndSubmit(text, sentScreen, submitKey)
     } catch (err) {
       this.currentTurn = null
       assistantTurn.state = TurnStateErrored
@@ -449,7 +458,7 @@ export class Conversation {
     const req = this.currentInput
     if (req === null) throw ErrNoInputPending
     if (requestID !== "" && requestID !== req.id) throw ErrStaleInputRequest
-    this.writeAnswer(req, ans)
+    await this.writeAnswer(req, ans)
   }
 
   /** Records a pending request and tries policy/handler resolution, else surfaces. */
@@ -493,6 +502,87 @@ export class Conversation {
     this.sess.writeStdin(p)
   }
 
+  /**
+   * Delivers a user message to the harness. For prompt-readiness harnesses the
+   * text and the submit key go out as TWO separate PTY writes, with a bounded
+   * wait in between for the composer to echo the text: codex 0.142.5 (and
+   * claude-code 2.1.201, META-HARNESS-24) consume a text+Enter burst arriving
+   * in one input batch as a paste, rendering the Enter as a newline and leaving
+   * the prompt unsubmitted in the composer — after which codex never writes a
+   * rollout file and the turn dies as a transcript-read miss (META-HARNESS-21).
+   * Other harnesses keep the single-burst write.
+   *
+   * NOT async on purpose: the text write throws synchronously (callers that
+   * decide surfacing on a sync throw rely on that); only the echo wait and the
+   * submit write are deferred into the returned promise.
+   */
+  private writeMessageAndSubmit(
+    text: string,
+    preWriteScreen: string,
+    submitKey: Uint8Array,
+  ): Promise<void> {
+    if (!requiresPromptReadiness(this.opts.harness)) {
+      this.writeKeys(concat(enc.encode(text), submitKey))
+      return Promise.resolve()
+    }
+    this.writeKeys(enc.encode(text))
+    return this.awaitComposerEcho(text, preWriteScreen).then(() =>
+      this.writeKeys(submitKey),
+    )
+  }
+
+  private echoBoundDur(): number {
+    const configured =
+      this.opts.echoBound && this.opts.echoBound > 0
+        ? this.opts.echoBound
+        : submitEchoGap
+    // The submit key must land well inside the idle-completion window: an echo
+    // wait outliving it would let the swallowed-prompt check judge (and error)
+    // the turn before the submit was even written. Matters when a caller
+    // shrinks idleGap (tests) without also shrinking the echo bound.
+    return Math.min(configured, this.idleGapDur() / 2)
+  }
+
+  /**
+   * Waits (bounded by echoBoundDur) until the composer echoes the just-written
+   * message text. Primary signal: the screen contains the first line of the
+   * text truncated to echoNeedleLen chars (wrap-proof at any supported width).
+   * Fallback signal: past the halfway mark — or immediately when the text has
+   * no matchable first line — ANY screen change since the pre-write snapshot
+   * counts, covering composers that transform the echo (paste placeholders,
+   * styling). On deadline or close it simply returns, degrading to the old
+   * single-burst timing: the submit is written regardless, so this can delay a
+   * send but never hang or drop it.
+   */
+  private async awaitComposerEcho(text: string, preWriteScreen: string): Promise<void> {
+    const needle = (text.split("\n", 1)[0] ?? "").trim().slice(0, echoNeedleLen)
+    const bound = this.echoBoundDur()
+    const deadline = sleep(bound)
+    const half = sleep(bound / 2)
+    const never = new Promise<void>(() => {})
+    let halfDone = false
+    const [notify, unsubscribe] = this.screen.subscribe()
+    try {
+      for (;;) {
+        const cur = this.screen.snapshot().text
+        if (needle !== "" && cur.includes(needle)) return
+        if ((halfDone || needle === "") && cur !== preWriteScreen) return
+        const which = await Promise.race([
+          this.closedPromise.then(() => "closed" as const),
+          notify.receive().then((r) => (r.ok ? ("changed" as const) : ("closed" as const))),
+          (halfDone ? never : half.promise).then(() => "half" as const),
+          deadline.promise.then(() => "deadline" as const),
+        ])
+        if (which === "closed" || which === "deadline") return
+        if (which === "half") halfDone = true
+      }
+    } finally {
+      deadline.cancel()
+      half.cancel()
+      unsubscribe()
+    }
+  }
+
   private tryAutoDismissCodex(req: TurnsInputRequest): boolean {
     if (this.opts.harness !== "codex" || this.opts.disableCodexAutoDismiss) return false
     const [keys, ok] = codex.AutoDismissKeys(req)
@@ -511,7 +601,11 @@ export class Conversation {
       const [ans, ok] = this.opts.onInputRequest(toClientInputRequest(req))
       if (ok) {
         try {
-          this.writeAnswer(req, ans)
+          // writeAnswer validates and writes the first keys synchronously, so
+          // an unknown option or a dead PTY still falls through to surface.
+          // Only the echo-gated submit tail is deferred; a late submit-write
+          // failure cannot un-resolve an already-accepted answer.
+          void this.writeAnswer(req, ans).catch(() => {})
           return true
         } catch {
           // fall through to surface
@@ -534,16 +628,23 @@ export class Conversation {
     }
   }
 
-  private writeAnswer(req: TurnsInputRequest, ans: InputAnswer): void {
+  /**
+   * NOT async on purpose: validation and the first keystroke write throw
+   * synchronously (tryResolveInput's fall-through-to-surface relies on that);
+   * only the echo-gated submit tail of the free-text branch is deferred into
+   * the returned promise.
+   */
+  private writeAnswer(req: TurnsInputRequest, ans: InputAnswer): Promise<void> {
     const opts = req.options ?? []
     if (opts.length === 0) {
-      const submit = submitKeyForHarness(this.opts.harness, this.screen.snapshot().text)
-      this.writeKeys(concat(enc.encode(ans.text ?? ""), submit))
-      return
+      const preWriteScreen = this.screen.snapshot().text
+      const submit = submitKeyForHarness(this.opts.harness, preWriteScreen)
+      return this.writeMessageAndSubmit(ans.text ?? "", preWriteScreen, submit)
     }
     const opt = findOption(req, ans.optionID ?? "")
     if (!opt) throw ErrUnknownOption
     this.writeKeys(opt.keys)
+    return Promise.resolve()
   }
 
   // ── Watcher pump & turn-state machine ────────────────────────────────────

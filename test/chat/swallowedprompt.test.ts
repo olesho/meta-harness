@@ -47,4 +47,28 @@ describe("swallowed prompt (real pty + fake harness)", () => {
     // The raw ready screen must not leak into the persisted reply text.
     expect(turn.text).toBe("")
   })
+
+  // META-HARNESS-21, the codex 0.142.5 shape: the submit is consumed as part of
+  // a paste and the prompt stays sitting in the composer ("› <text>"). Codex
+  // writes its rollout lazily at first submitted message, so a false-success
+  // here surfaces later as a confusing transcript-read miss — the turn must
+  // error instead. The first AwaitSubmit absorbs the startup /status prime.
+  test("codex: prompt left sitting in the composer errors the turn", async () => {
+    const script = New("codex")
+      .Idle()
+      .AwaitSubmit() // the session-id primer's "/status" + CSI 13 u
+      .Idle()
+      .AwaitSubmit() // the real send
+      .CodexSwallowed(0)
+      .StayAliveUntilStopped()
+      .Build()
+
+    const conv = await openTracked(script)
+    await sendOneTurn(conv, "reply with just: ok")
+
+    const turn = await waitForTerminalTurn(conv, 4000)
+    expect(turn.state).toBe(TurnStateErrored)
+    expect(turn.reason).toContain("prompt not accepted")
+    expect(turn.text).toBe("")
+  })
 })
