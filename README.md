@@ -2,6 +2,16 @@
 
 TypeScript project for autonomous plan → ship → release → redeploy.
 
+## Documentation
+
+Docs live in [`docs/`](docs/README.md), split by format:
+
+- **Markdown** ([`docs/md/`](docs/md/README.md)) — the written docs: the
+  [architecture overview](docs/md/architecture.md), the [getting-started guide](docs/md/getting-started.md),
+  the [module reference](docs/md/modules/README.md), and the [task guides](docs/md/guides/README.md).
+- **HTML** ([`docs/html/`](docs/html/index.html)) — a single-page visual overview with SVG
+  architecture and turn-flow diagrams.
+
 ## Develop
 
 ```bash
