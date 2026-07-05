@@ -64,12 +64,12 @@ describe("discovery", () => {
   })
 
   test("lookup: installed via binary name", () => {
-    setShimPath({ name: "claude", body: "#!/bin/sh\necho 2.1.193\n" })
+    setShimPath({ name: "claude", body: "#!/bin/sh\necho 2.1.201\n" })
     const got = lookup("claude")
     expect(got.installed).toBe(true)
     expect(got.harness).toBe("claude-code")
     expect(got.binary).toBe("claude")
-    expect(got.detectedVersion).toBe("2.1.193")
+    expect(got.detectedVersion).toBe("2.1.201")
     expect(got.versionMatchesPin).toBe(true)
   })
 
