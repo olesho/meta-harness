@@ -254,6 +254,19 @@ export class Builder {
     return this.frame(delayMs, this.ccScreen("Codex", "", "• " + status + "…", ""), false)
   }
 
+  /**
+   * Paints the codex swallowed-submit frame: the captured prompt still sitting
+   * in the composer ("› <prompt>"), screen otherwise settled — the live 0.142.5
+   * shape after a text+Enter burst is consumed as a paste (META-HARNESS-21).
+   */
+  CodexSwallowed(delayMs: number): this {
+    return this.frame(
+      delayMs,
+      this.ccScreen("Codex", "", "› " + promptPlaceholder, "", this.resumeHint()),
+      true, // echo: substitute the captured prompt into the composer row
+    )
+  }
+
   /** Paints the end-of-turn codex frame with a fresh Token-usage footer. */
   CodexReply(delayMs: number, body: string): this {
     const n = this.s.steps.length + 1
@@ -315,6 +328,10 @@ export function New(harness: string): Builder {
 // holds at any scale, as long as fixture frame delays stay below markerGap.
 export const testIdleGap = 500
 export const testMarkerGap = 120
+// The fake never echoes typed text into a frame, so every echo-gated send waits
+// the full bound before writing the submit key. Keep it small — and strictly
+// below testIdleGap, or the idle watcher could complete a turn pre-submit.
+export const testEchoBound = 120
 
 /**
  * openFake spawns the fake harness driving the given script and returns an open
@@ -354,6 +371,7 @@ export async function openFake(
     rows: 40,
     idleGap: testIdleGap,
     markerGap: testMarkerGap,
+    echoBound: testEchoBound,
     ...optOverrides,
   })
 }

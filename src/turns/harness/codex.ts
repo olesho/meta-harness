@@ -160,6 +160,27 @@ export class CodexAdapter extends GenericAdapter implements Adapter {
     return enc.encode("/status" + "\x1b[13u")
   }
 
+  /**
+   * Implements turns.SwallowedPromptDetector. On codex 0.142.5 a swallowed
+   * submit (the text+Enter burst consumed as a paste) leaves the prompt text
+   * sitting in the composer with the Enter rendered as a newline — shape
+   * captured live during the META-HARNESS-21 triage. Two signals:
+   *   1. The settled screen is byte-identical to the one the prompt was
+   *      submitted on (nothing was accepted at all).
+   *   2. The LAST "›" row on screen — the composer; scrollback echoes of past
+   *      prompts render above it — still carries text. An idle codex that
+   *      actually ran the turn settles with an EMPTY "› " composer.
+   */
+  promptNotAccepted(snap: Snapshot, sentScreenText: string): boolean {
+    if (snap.text === sentScreenText) return true
+    const lines = snap.text.split("\n")
+    for (let i = lines.length - 1; i >= 0; i--) {
+      const m = composerRowRE.exec(lines[i]!)
+      if (m) return m[1]!.trim() !== ""
+    }
+    return false
+  }
+
   /** Implements turns.SessionResumer — `codex resume <uuid>`. */
   resumeArgs(harnessSessionID: string): string[] {
     return ["resume", harnessSessionID]
@@ -213,6 +234,10 @@ const menuRE = /^[^\S\r\n]*(?:›[^\S\r\n]*)?(\d+)\.[^\S\r\n]+(.+?)[^\S\r\n]*$/g
 
 // promptRE matches the idle composer prompt indicator — the "›" glyph alone.
 const promptRE = /^[^\S\r\n]*›/m
+
+// composerRowRE matches one "›"-prefixed screen row, capturing what follows the
+// glyph. Applied per-line, last match wins (the composer sits below scrollback).
+const composerRowRE = /^[^\S\r\n]*›(.*)$/
 
 /**
  * DetectInput recognizes a blocking startup interstitial in the rendered screen
