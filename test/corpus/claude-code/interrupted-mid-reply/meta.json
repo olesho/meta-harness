@@ -1,7 +1,7 @@
 {
   "harness": "claude-code",
   "binary_version": "2.1.201",
-  "recorded_at": "2026-07-05T13:45:53.055Z",
+  "recorded_at": "2026-07-05T13:48:54.027Z",
   "cols": 120,
   "rows": 40,
   "notes": "record-scenarios interrupted-mid-reply: long reply interrupted with ESC mid-stream; must end errored, not complete"

@@ -1,7 +1,7 @@
 {
   "harness": "claude-code",
   "binary_version": "2.1.201",
-  "recorded_at": "2026-07-05T13:41:44.092Z",
+  "recorded_at": "2026-07-05T13:48:08.133Z",
   "cols": 120,
   "rows": 40,
   "notes": "record-scenarios multi-turn: three consecutive short prompts; each turn must settle before the next"

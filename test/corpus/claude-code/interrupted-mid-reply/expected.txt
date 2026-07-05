@@ -1,3 +1,40 @@
                                                                                                                         
-Resume this session with:                                                                                               
-claude --resume b854b272-a00e-473b-8e60-3aca71b59f5f
+╭─── Claude Code v2.1.201 ─────────────────────────────────────────────────────────────────────────────────────────────╮
+│                                                    │ Tips for getting started                                        │
+│                 Welcome back Oleh!                 │ Ask Claude to create a new app or clone a repository            │
+│                                                    │ ─────────────────────────────────────────────────────────────── │
+│                       ▐▛███▜▌                      │ What's new                                                      │
+│                      ▝▜█████▛▘                     │ Claude Sonnet 5 sessions no longer use the mid-conversation sy… │
+│                        ▘▘ ▝▝                       │ Changed `AskUserQuestion` dialogs to no longer auto-continue b… │
+│   Fable 5 with high effort · Claude Max · Oleh     │ Changed the "default" permission mode to "Manual" across the C… │
+│   Luchkiv                                          │ /release-notes for more                                         │
+│ /…/T/meta-harness-corpus-rec/interrupted-mid-reply │                                                                 │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+                                                                                                                        
+ ⚠ 2 MCP servers need authentication · run /mcp                                                                         
+                                                                                                                        
+❯ Write a detailed 500 word essay about the history of Paris                                                            
+                                                                                                                        
+⏺ The History of Paris                                                                                                  
+                                                                                                                        
+  Paris began as a modest settlement of the Parisii, a Celtic tribe who established themselves on the Île de la Cité    
+  around the third century BCE. The island's strategic position in the Seine made it a natural crossroads for trade. In 
+  52 BCE, Roman forces under Julius Caesar conquered the region, and                                                    
+  ⎿  Interrupted · What should Claude do instead?                                                                       
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                       ● high · /effort 
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯                                                                                                                       
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏵⏵ auto mode on (shift+tab to cycle) · ← for agents

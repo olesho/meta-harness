@@ -1,3 +1,40 @@
                                                                                                                         
-Resume this session with:                                                                                               
-claude --resume 21e62f81-9e85-4997-a52b-1c774b1ad67b
+╭─── Claude Code v2.1.201 ─────────────────────────────────────────────────────────────────────────────────────────────╮
+│                                                    │ Tips for getting started                                        │
+│                 Welcome back Oleh!                 │ Run /init to create a CLAUDE.md file with instructions for Cla… │
+│                                                    │ ─────────────────────────────────────────────────────────────── │
+│                       ▐▛███▜▌                      │ What's new                                                      │
+│                      ▝▜█████▛▘                     │ Claude Sonnet 5 sessions no longer use the mid-conversation sy… │
+│                        ▘▘ ▝▝                       │ Changed `AskUserQuestion` dialogs to no longer auto-continue b… │
+│    Fable 5 with high effort · Claude Max · Oleh    │ Changed the "default" permission mode to "Manual" across the C… │
+│    Luchkiv                                         │ /release-notes for more                                         │
+│       /…/T/meta-harness-corpus-rec/tool-call       │                                                                 │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+                                                                                                                        
+ ⚠ 2 MCP servers need authentication · run /mcp                                                                         
+                                                                                                                        
+❯ Use the Read tool to read notes.txt and tell me exactly what it says                                                  
+                                                                                                                        
+  Read 1 file                                                                                                           
+                                                                                                                        
+⏺ notes.txt contains a single line:                                                                                     
+                                                                                                                        
+  The corpus fixture sentinel is: POMELO-CANYON-88                                                                      
+                                                                                                                        
+✻ Sautéed for 11s                                                                                                       
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯                                                                                                                       
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏵⏵ auto mode on (shift+tab to cycle) · ← for agents

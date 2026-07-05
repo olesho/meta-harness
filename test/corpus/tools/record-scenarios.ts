@@ -10,8 +10,11 @@
 // screen, trailing blanks trimmed).
 //
 // Each run does a warmup pass first (accept the folder-trust dialog so it never
-// pollutes the recording), then the recording pass, ending with a graceful
-// /quit so the "claude --resume <uuid>" hint lands in the recording.
+// pollutes the recording), then the recording pass. The recording is frozen at
+// the final settled conversation frame — the trailing graceful /quit is NOT
+// teed into bytes.raw, because at 2.1.201 /quit replaces the conversation with
+// a goodbye/resume screen and the replay tests assert the adapter's verdict on
+// the recording's final frame.
 //
 // Usage:
 //   bun test/corpus/tools/record-scenarios.ts --scenario multi-turn \
@@ -231,7 +234,10 @@ async function main(): Promise<void> {
   const bytesPath = join(out, "bytes.raw")
   writeFileSync(bytesPath, new Uint8Array(0))
   const startedAt = new Date()
-  const live = await spawnLive(resolved, cwd, (d) => appendFileSync(bytesPath, d))
+  let recording = true
+  const live = await spawnLive(resolved, cwd, (d) => {
+    if (recording) appendFileSync(bytesPath, d)
+  })
   const adapter = claudecode.New()
 
   try {
@@ -281,14 +287,17 @@ async function main(): Promise<void> {
       }
     }
 
-    await sleep(1_500) // settle before quitting so the final turn fully renders
-    await quitAndWaitExit(live)
+    await sleep(1_500) // settle so the final turn fully renders
   } catch (err) {
     live.pty.kill("SIGKILL")
     throw err
   }
 
+  // Freeze the recording at the settled conversation frame, THEN quit: the
+  // goodbye/resume screen /quit paints must not leak into bytes.raw.
   const finalText = live.screen.snapshot().text
+  recording = false
+  await quitAndWaitExit(live)
   writeFileSync(join(out, "expected.txt"), finalText.replace(/\s+$/u, "") + "\n")
   const meta = {
     harness: HARNESS,

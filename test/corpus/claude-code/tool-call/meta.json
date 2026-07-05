@@ -1,7 +1,7 @@
 {
   "harness": "claude-code",
   "binary_version": "2.1.201",
-  "recorded_at": "2026-07-05T13:42:20.373Z",
+  "recorded_at": "2026-07-05T13:48:35.996Z",
   "cols": 120,
   "rows": 40,
   "notes": "record-scenarios tool-call: single turn that makes a Read tool call before answering"
