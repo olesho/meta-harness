@@ -6,6 +6,30 @@
 // stable, so the few the chat readiness gate consumes are ported inline here
 // rather than reaching across the (separately-owned) turns layer for them.
 
+// --- claude-code composer / blocking-dialog detection ---
+
+// Blocking-dialog anchors (mirrored inline from the turns claudecode adapter,
+// per this file's convention — the chat layer stays turns-free). Each of these
+// dialogs renders its own "❯" selector under the "Claude Code" header, which
+// the old header+selector heuristic mistook for a ready composer.
+const claudeTrustAnchor = "Do you trust the files in this folder?"
+const claudeTrustAnchorAlt = "Is this a project you created or one you trust?"
+const claudeBypassAnchor = "Bypass Permissions mode"
+
+// claudeComposerRE matches the idle composer prompt line: a "❯" alone on its
+// own line (only whitespace after). While a turn is in flight the composer is
+// replaced by the spinner, past prompts render as "❯ <text>" (non-empty), and
+// blocking dialogs render "❯ 1. Yes…" menu rows — none of which match.
+const claudeComposerRE = /^[^\S\r\n]*❯[^\S\r\n]*$/m
+
+function claudeBlockingDialog(text: string): boolean {
+  return (
+    text.includes(claudeTrustAnchor) ||
+    text.includes(claudeTrustAnchorAlt) ||
+    text.includes(claudeBypassAnchor)
+  )
+}
+
 // --- codex interstitial / composer detection (port of codex/input.go) ---
 
 const codexUpdateAnchor = "Update available!"
@@ -60,10 +84,14 @@ export function requiresPromptReadiness(harness: string): boolean {
 export function readyForInput(harness: string, text: string): boolean {
   switch (harness) {
     case "claude-code":
-      // A blocking dialog renders its own "❯" selector + "Claude Code" header,
-      // which would otherwise look ready; the header+selector heuristic alone is
-      // used here (the turns adapter owns the full dialog detection).
-      return text.includes("Claude Code") && text.includes("❯")
+      // A blocking dialog (folder trust, bypass acceptance) renders its own
+      // "❯" selector + "Claude Code" header and would otherwise look ready —
+      // reject those outright, mirroring the codex interstitial handling.
+      if (claudeBlockingDialog(text)) return false
+      // Positive signal: the EMPTY composer line ("❯" alone on its own line),
+      // not merely header + "❯" anywhere — verified against the live 2.1.201
+      // ready screen and the 2.1.185 corpus.
+      return text.includes("Claude Code") && claudeComposerRE.test(text)
     case "codex":
       // A blocking startup interstitial renders its own "›" highlight and looks
       // ready — treat it as not-ready so Send waits for the auto-dismiss.
