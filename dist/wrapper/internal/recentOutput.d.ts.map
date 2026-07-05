@@ -1,0 +1,1 @@
+{"version":3,"file":"recentOutput.d.ts","sourceRoot":"","sources":["../../../src/wrapper/internal/recentOutput.ts"],"names":[],"mappings":"AAIA,qBAAa,kBAAkB;IAC7B,OAAO,CAAC,QAAQ,CAAC,KAAK,CAAQ;IAC9B,OAAO,CAAC,GAAG,CAAgC;gBAE/B,KAAK,EAAE,MAAM;IAIzB,KAAK,CAAC,CAAC,EAAE,UAAU,GAAG,IAAI;IAa1B,MAAM,IAAI,MAAM;CAGjB;AAED,wBAAgB,eAAe,CAAC,KAAK,EAAE,MAAM,GAAG,kBAAkB,CAEjE"}

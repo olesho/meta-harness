@@ -8,6 +8,7 @@
 
 export {
   runOneShot,
+  runOneShotDetailed,
   cleanEnv,
   isLeakedClaudeEnv,
   AutoAcceptTrust,
@@ -15,4 +16,5 @@ export {
   TurnErroredError,
   EmptyPromptError,
   type OneShotConfig,
+  type OneShotOutcome,
 } from "./oneshot.ts"

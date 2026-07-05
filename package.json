@@ -1,28 +1,31 @@
 {
   "name": "meta-harness",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
-  "main": "./src/index.ts",
-  "types": "./src/index.ts",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "//exports": "Conditional: Bun consumers (e.g. orche) resolve raw `src/**` TS via the `bun` condition; Node consumers (loomcli flue bundle + sandbox runner) resolve compiled `dist/**` via `import`. Keep `bun` FIRST so Bun never falls through to dist. `dist` is built by `npm run build` and committed (see tsconfig.build.json).",
   "exports": {
-    ".": "./src/index.ts",
-    "./async": "./src/async/index.ts",
-    "./screen": "./src/screen/index.ts",
-    "./wrapper": "./src/wrapper/index.ts",
-    "./turns": "./src/turns/index.ts",
-    "./transcript": "./src/transcript/index.ts",
-    "./chat": "./src/chat/index.ts",
-    "./discovery": "./src/discovery/index.ts",
-    "./versions": "./src/versions/index.ts",
-    "./oneshot": "./src/oneshot/index.ts"
+    ".": { "bun": "./src/index.ts", "types": "./dist/index.d.ts", "import": "./dist/index.js" },
+    "./async": { "bun": "./src/async/index.ts", "types": "./dist/async/index.d.ts", "import": "./dist/async/index.js" },
+    "./screen": { "bun": "./src/screen/index.ts", "types": "./dist/screen/index.d.ts", "import": "./dist/screen/index.js" },
+    "./wrapper": { "bun": "./src/wrapper/index.ts", "types": "./dist/wrapper/index.d.ts", "import": "./dist/wrapper/index.js" },
+    "./turns": { "bun": "./src/turns/index.ts", "types": "./dist/turns/index.d.ts", "import": "./dist/turns/index.js" },
+    "./transcript": { "bun": "./src/transcript/index.ts", "types": "./dist/transcript/index.d.ts", "import": "./dist/transcript/index.js" },
+    "./chat": { "bun": "./src/chat/index.ts", "types": "./dist/chat/index.d.ts", "import": "./dist/chat/index.js" },
+    "./discovery": { "bun": "./src/discovery/index.ts", "types": "./dist/discovery/index.d.ts", "import": "./dist/discovery/index.js" },
+    "./versions": { "bun": "./src/versions/index.ts", "types": "./dist/versions/index.d.ts", "import": "./dist/versions/index.js" },
+    "./oneshot": { "bun": "./src/oneshot/index.ts", "types": "./dist/oneshot/index.d.ts", "import": "./dist/oneshot/index.js" }
   },
   "bin": {
-    "meta-harness-run": "./src/cli/run.ts"
+    "meta-harness-run": "./src/cli/run.ts",
+    "meta-harness-structured-run": "./dist/cli/structured-runner.js"
   },
   "scripts": {
     "test": "bun test",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "build": "node scripts/build.mjs"
   },
   "devDependencies": {
     "@types/node": "^22",

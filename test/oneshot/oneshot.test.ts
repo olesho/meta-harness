@@ -9,6 +9,7 @@ import { join } from "node:path"
 
 import {
   runOneShot,
+  runOneShotDetailed,
   cleanEnv,
   isLeakedClaudeEnv,
   DeadlineError,
@@ -95,6 +96,75 @@ describe("runOneShot (real pty + fake harness)", () => {
         prompt: "   \n",
       }),
     ).rejects.toThrow()
+  })
+})
+
+describe("runOneShotDetailed (failure-safe result union)", () => {
+  const SESSION_ID = "abcd1234-0000-0000-0000-000000000001"
+
+  test("completed: carries reply, harnessSessionID, and workingDir", async () => {
+    const sentinel = "DETAILED-OK"
+    const script = New("claude-code")
+      .Session(SESSION_ID)
+      .Idle()
+      .AwaitSubmit()
+      .Working(30, "Thinking")
+      .Reply(40, "Answer: " + PromptRef(), "Synthesized", "5s")
+      .Build()
+
+    const wd = mkdtempSync(join(tmpdir(), "detailed-wd-"))
+    const out = await runOneShotDetailed(deadline(8000), {
+      harness: "claude-code",
+      binaryPath: fakeHarnessBin,
+      prompt: "Reply with " + sentinel,
+      workingDir: wd,
+      env: scriptEnv(script),
+      idleGap: testIdleGap,
+      markerGap: testMarkerGap,
+    })
+
+    expect(out.status).toBe("completed")
+    if (out.status !== "completed") throw new Error("unreachable")
+    expect(out.reply).toContain(sentinel)
+    expect(out.harnessSessionID).toBe(SESSION_ID)
+    expect(out.workingDir).toBe(wd)
+  })
+
+  test("empty prompt: startup_error, never throws", async () => {
+    const out = await runOneShotDetailed(deadline(2000), {
+      harness: "claude-code",
+      binaryPath: fakeHarnessBin,
+      prompt: "   \n",
+      workingDir: "/tmp/empty-wd",
+    })
+
+    expect(out.status).toBe("startup_error")
+    if (out.status !== "startup_error") throw new Error("unreachable")
+    expect(out.reason).toContain("empty")
+    expect(out.workingDir).toBe("/tmp/empty-wd")
+  })
+
+  test("deadline: reports 'deadline' and still carries the extracted session id", async () => {
+    const script = New("claude-code")
+      .Session(SESSION_ID)
+      .Idle()
+      .AwaitSubmit()
+      .Working(30, "Thinking")
+      .StayAliveUntilStopped()
+      .Build()
+
+    const out = await runOneShotDetailed(deadline(600), {
+      harness: "claude-code",
+      binaryPath: fakeHarnessBin,
+      prompt: "hang please",
+      env: scriptEnv(script),
+      idleGap: testIdleGap,
+      markerGap: testMarkerGap,
+    })
+
+    expect(out.status).toBe("deadline")
+    if (out.status !== "deadline") throw new Error("unreachable")
+    expect(out.harnessSessionID).toBe(SESSION_ID)
   })
 })
 

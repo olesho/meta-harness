@@ -15,8 +15,19 @@
 // writes behind a Mutex and await each flush so snapshots stay coherent and the
 // generation counter mirrors the Go implementation exactly.
 
-import { Terminal } from "@xterm/headless"
+import { createRequire } from "node:module"
+
 import { Mutex } from "../internal/async/index.ts"
+
+// @xterm/headless is a CommonJS module. A bare `import { Terminal }` resolves
+// under Bun and under a bundler (esbuild), but NOT under plain Node ESM — Node's
+// CJS named-export detection doesn't see `Terminal` through xterm's UMD wrapper.
+// createRequire loads the CJS module identically in every runtime, so the compiled
+// dist also runs under raw Node (the sandbox structured runner + the build smoke).
+// `InstanceType<typeof Terminal>` recovers the instance type for annotations.
+const { Terminal } = createRequire(import.meta.url)(
+  "@xterm/headless",
+) as typeof import("@xterm/headless")
 
 /**
  * A coherent point-in-time view of the emulated screen. Snapshots are plain
@@ -98,7 +109,7 @@ class Subscriber implements Notify {
  * for concurrent (interleaved-async) use.
  */
 export class Screen {
-  private readonly term: Terminal
+  private readonly term: InstanceType<typeof Terminal>
   private readonly mu = new Mutex()
   private gen = 0
   private readonly subs = new Set<Subscriber>()

@@ -1,0 +1,271 @@
+import { type Screen, type Snapshot } from "../screen/index.ts";
+import { type Adapter, type Event as TurnEvent, type InputRequest as TurnsInputRequest, type Watcher } from "../turns/index.ts";
+import { type Session as WrapperSession } from "../wrapper/index.ts";
+import { Context } from "../internal/async/index.ts";
+import type { Store } from "./store.ts";
+import { type Session, type Turn, type ConversationEvent, type InputRequest, type InputAnswer, type InputPolicy, type HistorySource } from "./types.ts";
+import { ControlQueue } from "./control.ts";
+/** Options configures a single Conversation. Mirrors chat.Options. */
+export interface Options {
+    /** Per-harness adapter name. Required. */
+    harness: string;
+    /** The harness executable. Required. */
+    binaryPath: string;
+    args?: string[];
+    /**
+     * When set, resumes the named *harness* session id (not the chat session id):
+     * the resolved adapter must implement SessionResumer, whose resumeArgs are
+     * prepended to `args` at launch, and the new chat Session's harnessSessionID
+     * is seeded with this value. Open throws ErrResumeUnsupported if the harness
+     * cannot resume. Prefer Reopen to derive this from a stored Session.
+     */
+    resume?: string;
+    workingDir?: string;
+    env?: string[];
+    effort?: string;
+    model?: string;
+    cols?: number;
+    rows?: number;
+    /** Backs the chat metadata. Required; pass newMemStore() for the default. */
+    store: Store;
+    /** Sizes the events buffer. Defaults to 32. */
+    eventBuffer?: number;
+    /** Pre-configures how blocking interactive prompts are resolved. */
+    inputPolicy?: InputPolicy;
+    /** Turns off the built-in auto-dismissal of Codex startup interstitials. */
+    disableCodexAutoDismiss?: boolean;
+    /** In-process resolver consulted when InputPolicy did not auto-answer. */
+    onInputRequest?: (req: InputRequest) => [InputAnswer, boolean];
+    /** Test-only idle-completion window override (ms). Zero = package default. */
+    idleGap?: number;
+    /** Test-only marker-confirm window override (ms). Zero = package default. */
+    markerGap?: number;
+    /** Test-only session-id prime deadline override (ms). Zero = package default. */
+    primeBound?: number;
+}
+/** A size-1 coalesced wake signal — the Go `chan struct{}` of capacity 1. */
+declare class Signal {
+    private pending;
+    private waiter;
+    signal(): void;
+    receive(): Promise<void>;
+    /** Non-blocking drain — true if a signal was pending (the select default). */
+    tryReceive(): boolean;
+}
+/** A buffered chat-event channel: emit drops when full; receive/tryReceive read. */
+declare class EventBus {
+    private readonly cap;
+    private readonly buf;
+    private readonly recvWaiters;
+    private _closed;
+    constructor(cap: number);
+    /** Non-blocking push; drops the event when the buffer is full (Go's emit). */
+    emit(ev: ConversationEvent): void;
+    /** Synchronous, non-blocking receive — the Go `select { case <-ch: default }`. */
+    tryReceive(): {
+        value?: ConversationEvent;
+        ok: boolean;
+    };
+    receive(): Promise<{
+        value?: ConversationEvent;
+        ok: boolean;
+    }>;
+    close(): void;
+    [Symbol.asyncIterator](): AsyncIterator<ConversationEvent>;
+}
+/** Fields a Conversation can be constructed with (the Go struct-literal shape). */
+export interface ConversationInit {
+    opts?: Partial<Options>;
+    store?: Store;
+    adapter?: Adapter;
+    sess?: WrapperSession;
+    screen?: Screen;
+    watcher?: Watcher;
+    queue?: ControlQueue;
+    session?: Session;
+    eventCh?: EventBus;
+    currentTurn?: Turn | null;
+    markerArmCh?: Signal;
+    inputStateCh?: Signal;
+    closed?: boolean;
+    /** Test injection: replaces sess.writeStdin for answer/quit keystrokes. */
+    writeStdin?: (p: Uint8Array) => void;
+}
+export declare class Conversation {
+    opts: Options;
+    store: Store;
+    adapter: Adapter;
+    sess?: WrapperSession;
+    screen: Screen;
+    watcher?: Watcher;
+    releaseWriter?: () => void;
+    queue: ControlQueue;
+    session: Session;
+    /**
+     * Resume-only, one-shot latch. Armed by openWithSession ONLY when the session
+     * was seeded from an Options.resume id AND the resolved adapter reports
+     * resumeForksSessionID() === true (i.e. `resume` mints a NEW harness session id
+     * rather than continuing the old one). While set, maybeExtractSessionID is
+     * allowed to overwrite the seeded (now-stale) id EXACTLY ONCE with the freshly
+     * located id, after which it clears itself. It never arms for non-forking
+     * harnesses (Claude Code, Codex per the verified finding), so the general
+     * first-write-wins guards remain in force for every other session.
+     */
+    harnessSessionIDProvisional: boolean;
+    /**
+     * Diagnostic outcome of the startup session-id prime (primeSessionID). Read by
+     * tests via a structural escape; NOT a public accessor and NOT walked by the
+     * contract golden (private instance field). Undefined when priming did not run
+     * (resume, non-codex, id already set).
+     */
+    private primeOutcome?;
+    eventCh: EventBus;
+    currentTurn: Turn | null;
+    endMarkerSeen: boolean;
+    markerArmCh: Signal;
+    inputStateCh: Signal;
+    currentInput: TurnsInputRequest | null;
+    inputSurfaced: boolean;
+    writeStdin?: (p: Uint8Array) => void;
+    private closedFlag;
+    private closedResolve;
+    private readonly closedPromise;
+    private closeDone;
+    constructor(init?: ConversationInit);
+    /** The chat-level session ID. */
+    sessionID(): string;
+    /** The per-harness turns adapter. */
+    getAdapter(): Adapter;
+    /** A coherent point-in-time view of the rendered terminal. */
+    screenSnapshot(): Snapshot;
+    /** The channel of turn-state transitions (async-iterable). */
+    events(): EventBus;
+    /** Block until granted the exclusive control token. FIFO. */
+    acquireControl(ctx: Context): Promise<() => void>;
+    /** Terminate the harness, release the writer lock, stop the watcher. */
+    close(ctx?: Context): Promise<void>;
+    isClosed(): boolean;
+    /** Transmit a user message; record the user turn and a pending assistant turn. */
+    send(ctx: Context, text: string): Promise<string>;
+    /** The underlying wrapper session, for callers reaching past the chat API. */
+    wrapper(): WrapperSession | undefined;
+    /** Ask the harness to exit gracefully via its adapter-defined quit sequence. */
+    quit(ctx: Context): Promise<void>;
+    /** Respond to the interactive prompt currently awaiting an answer. */
+    answer(_ctx: Context, requestID: string, ans: InputAnswer): Promise<void>;
+    /** Records a pending request and tries policy/handler resolution, else surfaces. */
+    handleInputRequested(req: TurnsInputRequest | undefined): void;
+    handleInputResolved(_req: TurnsInputRequest | undefined): void;
+    private signalInputState;
+    /** A prompt is pending that no policy/handler is resolving. */
+    inputAwaitingClient(): boolean;
+    private writeKeys;
+    private tryAutoDismissCodex;
+    private tryResolveInput;
+    private policyOption;
+    private writeAnswer;
+    private consumeWatcher;
+    handleTurnsEvent(ev: TurnEvent): Promise<void>;
+    private idleGapDur;
+    private markerGapDur;
+    private idleCompletionWatcher;
+    maybeIdleComplete(): Promise<void>;
+    maybeExtractSessionID(): Promise<void>;
+    /**
+     * Persists `id` then, only on a committed write, sets it in memory. Ordering
+     * matters: the first-write-wins guards short-circuit once the in-memory id is
+     * non-empty, so setting in memory before a failed persist would wedge the id
+     * empty in the store forever. Persist-first means a failed updateSession leaves
+     * the in-memory id unchanged, so the next TurnComplete legitimately retries.
+     *
+     * `replace=false` (first-write mode): a no-op once the id is already set.
+     * `replace=true` (provisional-refresh mode): overwrites a non-empty seeded id
+     * only when `id` genuinely differs. Returns true iff the id was persisted+set.
+     * The store rejection is caught here so it can never surface as unhandled.
+     */
+    private captureAndPersistSessionID;
+    /** Extract the id from the current screen and first-write it. True once set. */
+    private captureFromScreen;
+    private primeBoundDur;
+    /**
+     * Primes the harness session id at first idle by writing the adapter's
+     * primeSessionIDKeys (Codex: `/status`), which renders the id on screen, then
+     * capturing it — all before Open returns the handle, so no public method can
+     * race the primer (they need the handle; send/answer also need the control
+     * token, which the primer holds). Bounded by an internal deadline so Open can
+     * never hang; a capture miss is non-fatal (the `/quit` hint and the first
+     * TurnComplete re-scrape remain backstops). Only lifecycle/IO failures — ctx
+     * cancellation, ErrClosed, or a writeKeys throw — are fatal and propagate to
+     * openWithSession's cleanup. Records the outcome in primeOutcome for tests.
+     */
+    private primeSessionID;
+    private extractSessionID;
+    captureRawSessionID(line: string): Promise<void>;
+    history(): Promise<Turn[]>;
+    historyWithSource(): Promise<[Turn[], HistorySource]>;
+    private assistantText;
+    private adapterBusy;
+    private adapterQuitSequence;
+    private adapterRawSessionID;
+    private waitReadyForSend;
+    /**
+     * Blocks until the composer prompt is ready for a message. Owns its screen
+     * subscription in a try/finally so it always unsubscribes. Throws ctx.err() on
+     * cancellation, ErrClosed on close, ErrInputPending on a client-facing prompt.
+     * Extracted verbatim from waitReadyForSend's loop.
+     */
+    private awaitPromptReady;
+    /**
+     * Same readiness loop as awaitPromptReady but with an extra, NON-throwing exit:
+     * when deadlinePromise resolves before the prompt is ready it returns the
+     * "deadline" sentinel instead of throwing. The screen subscription is owned in
+     * one try/finally so it never leaks on the timeout path (unlike racing a live
+     * awaitPromptReady against a timer, which would abandon a subscribed waiter).
+     * ctx cancellation still throws ctx.err(); close still throws ErrClosed;
+     * a client-facing prompt still throws ErrInputPending.
+     */
+    private awaitPromptReadyUntil;
+    emit(ev: ConversationEvent): void;
+    /** Internal: start the watcher + idle pumps. Used by Open. */
+    startPumps(): void;
+}
+/** resolveAdapter maps a harness name to a concrete turns.Adapter. */
+export declare function resolveAdapter(name: string): Adapter;
+/** Open starts a harness, wires the screen + turn watcher, returns a Conversation. */
+export declare function Open(ctx: Context | undefined, opts: Options): Promise<Conversation>;
+/**
+ * ReopenOptions configures Reopen. `harness` and `workingDir` are omitted because
+ * they are derived from the stored Session; `resume` is omitted because it is
+ * derived from the stored harnessSessionID. Every other launch knob (binaryPath,
+ * env, args, effort, model, cols, rows, inputPolicy, onInputRequest, …) must be
+ * supplied by the caller — the stored Session persists ONLY harness, workingDir,
+ * and harnessSessionID, so it cannot reconstruct them.
+ */
+export type ReopenOptions = Omit<Options, "harness" | "workingDir" | "resume"> & {
+    /** The chat session id (as returned by Conversation.sessionID()) to reopen. */
+    sessionID: string;
+};
+/**
+ * Reopen loads a stored chat Session by id and relaunches its harness in resume
+ * mode, reusing the SAME chat session id rather than minting a new one — so the
+ * returned Conversation's sessionID() and history reflect the resumed session.
+ *
+ * It derives `harness` and `workingDir` from the stored record and `resume` from
+ * the stored harnessSessionID. The stored Session persists only those three
+ * fields, so binaryPath, env, and all other launch knobs must be supplied by the
+ * caller via ReopenOptions.
+ *
+ * Throws ErrNoHarnessSession when the stored session never captured a harness
+ * session id, and surfaces ErrResumeUnsupported unchanged when the derived
+ * harness has no SessionResumer.
+ */
+export declare function Reopen(ctx: Context | undefined, opts: ReopenOptions): Promise<Conversation>;
+/**
+ * Structurally probes an adapter for the optional SessionForkResumer capability.
+ * Returns true only when the adapter explicitly reports that `resume` forks the
+ * harness session id (mints a new one). Adapters that omit the method — Claude
+ * Code, and Codex per the verified finding — default to no-fork.
+ */
+export declare function adapterResumeForks(adapter: Adapter): boolean;
+export { EventBus, Signal };
+//# sourceMappingURL=conversation.d.ts.map

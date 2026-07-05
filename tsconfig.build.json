@@ -1,0 +1,25 @@
+{
+  // Node-targeted production build. Emits ESM `dist/` (+ .d.ts) from the raw-`.ts`
+  // source so Node consumers (e.g. loomcli's flue bundle + sandbox runner) import
+  // compiled JS instead of TypeScript. Bun consumers keep importing `src/**`
+  // directly via the `bun` export condition (see package.json `exports`).
+  //
+  // `rewriteRelativeImportExtensions` rewrites the source's `./foo.ts` specifiers
+  // to `./foo.js` on emit; `nodenext` makes the output real Node ESM. The Bun-only
+  // CLI (src/cli) and all tests are excluded — the CLI stays Bun via `bin`.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "allowImportingTsExtensions": true,
+    "rewriteRelativeImportExtensions": true,
+    "outDir": "dist",
+    "rootDir": "src"
+  },
+  "include": ["src"],
+  "exclude": ["src/cli/run.ts", "test", "**/*.test.ts", "**/*.spec.ts", "**/*.test.mts"]
+}
