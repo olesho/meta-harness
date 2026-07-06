@@ -26,8 +26,12 @@ export declare class ClaudeCodeAdapter extends GenericAdapter implements Adapter
     promptNotAccepted(snap: Snapshot, sentScreenText: string): boolean;
     /** Implements turns.Quitter. */
     quitSequence(): Uint8Array;
+    /** Implements turns.SessionInitializer — `claude --session-id <uuid>`. */
+    initSession(): [string[], string];
     /** Implements turns.SessionResumer — `claude --resume <uuid>`. */
     resumeArgs(harnessSessionID: string): string[];
+    /** Implements turns.SessionControlFlags — flags chat manages, banned from args. */
+    sessionControlFlags(): string[];
     /** Implements turns.RawSessionIDExtractor. */
     extractSessionIDFromLine(line: string): [string, boolean];
     /** Implements turns.TranscriptReader — reads the on-disk Claude Code log. */
