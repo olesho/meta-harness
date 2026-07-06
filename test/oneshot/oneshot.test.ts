@@ -101,6 +101,10 @@ describe("runOneShot (real pty + fake harness)", () => {
 
 describe("runOneShotDetailed (failure-safe result union)", () => {
   const SESSION_ID = "abcd1234-0000-0000-0000-000000000001"
+  // claude-code mints its own session id at launch (--session-id <uuid>), so
+  // the detailed result carries that minted uuid — not the fake's hint id.
+  const uuidRE =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
   test("completed: carries reply, harnessSessionID, and workingDir", async () => {
     const sentinel = "DETAILED-OK"
@@ -126,7 +130,8 @@ describe("runOneShotDetailed (failure-safe result union)", () => {
     expect(out.status).toBe("completed")
     if (out.status !== "completed") throw new Error("unreachable")
     expect(out.reply).toContain(sentinel)
-    expect(out.harnessSessionID).toBe(SESSION_ID)
+    expect(out.harnessSessionID).toMatch(uuidRE)
+    expect(out.harnessSessionID).not.toBe(SESSION_ID)
     expect(out.workingDir).toBe(wd)
   })
 
@@ -144,7 +149,7 @@ describe("runOneShotDetailed (failure-safe result union)", () => {
     expect(out.workingDir).toBe("/tmp/empty-wd")
   })
 
-  test("deadline: reports 'deadline' and still carries the extracted session id", async () => {
+  test("deadline: reports 'deadline' and still carries the minted session id", async () => {
     const script = New("claude-code")
       .Session(SESSION_ID)
       .Idle()
@@ -164,7 +169,7 @@ describe("runOneShotDetailed (failure-safe result union)", () => {
 
     expect(out.status).toBe("deadline")
     if (out.status !== "deadline") throw new Error("unreachable")
-    expect(out.harnessSessionID).toBe(SESSION_ID)
+    expect(out.harnessSessionID).toMatch(uuidRE)
   })
 })
 

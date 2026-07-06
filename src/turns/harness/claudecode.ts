@@ -8,7 +8,7 @@
 // Embeds the generic adapter so wrapper-level status events keep flowing.
 // Port of pkg/turns/harness/claudecode/{claudecode.go}.
 
-import { createHash } from "node:crypto"
+import { createHash, randomUUID } from "node:crypto"
 import type { Snapshot } from "../../screen/index.ts"
 import { ClaudeCodeReader } from "../../transcript/claudecode/claudecode.ts"
 import { turnsFromEvents } from "../../transcript/event.ts"
@@ -30,7 +30,10 @@ const enc = new TextEncoder()
 const thinkingRE =
   /^[^\S\r\n]*(✻ \p{Lu}\p{L}+ for \d+[hms](?: \d+[hms])*)[^\S\r\n]*$/gmu
 
-// resumeRE matches the "claude --resume <uuid>" hint Claude Code prints on exit.
+// resumeRE matches the "claude --resume <uuid>" hint older Claude Code builds
+// printed on exit. As of 2.1.201 no such hint is printed (graceful exit emits
+// only terminal-mode teardown), so this raw-line capture is a legacy backstop:
+// the session id is now pinned at launch via `--session-id` (see initSession).
 const resumeRE =
   /claude --resume ([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})/
 
@@ -207,9 +210,29 @@ export class ClaudeCodeAdapter extends GenericAdapter implements Adapter {
     return quitCommand
   }
 
+  /** Implements turns.SessionInitializer — `claude --session-id <uuid>`. */
+  initSession(): [string[], string] {
+    const id = randomUUID()
+    return [["--session-id", id], id]
+  }
+
   /** Implements turns.SessionResumer — `claude --resume <uuid>`. */
   resumeArgs(harnessSessionID: string): string[] {
     return ["--resume", harnessSessionID]
+  }
+
+  /** Implements turns.SessionControlFlags — flags chat manages, banned from args. */
+  sessionControlFlags(): string[] {
+    return [
+      "--session-id",
+      "-r",
+      "--resume",
+      "-c",
+      "--continue",
+      "--fork-session",
+      "--from-pr",
+      "--no-session-persistence",
+    ]
   }
 
   /** Implements turns.RawSessionIDExtractor. */

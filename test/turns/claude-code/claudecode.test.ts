@@ -137,3 +137,45 @@ describe("claude-code resumeArgs", () => {
     expect(args).toEqual(["--resume", "sess-uuid"])
   })
 })
+
+describe("claude-code session control", () => {
+  const uuidRE =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
+
+  test("initSession mints --session-id <uuid>", () => {
+    const [argv, id] = claudecode.New().initSession()
+    expect(argv[0]).toBe("--session-id")
+    expect(argv[1]).toBe(id)
+    expect(id).toMatch(uuidRE)
+  })
+
+  test("initSession mints a fresh id per call", () => {
+    const [, a] = claudecode.New().initSession()
+    const [, b] = claudecode.New().initSession()
+    expect(a).not.toBe(b)
+  })
+
+  test("sessionControlFlags lists the chat-managed flags", () => {
+    expect(claudecode.New().sessionControlFlags()).toEqual([
+      "--session-id",
+      "-r",
+      "--resume",
+      "-c",
+      "--continue",
+      "--fork-session",
+      "--from-pr",
+      "--no-session-persistence",
+    ])
+  })
+
+  test("extractSessionIDFromLine still matches the legacy resume hint", () => {
+    const id = "74ca2184-c064-492c-88dc-c79c128de13e"
+    const [got, ok] = claudecode
+      .New()
+      .extractSessionIDFromLine("  claude --resume " + id)
+    expect(ok).toBe(true)
+    expect(got).toBe(id)
+    const [, miss] = claudecode.New().extractSessionIDFromLine("✻ Baked for 5s")
+    expect(miss).toBe(false)
+  })
+})

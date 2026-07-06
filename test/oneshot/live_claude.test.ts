@@ -9,10 +9,11 @@
 //   1. runOneShot() — the production one-shot path (src/oneshot/oneshot.ts):
 //      prompt in → a real, non-empty reply out that is NOT the ready screen.
 //   2. chat Open()/send()/quit() — the layer runOneShot wraps — additionally
-//      asserting the child echoed the prompt into the rendered screen and that
-//      the harness session id was captured. The session-id assertion needs the
-//      graceful `/quit` resume hint, which one-shot teardown (SIGTERM) skips —
-//      hence the chat-level path here rather than a second runOneShot.
+//      asserting the child echoed the prompt into the rendered screen, that the
+//      harness session id is pinned at launch (chat mints it and passes
+//      `--session-id <uuid>`; 2.1.201 no longer prints the exit-time resume
+//      hint), and that history() reads the on-disk transcript back under that
+//      pinned id after the turn completes.
 
 import { describe, expect, test } from "bun:test"
 import { mkdtempSync, rmSync } from "node:fs"
@@ -119,7 +120,7 @@ describe("live claude e2e (LIVE_CLAUDE=1)", () => {
   )
 
   test.skipIf(!live)(
-    "live send echoes the prompt on screen and captures the harness session id",
+    "live send echoes the prompt on screen, pins the session id at launch, and reads the transcript back",
     async () => {
       const dir = mkdtempSync(join(tmpdir(), "live-claude-chat-"))
       const store = newMemStore()
@@ -132,6 +133,12 @@ describe("live claude e2e (LIVE_CLAUDE=1)", () => {
         inputPolicy: AutoAcceptTrust,
       })
       try {
+        // The id is minted by chat at Open (`--session-id <uuid>`) — available
+        // immediately, without waiting for any exit-time hint (2.1.201 prints
+        // none). pollHarnessSessionID returns instantly on the seeded id.
+        const seededID = await pollHarnessSessionID(store, conv.sessionID(), 5_000)
+        expect(seededID).toMatch(uuidRE)
+
         const release = await conv.acquireControl(ctx)
         try {
           await conv.send(ctx, PROMPT)
@@ -147,11 +154,26 @@ describe("live claude e2e (LIVE_CLAUDE=1)", () => {
         // The child echoed the prompt: it must be visible in the captured screen.
         expect(conv.screenSnapshot().text).toContain(PROMPT)
 
-        // Graceful quit renders the "claude --resume <uuid>" hint, which the
-        // raw-line capture turns into the persisted harness session id.
+        // The ticket's actual complaint: with the id pinned at launch, claude
+        // persists its JSONL under exactly that uuid and history() reads the
+        // transcript back — no more silent store-fallback with zero entries.
+        // The transcript flush can lag turn completion; retry briefly.
+        let transcript: Turn[] = []
+        const historyDeadline = Date.now() + 20_000
+        for (;;) {
+          transcript = await conv.history()
+          if (transcript.length > 0 || Date.now() >= historyDeadline) break
+          await new Promise((r) => setTimeout(r, 500))
+        }
+        expect(transcript.length).toBeGreaterThan(0)
+        expect(
+          transcript.some((t) => t.text.toLowerCase().includes(TOKEN)),
+        ).toBe(true)
+
+        // Graceful quit must not disturb the pinned id.
         await conv.quit(ctx)
-        const harnessID = await pollHarnessSessionID(store, conv.sessionID(), 20_000)
-        expect(harnessID).toMatch(uuidRE)
+        const harnessID = await pollHarnessSessionID(store, conv.sessionID(), 5_000)
+        expect(harnessID).toBe(seededID)
       } finally {
         cancel()
         const { ctx: closeCtx } = Context.withDeadline(Context.background(), 3000)
