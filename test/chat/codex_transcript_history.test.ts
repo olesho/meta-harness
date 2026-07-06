@@ -2,10 +2,11 @@
 // a Codex session with a non-empty harnessSessionID returns the rollout's turns
 // sourced from the on-disk transcript (HistorySourceTranscript).
 import { describe, expect, test, afterEach } from "bun:test"
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs"
+import { mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { Conversation } from "../../src/chat/conversation.ts"
+import { writeCodexRollout } from "./helpers.ts"
 import { newMemStore } from "../../src/chat/memstore.ts"
 import { newScreen } from "../../src/screen/index.ts"
 import { codex } from "../../src/turns/index.ts"
@@ -25,40 +26,6 @@ function tempDir(): string {
 afterEach(() => {
   for (const d of tmps.splice(0)) rmSync(d, { recursive: true, force: true })
 })
-
-function writeCodexRollout(sessionsRoot: string, sessionID: string, cwd: string): void {
-  const dir = join(sessionsRoot, "2026", "06", "26")
-  mkdirSync(dir, { recursive: true })
-  const lines = [
-    JSON.stringify({
-      timestamp: "2026-06-26T05:25:23.303Z",
-      type: "session_meta",
-      payload: { session_id: sessionID, cwd, cli_version: "0.142.0" },
-    }),
-    JSON.stringify({
-      timestamp: "2026-06-26T05:25:24.000Z",
-      type: "response_item",
-      payload: {
-        type: "message",
-        role: "user",
-        content: [{ type: "input_text", text: "hello codex" }],
-      },
-    }),
-    JSON.stringify({
-      timestamp: "2026-06-26T05:25:25.000Z",
-      type: "response_item",
-      payload: {
-        type: "message",
-        role: "assistant",
-        content: [{ type: "output_text", text: "hi there" }],
-      },
-    }),
-  ]
-  writeFileSync(
-    join(dir, `rollout-2026-06-26T07-25-23-${sessionID}.jsonl`),
-    lines.join("\n") + "\n",
-  )
-}
 
 describe("codex transcript history", () => {
   test("historyWithSource returns rollout turns from HistorySourceTranscript", async () => {

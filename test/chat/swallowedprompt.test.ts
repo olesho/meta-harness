@@ -66,7 +66,9 @@ describe("swallowed prompt (real pty + fake harness)", () => {
     const conv = await openTracked(script)
     await sendOneTurn(conv, "reply with just: ok")
 
-    const turn = await waitForTerminalTurn(conv, 4000)
+    // 8000 (not 4000): a genuine codex swallow now pays the transcript
+    // override's one-shot ~500ms flush-lag retry before erroring.
+    const turn = await waitForTerminalTurn(conv, 8000)
     expect(turn.state).toBe(TurnStateErrored)
     expect(turn.reason).toContain("prompt not accepted")
     expect(turn.text).toBe("")

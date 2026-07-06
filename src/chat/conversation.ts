@@ -35,6 +35,7 @@ import {
 import { start as wrapperStart, type Session as WrapperSession } from "../wrapper/index.ts"
 import { Context, isSentinel, wrap } from "../internal/async/index.ts"
 import { ErrEmptySessionID, ErrSessionNotFound } from "../transcript/errors.ts"
+import { stripIDEContextTags } from "../transcript/stripTags.ts"
 import type { Store } from "./store.ts"
 import {
   type Session,
@@ -136,6 +137,11 @@ const submitEchoGap = 1500
 // on. Short enough that the composer cannot soft-wrap it mid-needle at any
 // supported terminal width.
 const echoNeedleLen = 24
+// transcriptFlushRetryGap — the one-shot re-read delay when the swallow-override
+// transcript proof misses in a flush-lag shape (no rollout on disk yet, or the
+// current prompt not yet appended). A genuine swallow writes no rollout, so it
+// pays at most this once. (ms)
+const transcriptFlushRetryGap = 500
 
 function concat(a: Uint8Array, b: Uint8Array): Uint8Array {
   const out = new Uint8Array(a.length + b.length)
@@ -283,6 +289,16 @@ export class Conversation {
   endMarkerSeen = false
   /** Rendered screen at the moment send() submitted the in-flight prompt. */
   private sentScreenText = ""
+  /** Raw prompt text of the in-flight send (transcript swallow-override proof). */
+  private sentPromptText = ""
+  /**
+   * Transcript turn count captured just before the in-flight submit, or null
+   * when unknown. The swallow-override proof only accepts a prompt match at an
+   * index ≥ this watermark, so an identical prompt earlier in a resumed rollout
+   * can never count as proof of the CURRENT turn (turnsFromEvents carries no
+   * turn boundaries). Computed only for transcript-override-eligible adapters.
+   */
+  private sentTranscriptWatermark: number | null = null
   markerArmCh: Signal
   inputStateCh: Signal
 
@@ -413,6 +429,8 @@ export class Conversation {
 
     const sentScreen = this.screen.snapshot().text
     this.sentScreenText = sentScreen
+    this.sentPromptText = text
+    this.sentTranscriptWatermark = this.captureTranscriptWatermark()
     const submitKey = submitKeyForHarness(this.opts.harness, sentScreen)
     try {
       await this.writeMessageAndSubmit(text, sentScreen, submitKey, ctx)
@@ -777,17 +795,42 @@ export class Conversation {
     if (Date.now() - turn.startedAt.getTime() < gap) return
 
     if (this.currentTurn === null || this.currentTurn.id !== turn.id) return
-    this.currentTurn = null
-    this.endMarkerSeen = false
 
     // Kill the false-success path: on the idle-completion fallback (no marker
     // observed), a screen the adapter recognizes as a swallowed prompt — a
     // settled ready screen with no assistant output for this turn — errors the
     // turn instead of completing it with the raw ready screen as the "reply".
     if (!marker && this.adapterPromptNotAccepted(snap)) {
-      turn.state = TurnStateErrored
+      // The screen-only swallow verdict can false-fire when the TUI repaint
+      // lags the idle gap (META-HARNESS-28), so for adapters whose verdict has
+      // no extraction backing, the on-disk transcript gets a veto before the
+      // turn errors. currentTurn stays HELD through the awaits below — send()
+      // rejects with ErrTurnInFlight only while it is non-null, which is what
+      // keeps a new turn from interleaving with the proof reads (including
+      // the flush-lag retry sleep). Session-id extraction runs FIRST so an id
+      // visible only on this settled swallowed screen is usable by the proof.
+      await this.maybeExtractSessionID()
+      const [proof, diag] = await this.transcriptProofOfCurrentTurn()
+      if (this.closedFlag) return
+      if (this.currentTurn === null || this.currentTurn.id !== turn.id) return
+      this.currentTurn = null
+      this.endMarkerSeen = false
       turn.completedAt = new Date()
-      turn.reason = this.opts.harness + ": prompt not accepted / no assistant output"
+      if (proof !== null) {
+        turn.state = TurnStateComplete
+        turn.reason =
+          this.opts.harness +
+          ": transcript-confirmed completion (screen looked swallowed; rollout shows the submitted prompt followed by assistant output)"
+        // The clean transcript reply — NOT assistantText, which for adapters
+        // without extractMessage would persist the raw ready screen.
+        turn.text = proof.text
+      } else {
+        turn.state = TurnStateErrored
+        turn.reason =
+          this.opts.harness +
+          ": prompt not accepted / no assistant output" +
+          (diag !== "" ? "; " + diag : "")
+      }
       try {
         await this.store.updateTurn(turn)
       } catch (err) {
@@ -797,6 +840,9 @@ export class Conversation {
       this.emit({ type: EventTurn, turn: { ...turn } })
       return
     }
+
+    this.currentTurn = null
+    this.endMarkerSeen = false
 
     await this.maybeExtractSessionID()
 
@@ -1087,6 +1133,131 @@ export class Conversation {
       )
     }
     return false
+  }
+
+  /**
+   * The transcript-backed swallow override applies only to adapters that CAN
+   * read their on-disk transcript but CANNOT extract a reply from the screen —
+   * today exactly Codex. With extractMessage present the swallow verdict is
+   * already extraction-backed (Claude Code), and the transcript must not
+   * second-guess it. Structural probes, same pattern as assistantText().
+   */
+  private transcriptOverrideEligible(): boolean {
+    const a = this.adapter as unknown as Record<string, unknown>
+    return typeof a.readTranscript === "function" && typeof a.extractMessage !== "function"
+  }
+
+  private readTranscriptTurns(id: string): { role: string; text: string }[] {
+    const a = this.adapter as unknown as Record<string, unknown>
+    return (a.readTranscript as (id: string, wd: string) => { role: string; text: string }[])(
+      id,
+      this.opts.workingDir ?? "",
+    )
+  }
+
+  /**
+   * The transcript turn count immediately before the in-flight submit — the
+   * pre-send watermark for transcriptProofOfCurrentTurn. readTranscript is
+   * synchronous, so send() pays no new await. Rules: not eligible → null (the
+   * proof gate declines before looking); empty harnessSessionID → 0 (fresh
+   * session, no prior history); a sentinel read failure (no rollout yet) → 0;
+   * any other failure → null ("unknown" — the proof helper then declines
+   * rather than guessing a lower bound). Never throws out of send().
+   */
+  private captureTranscriptWatermark(): number | null {
+    if (!this.transcriptOverrideEligible()) return null
+    if (this.session.harnessSessionID === "") return 0
+    try {
+      return this.readTranscriptTurns(this.session.harnessSessionID).length
+    } catch (err) {
+      if (isSentinel(err, ErrSessionNotFound) || isSentinel(err, ErrEmptySessionID)) return 0
+      return null
+    }
+  }
+
+  /**
+   * transcriptProofOfCurrentTurn consults the adapter's on-disk transcript for
+   * positive proof that the in-flight prompt was accepted and answered, to
+   * veto a screen-derived swallowed-prompt verdict on the idle fallback path
+   * (META-HARNESS-28: under load the codex TUI repaint lags the idle gap, so
+   * the screen-only detector false-fires on fully successful turns whose
+   * rollout is already on disk).
+   *
+   * Returns [proof, diagnostic]. Proof requires the FIRST RoleUser transcript
+   * turn at index ≥ the pre-send watermark whose text equals the sent prompt —
+   * both sides through stripIDEContextTags, because codex parsing already
+   * strips those tags from user text — followed by ≥1 non-empty RoleAssistant
+   * turn before the next RoleUser turn (RoleSystem turns in between are
+   * skipped; later turns can never contaminate the reply). Matching is
+   * deliberately scoped to single-text-block user messages — codex 0.142.5's
+   * TUI shape; appendMessageEvents emits one transcript turn per content
+   * block, so a split prompt degrades to no-proof, the conservative direction.
+   *
+   * Error semantics (nothing thrown may escape maybeIdleComplete): sentinel
+   * reader errors yield no proof silently; any other reader error yields no
+   * proof plus a diagnostic. A transcript problem never flips errored →
+   * completed; only positive proof does. A first read that misses in a
+   * flush-lag shape (ErrSessionNotFound, or no prompt match at/after the
+   * watermark) retries ONCE after transcriptFlushRetryGap, with the turn
+   * still held by the caller. A null watermark never retries.
+   */
+  private async transcriptProofOfCurrentTurn(): Promise<[{ text: string } | null, string]> {
+    if (!this.transcriptOverrideEligible()) return [null, ""]
+    if (this.session.harnessSessionID === "") return [null, ""]
+    const watermark = this.sentTranscriptWatermark
+    if (watermark === null) return [null, "pre-send transcript watermark unavailable"]
+
+    const first = this.tryTranscriptProof(watermark)
+    if (first.proof !== null || !first.retryable) return [first.proof, first.diag]
+    const timer = sleep(transcriptFlushRetryGap)
+    try {
+      await Promise.race([timer.promise, this.closedPromise])
+    } finally {
+      timer.cancel()
+    }
+    if (this.closedFlag) return [null, first.diag]
+    const second = this.tryTranscriptProof(watermark)
+    return [second.proof, second.diag]
+  }
+
+  /** One synchronous proof attempt; retryable marks flush-lag-shaped misses. */
+  private tryTranscriptProof(watermark: number): {
+    proof: { text: string } | null
+    diag: string
+    retryable: boolean
+  } {
+    let turns: { role: string; text: string }[]
+    try {
+      turns = this.readTranscriptTurns(this.session.harnessSessionID)
+    } catch (err) {
+      // No rollout on disk yet is the flush-lag shape worth one retry; an
+      // empty-id sentinel is a plain no, and anything else is a real reader
+      // failure surfaced as a diagnostic, never as success.
+      if (isSentinel(err, ErrSessionNotFound)) return { proof: null, diag: "", retryable: true }
+      if (isSentinel(err, ErrEmptySessionID)) return { proof: null, diag: "", retryable: false }
+      return { proof: null, diag: "transcript check failed: " + String(err), retryable: false }
+    }
+    const want = stripIDEContextTags(this.sentPromptText)
+    let match = -1
+    for (let i = Math.max(0, watermark); i < turns.length; i++) {
+      const t = turns[i]!
+      if (t.role !== RoleUser) continue
+      if (stripIDEContextTags(t.text) === want) {
+        match = i
+        break
+      }
+    }
+    if (match < 0) return { proof: null, diag: "", retryable: true }
+    const replies: string[] = []
+    for (let i = match + 1; i < turns.length; i++) {
+      const t = turns[i]!
+      if (t.role === RoleUser) break // stop: a later turn must not contaminate
+      if (t.role !== RoleAssistant) continue // skip RoleSystem between the two
+      if (t.text.trim() === "") continue
+      replies.push(t.text)
+    }
+    if (replies.length === 0) return { proof: null, diag: "", retryable: false }
+    return { proof: { text: replies.join("\n\n") }, diag: "", retryable: false }
   }
 
   private adapterBusy(snap: Snapshot): boolean {
