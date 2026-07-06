@@ -7,7 +7,7 @@
 //
 // Embeds the generic adapter so wrapper-level status events keep flowing.
 // Port of pkg/turns/harness/claudecode/{claudecode.go}.
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { ClaudeCodeReader } from "../../transcript/claudecode/claudecode.js";
 import { turnsFromEvents } from "../../transcript/event.js";
 import { GenericAdapter } from "../generic.js";
@@ -17,7 +17,10 @@ const enc = new TextEncoder();
 // line so it does not mis-fire when the model echoes the marker shape in prose.
 // The duration is one or more <number><unit> components (unit ∈ {h,m,s}).
 const thinkingRE = /^[^\S\r\n]*(✻ \p{Lu}\p{L}+ for \d+[hms](?: \d+[hms])*)[^\S\r\n]*$/gmu;
-// resumeRE matches the "claude --resume <uuid>" hint Claude Code prints on exit.
+// resumeRE matches the "claude --resume <uuid>" hint older Claude Code builds
+// printed on exit. As of 2.1.201 no such hint is printed (graceful exit emits
+// only terminal-mode teardown), so this raw-line capture is a legacy backstop:
+// the session id is now pinned at launch via `--session-id` (see initSession).
 const resumeRE = /claude --resume ([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})/;
 // interruptMarker is the literal text after the user interrupts a reply.
 // Note the NBSP (U+00A0) between the two spaces — matched exactly.
@@ -179,9 +182,27 @@ export class ClaudeCodeAdapter extends GenericAdapter {
     quitSequence() {
         return quitCommand;
     }
+    /** Implements turns.SessionInitializer — `claude --session-id <uuid>`. */
+    initSession() {
+        const id = randomUUID();
+        return [["--session-id", id], id];
+    }
     /** Implements turns.SessionResumer — `claude --resume <uuid>`. */
     resumeArgs(harnessSessionID) {
         return ["--resume", harnessSessionID];
+    }
+    /** Implements turns.SessionControlFlags — flags chat manages, banned from args. */
+    sessionControlFlags() {
+        return [
+            "--session-id",
+            "-r",
+            "--resume",
+            "-c",
+            "--continue",
+            "--fork-session",
+            "--from-pr",
+            "--no-session-persistence",
+        ];
     }
     /** Implements turns.RawSessionIDExtractor. */
     extractSessionIDFromLine(line) {

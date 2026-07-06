@@ -1,4 +1,7 @@
 // Shared test helpers for the chat-layer ports.
+import { appendFileSync, mkdirSync, writeFileSync } from "node:fs"
+import { join } from "node:path"
+
 import { Conversation, EventBus, type Options } from "../../src/chat/conversation.ts"
 import type { InputRequest as TurnsInputRequest } from "../../src/turns/index.ts"
 
@@ -39,6 +42,64 @@ export function newTestConv(opts: Partial<Options>, rec: KeyRecorder): Conversat
     eventCh: new EventBus(8),
     writeStdin: rec.write,
   })
+}
+
+/** One message entry of a fixture Codex rollout (a response_item line). */
+export interface CodexRolloutEntry {
+  role: "user" | "assistant"
+  text: string
+}
+
+function rolloutMessageLine(entry: CodexRolloutEntry, n: number): string {
+  return JSON.stringify({
+    timestamp: `2026-06-26T05:25:24.${String(n % 1000).padStart(3, "0")}Z`,
+    type: "response_item",
+    payload: {
+      type: "message",
+      role: entry.role,
+      content: [
+        { type: entry.role === "user" ? "input_text" : "output_text", text: entry.text },
+      ],
+    },
+  })
+}
+
+/**
+ * writeCodexRollout lays a Codex session rollout fixture under sessionsRoot at
+ * the real on-disk shape (<root>/YYYY/MM/DD/rollout-<ts>-<uuid>.jsonl): a
+ * session_meta envelope followed by one message response_item per entry.
+ * Returns the file path so tests can appendCodexRollout later.
+ */
+export function writeCodexRollout(
+  sessionsRoot: string,
+  sessionID: string,
+  cwd: string,
+  entries: CodexRolloutEntry[] = [
+    { role: "user", text: "hello codex" },
+    { role: "assistant", text: "hi there" },
+  ],
+): string {
+  const dir = join(sessionsRoot, "2026", "06", "26")
+  mkdirSync(dir, { recursive: true })
+  const lines = [
+    JSON.stringify({
+      timestamp: "2026-06-26T05:25:23.303Z",
+      type: "session_meta",
+      payload: { session_id: sessionID, cwd, cli_version: "0.142.0" },
+    }),
+    ...entries.map((e, i) => rolloutMessageLine(e, i)),
+  ]
+  const file = join(dir, `rollout-2026-06-26T07-25-23-${sessionID}.jsonl`)
+  writeFileSync(file, lines.join("\n") + "\n")
+  return file
+}
+
+/** appendCodexRollout appends further message entries to an existing rollout. */
+export function appendCodexRollout(file: string, entries: CodexRolloutEntry[]): void {
+  appendFileSync(
+    file,
+    entries.map((e, i) => rolloutMessageLine(e, 40 + i)).join("\n") + "\n",
+  )
 }
 
 export { enc, dec }

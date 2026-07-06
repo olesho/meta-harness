@@ -64,9 +64,15 @@ The most fully-supported harness. Name `claude-code`, binary `claude`.
   early; chat then defers to an [idle/marker window](concepts.md#quiescence--idle-completion)
   before finalizing. Interrupts (`⎿ Interrupted · What should Claude do instead?`) map to
   `Errored`.
-- **Session id.** Recovered from a raw `claude --resume <uuid>` hint line
-  (`RawSessionIDExtractor`).
+- **Session id.** Minted by chat at launch: `initSession()` (`SessionInitializer`)
+  returns `--session-id <uuid>` and the id itself, so the id is known (and persisted)
+  before the child even starts. The raw `claude --resume <uuid>` hint capture
+  (`RawSessionIDExtractor`) remains as a legacy backstop for older builds — Claude Code
+  2.1.201 no longer prints the hint on exit.
 - **Resume.** `--resume <uuid>`; does not fork the id.
+- **Session-control flags.** `sessionControlFlags()` lists the flags chat manages
+  internally (`--session-id`, `-r`, `--resume`, `-c`, `--continue`, `--fork-session`,
+  `--from-pr`, `--no-session-persistence`); chat bans them from your `args`.
 - **History.** [`ClaudeCodeReader`](modules/transcript.md#claudecodereader) reads
   `~/.claude/projects/<encoded-cwd>/<uuid>.jsonl` (tool-aware, returns `Event[]`).
 - **Interactive prompts.** Folder-trust / "bypass permissions" dialogs are detected as
