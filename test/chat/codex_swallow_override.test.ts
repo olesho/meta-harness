@@ -205,9 +205,7 @@ describe("codex transcript-backed swallow override (real pty + fake harness)", (
       harness: "codex",
       steps: [
         { frame: { delay_ms: 0, screen: "Codex\n\n› \n" } },
-        { wait_input: { until_regex: submitRE, capture: true, label: "submit" } }, // prime
-        { frame: { delay_ms: 0, screen: "Codex\n\n› \n" } },
-        { wait_input: { until_regex: submitRE, capture: true, label: "submit" } }, // send
+        { wait_input: { until_regex: submitRE, capture: true, label: "submit" } }, // the send
         {
           frame: {
             delay_ms: 0,
@@ -218,9 +216,11 @@ describe("codex transcript-backed swallow override (real pty + fake harness)", (
         { hold: {} },
       ],
     }
-    // Shrink the primer bound: with no id on the idle screen the /status prime
-    // can only time out, and the default 800ms would just slow the test down.
-    const conv = await openFake(script, { primeBound: 150 })
+    // cols 55 < CODEX_STATUS_MIN_COLS suppresses the startup /status prime (its
+    // halfway resend would otherwise race the script's submit waits), keeping
+    // the session id genuinely unknown until the swallowed frame renders its
+    // resume hint — which still fits unwrapped at this width.
+    const conv = await openFake(script, { cols: 55 })
     open.add(conv)
     ;(conv.getAdapter() as codex.CodexAdapter).sessionsRoot = sessionsRoot
 

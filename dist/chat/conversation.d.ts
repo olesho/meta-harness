@@ -126,6 +126,16 @@ export declare class Conversation {
     endMarkerSeen: boolean;
     /** Rendered screen at the moment send() submitted the in-flight prompt. */
     private sentScreenText;
+    /** Raw prompt text of the in-flight send (transcript swallow-override proof). */
+    private sentPromptText;
+    /**
+     * Transcript turn count captured just before the in-flight submit, or null
+     * when unknown. The swallow-override proof only accepts a prompt match at an
+     * index ≥ this watermark, so an identical prompt earlier in a resumed rollout
+     * can never count as proof of the CURRENT turn (turnsFromEvents carries no
+     * turn boundaries). Computed only for transcript-override-eligible adapters.
+     */
+    private sentTranscriptWatermark;
     markerArmCh: Signal;
     inputStateCh: Signal;
     currentInput: TurnsInputRequest | null;
@@ -253,6 +263,54 @@ export declare class Conversation {
      */
     private assistantText;
     private adapterPromptNotAccepted;
+    /**
+     * The transcript-backed swallow override applies only to adapters that CAN
+     * read their on-disk transcript but CANNOT extract a reply from the screen —
+     * today exactly Codex. With extractMessage present the swallow verdict is
+     * already extraction-backed (Claude Code), and the transcript must not
+     * second-guess it. Structural probes, same pattern as assistantText().
+     */
+    private transcriptOverrideEligible;
+    private readTranscriptTurns;
+    /**
+     * The transcript turn count immediately before the in-flight submit — the
+     * pre-send watermark for transcriptProofOfCurrentTurn. readTranscript is
+     * synchronous, so send() pays no new await. Rules: not eligible → null (the
+     * proof gate declines before looking); empty harnessSessionID → 0 (fresh
+     * session, no prior history); a sentinel read failure (no rollout yet) → 0;
+     * any other failure → null ("unknown" — the proof helper then declines
+     * rather than guessing a lower bound). Never throws out of send().
+     */
+    private captureTranscriptWatermark;
+    /**
+     * transcriptProofOfCurrentTurn consults the adapter's on-disk transcript for
+     * positive proof that the in-flight prompt was accepted and answered, to
+     * veto a screen-derived swallowed-prompt verdict on the idle fallback path
+     * (META-HARNESS-28: under load the codex TUI repaint lags the idle gap, so
+     * the screen-only detector false-fires on fully successful turns whose
+     * rollout is already on disk).
+     *
+     * Returns [proof, diagnostic]. Proof requires the FIRST RoleUser transcript
+     * turn at index ≥ the pre-send watermark whose text equals the sent prompt —
+     * both sides through stripIDEContextTags, because codex parsing already
+     * strips those tags from user text — followed by ≥1 non-empty RoleAssistant
+     * turn before the next RoleUser turn (RoleSystem turns in between are
+     * skipped; later turns can never contaminate the reply). Matching is
+     * deliberately scoped to single-text-block user messages — codex 0.142.5's
+     * TUI shape; appendMessageEvents emits one transcript turn per content
+     * block, so a split prompt degrades to no-proof, the conservative direction.
+     *
+     * Error semantics (nothing thrown may escape maybeIdleComplete): sentinel
+     * reader errors yield no proof silently; any other reader error yields no
+     * proof plus a diagnostic. A transcript problem never flips errored →
+     * completed; only positive proof does. A first read that misses in a
+     * flush-lag shape (ErrSessionNotFound, or no prompt match at/after the
+     * watermark) retries ONCE after transcriptFlushRetryGap, with the turn
+     * still held by the caller. A null watermark never retries.
+     */
+    private transcriptProofOfCurrentTurn;
+    /** One synchronous proof attempt; retryable marks flush-lag-shaped misses. */
+    private tryTranscriptProof;
     private adapterBusy;
     private adapterQuitSequence;
     private adapterRawSessionID;

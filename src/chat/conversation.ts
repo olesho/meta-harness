@@ -1143,8 +1143,15 @@ export class Conversation {
    * second-guess it. Structural probes, same pattern as assistantText().
    */
   private transcriptOverrideEligible(): boolean {
-    const a = this.adapter as unknown as Record<string, unknown>
-    return typeof a.readTranscript === "function" && typeof a.extractMessage !== "function"
+    // Runs on EVERY send (unlike the other structural probes, which only run
+    // once a watcher is pumping), so it must tolerate adapter-less test
+    // Conversations constructed directly from ConversationInit.
+    const a = this.adapter as unknown as Record<string, unknown> | undefined
+    return (
+      a !== undefined &&
+      typeof a.readTranscript === "function" &&
+      typeof a.extractMessage !== "function"
+    )
   }
 
   private readTranscriptTurns(id: string): { role: string; text: string }[] {
