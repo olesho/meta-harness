@@ -16,3 +16,12 @@ export {
   defaultProbeTimeoutMs,
 } from "./discovery.ts"
 export { SemverDashVProbe, semverRe } from "./probes.ts"
+export {
+  type ModelInfo,
+  type DiscoverModelsOptions,
+  parseModelPicker,
+  knownModels,
+  defaultModel,
+  isKnownModel,
+  discoverModels,
+} from "./models.ts"

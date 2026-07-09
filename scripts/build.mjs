@@ -47,4 +47,13 @@ cpSync(
   join(versionsDstDir, "versions.json"),
 )
 
+// models.json: dist/discovery/models.js reads it `import.meta.url`-relative at
+// module load (same pattern as versions.json), so copy it alongside.
+const discoveryDstDir = join(dist, "discovery")
+mkdirSync(discoveryDstDir, { recursive: true })
+cpSync(
+  join(root, "src", "discovery", "models.json"),
+  join(discoveryDstDir, "models.json"),
+)
+
 console.log("build: dist ready")

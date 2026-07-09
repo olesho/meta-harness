@@ -7,4 +7,5 @@
 import "./probes.js";
 export { lookup, discover, registerProbe, resetCache, defaultProbeTimeoutMs, } from "./discovery.js";
 export { SemverDashVProbe, semverRe } from "./probes.js";
+export { parseModelPicker, knownModels, defaultModel, isKnownModel, discoverModels, } from "./models.js";
 //# sourceMappingURL=index.js.map

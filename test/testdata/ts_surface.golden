@@ -193,12 +193,19 @@ chat/index.ts
   submitKeyForHarness: function
 
 discovery/index.ts
+  DiscoverModelsOptions: type
   Info: type
+  ModelInfo: type
   Probe: type
   SemverDashVProbe: class{detect}
+  defaultModel: function
   defaultProbeTimeoutMs: number=10000
   discover: function
+  discoverModels: function
+  isKnownModel: function
+  knownModels: function
   lookup: function
+  parseModelPicker: function
   registerProbe: function
   resetCache: function
   semverRe: object{}
