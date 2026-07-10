@@ -1,10 +1,5 @@
 #!/usr/bin/env node
-export declare const ExitOK = 0;
-export declare const ExitError = 1;
-export declare const ExitUsage = 2;
-export declare const ExitDeadline = 124;
-/** The literal stderr anchor the orchestrator's deadline regex matches on 124. */
-export declare const DeadlineLine = "harness-wrapper run: context deadline exceeded";
+export { ExitOK, ExitError, ExitUsage, ExitDeadline, DeadlineLine, } from "../turnproto/index.ts";
 export declare function resolveHarnessName(name: string): "claude-code" | "codex" | null;
 export interface StructuredArgs {
     help?: boolean;

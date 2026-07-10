@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "packageManager": "npm@11.12.1",
+  "engines": { "node": ">=18" },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "//exports": "Conditional: Node consumers (loomcli flue bundle + sandbox runner) resolve compiled `dist/**` via `import`. The `bun` condition is retained (points at raw `src/**` TS) so a future Bun consumer still resolves; keep `bun` FIRST so Bun never falls through to dist. `dist` is built by `npm run build` and committed (see tsconfig.build.json).",

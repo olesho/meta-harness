@@ -4,9 +4,9 @@
 // (read from the harness's on-disk session), so a host orchestrator gets
 // transcript_entries without a second round-trip.
 //
-// Contrast with run.ts: that is the Bun-only, reply-on-stdout CLI (the reply is the
-// whole contract, and it can't expose harnessSessionID). This one is Node-only
-// (consumes the compiled dist), takes the prompt via --prompt-file (a SAFE
+// Contrast with run.ts: that is the reply-on-stdout CLI (the reply is the whole
+// contract, and it can't expose harnessSessionID). This one takes the prompt
+// via --prompt-file (a SAFE
 // transport — never shell-interpolated), reads the transcript back via the
 // per-harness Readers, and prints a structured result. Loom's sandbox task runner
 // parses the LAST stdout line as that result.
@@ -24,16 +24,15 @@ import { pathToFileURL } from "node:url";
 import { runOneShotDetailed, cleanEnv } from "../oneshot/index.js";
 import { Context } from "../async/index.js";
 import { ClaudeCodeReader, CodexReader, toPublicJSON, usageToPublicJSON, } from "../transcript/index.js";
-export const ExitOK = 0;
-export const ExitError = 1;
-export const ExitUsage = 2;
-export const ExitDeadline = 124;
-/** The literal stderr anchor the orchestrator's deadline regex matches on 124. */
-export const DeadlineLine = "harness-wrapper run: context deadline exceeded";
+// Exit codes + DeadlineLine come from the ONE shared protocol module
+// (src/turnproto). Re-exported here so this CLI's tested surface — test/cli/
+// structured-runner.test.ts imports ExitOK from this module — stays UNCHANGED.
+export { ExitOK, ExitError, ExitUsage, ExitDeadline, DeadlineLine, } from "../turnproto/index.js";
+import { ExitOK, ExitError, ExitUsage, ExitDeadline, DeadlineLine } from "../turnproto/index.js";
 const DEFAULT_TIMEOUT_MS = 30 * 60 * 1000;
-// resolveHarnessName / resolveBinaryPath / the exit codes intentionally mirror
-// run.ts. They are duplicated (not imported) so run.ts stays a Bun-only leaf that
-// this Node entry never pulls into its module graph.
+// resolveHarnessName / resolveBinaryPath are NOT protocol (the exit codes now
+// live in src/turnproto). They mirror run.ts's helpers and stay local to each
+// CLI so neither pulls the other into its module graph.
 export function resolveHarnessName(name) {
     switch (name) {
         case "claude":

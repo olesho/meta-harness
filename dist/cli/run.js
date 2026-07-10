@@ -22,15 +22,14 @@
 // here. node-pty under Bun spawns a `node ptyHost.mjs` bridge and loads a native
 // `.node` addon from disk, so the image must still ship `node`, the ptyHost.mjs,
 // and the materialized addon alongside the compiled executable. See PACKAGING.md.
+import { pathToFileURL } from "node:url";
 import { runOneShot, cleanEnv, DeadlineError, TurnErroredError, EmptyPromptError, } from "../oneshot/index.js";
 import { Context } from "../internal/async/index.js";
-/** Exit codes — kept in lockstep with the orchestrator's headless reply() parser. */
-export const ExitOK = 0;
-export const ExitError = 1;
-export const ExitUsage = 2;
-export const ExitDeadline = 124;
-/** The literal stderr anchor the orchestrator's isWrapperDeadline regex matches on a 124 exit. */
-export const DeadlineLine = "harness-wrapper run: context deadline exceeded";
+// Exit codes + DeadlineLine come from the ONE shared protocol module
+// (src/turnproto). Re-exported here so this CLI's tested surface — test/cli/
+// run.test.ts imports them from this module — stays UNCHANGED.
+export { ExitOK, ExitError, ExitUsage, ExitDeadline, DeadlineLine, } from "../turnproto/index.js";
+import { ExitOK, ExitError, ExitUsage, ExitDeadline, DeadlineLine } from "../turnproto/index.js";
 /** Default one-shot deadline when HARNESS_WRAPPER_RUN_TIMEOUT is unset (Go: 15m). */
 const DEFAULT_TIMEOUT_MS = 15 * 60 * 1000;
 const HELP = `meta-harness run — one-shot harness turn (prompt on stdin → reply on stdout)
@@ -247,7 +246,9 @@ export async function main(argv) {
     }
 }
 // Entry point — only when executed directly (not when imported by tests).
-if (import.meta.main) {
+// Node-safe idiom (import.meta.main exists only in Node ≥24.2, so it would make
+// this bin a silent no-op on older Node); mirrors structured-runner.ts.
+if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
     main(process.argv.slice(2)).then((code) => process.exit(code), (err) => {
         process.stderr.write("run: fatal: " + String(err) + "\n");
         process.exit(ExitError);

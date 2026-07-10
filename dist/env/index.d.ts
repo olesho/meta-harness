@@ -5,4 +5,5 @@ export { local } from "./local.ts";
 export { none } from "./none.ts";
 export { shouldKeep, TeardownError } from "./retention.ts";
 export { argvToShell, envPrefixedShell, shQuote } from "./argv.ts";
+export { runStructuredTurn, TurnProtocolError, TranscriptRetrievalUnsupportedError, type TurnConfig, } from "./turn.ts";
 //# sourceMappingURL=index.d.ts.map

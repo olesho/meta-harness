@@ -1,11 +1,5 @@
 #!/usr/bin/env node
-/** Exit codes — kept in lockstep with the orchestrator's headless reply() parser. */
-export declare const ExitOK = 0;
-export declare const ExitError = 1;
-export declare const ExitUsage = 2;
-export declare const ExitDeadline = 124;
-/** The literal stderr anchor the orchestrator's isWrapperDeadline regex matches on a 124 exit. */
-export declare const DeadlineLine = "harness-wrapper run: context deadline exceeded";
+export { ExitOK, ExitError, ExitUsage, ExitDeadline, DeadlineLine, } from "../turnproto/index.ts";
 /** Maps a CLI short name to the chat adapter (harness) name. */
 export declare function resolveHarnessName(name: string): string | null;
 export interface ParsedArgs {

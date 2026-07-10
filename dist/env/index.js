@@ -15,4 +15,8 @@ export { local } from "./local.js";
 export { none } from "./none.js";
 export { shouldKeep, TeardownError } from "./retention.js";
 export { argvToShell, envPrefixedShell, shQuote } from "./argv.js";
+// Host-side structured-turn client (design §7). Imports the exit constants +
+// result-schema type from src/turnproto (the ONE source of truth); turnproto is
+// dependency-light and never reaches into src/cli, so this barrel stays clean.
+export { runStructuredTurn, TurnProtocolError, TranscriptRetrievalUnsupportedError, } from "./turn.js";
 //# sourceMappingURL=index.js.map
