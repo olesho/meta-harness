@@ -82,6 +82,9 @@ The core `env()` factory orchestrates acquisition and teardown in strict order:
 2. provisioner.create()              → Workspace (resources acquired from here onward)
 3. containment.preflight(workspace)  — runtime capability check, via workspace.exec
 4. compose(workspace, layer)         → composed Workspace
+   (a containment with the optional acquire(ctx, ws, policy) hook creates its
+   resources HERE — e.g. `openshell sandbox create`, via workspace.exec — and
+   returns a layer closed over them; env() prefers acquire over layer(policy))
 5. injector.redactions() registered  — secrets marked for log redaction
 6. injector.apply(composed)          — credentials written to the composed boundary
 7. [turns run]
@@ -218,7 +221,7 @@ runStructuredTurn(ctx: Context, ws: Workspace, cfg: TurnConfig): Promise<Structu
 | 1 | Unit, hermetic | Every PR | `test/env/` |
 | 2 | Conformance suite | Every PR (against fakes) | `test/env/conformance.ts` |
 | 3 | In-guest e2e, no cloud | Every PR (with docker/podman) | `test/env/container.test.ts` |
-| 4 | Live (Daytona, OpenShell) | Nightly / opt-in (`META_HARNESS_ENV_LIVE`) | separate suite |
+| 4 | Live (Daytona, OpenShell) | Nightly / opt-in (`META_HARNESS_ENV_LIVE=<backend>`, e.g. `=openshell`) | `test/env/openshell-live.test.ts` |
 | 5 | Protocol freeze, composition, leak-probe | Mix of tiers 1–4 | `test/env/` |
 
 ## References

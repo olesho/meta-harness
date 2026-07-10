@@ -12,6 +12,7 @@
 //  - retention semantics mirroring orche's sandboxRetention
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
+import { argvToShell, shQuote } from "../env/argv.js";
 function spawnOpenShellCli(argv) {
     try {
         const p = spawnSync(argv[0], argv.slice(1), {
@@ -169,79 +170,196 @@ export class OpenShellContainment {
         }
     }
     layer(policy) {
-        const tier = policy.tier ?? "semi-trusted";
-        const modelHost = policy.modelHost ?? "api.anthropic.com";
-        const modelPort = policy.modelPort ?? 443;
-        const fleetHost = policy.fleetHost ?? "localhost";
-        const fleetPort = policy.fleetPort ?? 53343;
-        const harnessPath = policy.harnessPath ?? "/usr/local/bin/harness-wrapper";
-        const policyYaml = generatePolicy({
-            tier,
-            modelHost,
-            modelPort,
-            fleetHost,
-            fleetPort,
-            harnessPath,
-        });
-        return {
-            execWrap(argv, opts) {
-                // No sandbox name available at layer creation; caller provides via outer Containment
-                // This is a limitation of the current design — we'll need to refactor this.
-                // For now, return a marker that the caller must replace.
-                const wrapped = [
-                    "openshell",
-                    "sandbox",
-                    "exec",
-                    "-n",
-                    "__SANDBOX_NAME__", // placeholder
-                    "--no-tty",
-                    "--workdir",
-                    "/sandbox/repo",
-                    "--",
-                    "env",
-                    ...argv,
-                ];
-                return [wrapped, opts];
-            },
-            crossUpload(stagingPath, guestPath) {
-                return [
-                    "openshell",
-                    "sandbox",
-                    "upload",
-                    "--no-git-ignore",
-                    "__SANDBOX_NAME__",
-                    stagingPath,
-                    guestPath,
-                ];
-            },
-            crossDownload(guestPath, stagingPath) {
-                return [
-                    "openshell",
-                    "sandbox",
-                    "download",
-                    "__SANDBOX_NAME__",
-                    guestPath,
-                    stagingPath,
-                ];
-            },
-            pathMap(kind) {
-                switch (kind) {
-                    case "repo":
-                        return "/sandbox/repo";
-                    case "home":
-                        return "/sandbox/.home";
-                    case "tmp":
-                        return "/tmp";
-                }
-            },
-            teardown() {
-                return ["openshell", "sandbox", "delete", "__SANDBOX_NAME__"];
-            },
-            aliasMap: (hostUrl) => {
-                return resolveGuestUrl(hostUrl, this.driver);
-            },
-        };
+        // Unit-test seam: a caller that already owns a sandbox names it explicitly.
+        // Production goes through acquire(), which creates the sandbox and returns
+        // a layer closed over the real name.
+        const name = policy.sandboxName;
+        if (typeof name !== "string" || name.length === 0) {
+            throw new Error("openshell.layer: no sandbox name — use acquire() (production path) or " +
+                "pass policy.sandboxName (unit-test seam)");
+        }
+        return buildLayer(name, this.guestPath, this.driver);
     }
+    /** Create the sandbox (lifecycle step 4 — containment resources exist from
+     *  here) and return a layer closed over its name. All commands run via the
+     *  INNER workspace's exec (containment runs where inner runs, §5.1). */
+    async acquire(ctx, ws, policy) {
+        const agentId = policy.agentId ?? this.opts.agentId;
+        if (!agentId) {
+            throw new Error("openshell.acquire: no agentId — set policy.agentId or openshell({ agentId })");
+        }
+        const name = sandboxName(agentId);
+        // Crash recovery: best-effort delete of a leftover sandbox under the same
+        // deterministic name from a crashed prior run.
+        try {
+            await ws.exec(ctx, ["openshell", "sandbox", "delete", name]);
+        }
+        catch {
+            // best-effort only
+        }
+        // Explicit tier ⇒ stage a generated policy file; absent ⇒ gateway default.
+        let policyPath;
+        if (typeof policy.tier === "string") {
+            const yaml = generatePolicy({
+                tier: policy.tier,
+                modelHost: policy.modelHost ?? "api.anthropic.com",
+                modelPort: policy.modelPort ?? 443,
+                fleetHost: policy.fleetHost ?? "localhost",
+                fleetPort: policy.fleetPort ?? 53343,
+                harnessPath: policy.harnessPath ?? "/usr/local/bin/harness-wrapper",
+            });
+            policyPath = `${ws.guestPath("tmp")}/openshell-policy-${name}.yaml`;
+            const staged = await ws.exec(ctx, ["sh", "-c", `cat > '${policyPath}'`], {
+                stdin: yaml,
+            });
+            if (staged.code !== 0) {
+                throw new Error(`openshell.acquire: staging policy file failed (exit ${staged.code}): ` +
+                    `${staged.stderr || staged.stdout}`);
+            }
+        }
+        // `create` with no trailing command attaches an interactive shell and
+        // never exits under piped stdio (field-tested, 0.0.53) — run `true` as the
+        // initial command instead: create exits once it returns, and the sandbox
+        // is kept alive (deleting on command exit is opt-in via --no-keep).
+        const created = await ws.exec(ctx, [
+            "openshell",
+            "sandbox",
+            "create",
+            "--name",
+            name,
+            ...(this.opts.from ? ["--from", this.opts.from] : []),
+            ...(policyPath ? ["--policy", policyPath] : []),
+            "--no-tty",
+            "--",
+            "true",
+        ]);
+        if (created.code !== 0) {
+            throw new Error(`openshell.acquire: sandbox create failed (exit ${created.code}): ` +
+                `${created.stderr || created.stdout}`);
+        }
+        // Anything fallible after create must not leak the sandbox: best-effort
+        // delete before rethrowing.
+        try {
+            // Guest layout prep (default image layout is not guaranteed). One
+            // multi-arg mkdir: fully succeeds or fully fails, no partial case.
+            const prep = await ws.exec(ctx, [
+                "openshell",
+                "sandbox",
+                "exec",
+                "-n",
+                name,
+                "--no-tty",
+                "--",
+                "mkdir",
+                "-p",
+                this.guestPath,
+                "/sandbox/.home",
+            ]);
+            if (prep.code !== 0) {
+                throw new Error(`openshell.acquire: guest layout prep failed (exit ${prep.code}): ` +
+                    `${prep.stderr || prep.stdout}`);
+            }
+        }
+        catch (err) {
+            try {
+                await ws.exec(ctx, ["openshell", "sandbox", "delete", name]);
+            }
+            catch {
+                // best-effort only
+            }
+            throw err;
+        }
+        return buildLayer(name, this.guestPath, this.driver);
+    }
+}
+/** POSIX-only path helpers: guest and staging paths are always /-separated. */
+function posixBasename(p) {
+    const i = p.lastIndexOf("/");
+    return i >= 0 ? p.slice(i + 1) : p;
+}
+function posixDirname(p) {
+    const i = p.lastIndexOf("/");
+    return i > 0 ? p.slice(0, i) : "/";
+}
+/** Layer primitives closed over a REAL sandbox name. Module-scoped (not a class
+ *  method) so the erased-at-runtime `private` keyword can't leak it onto the
+ *  public class surface. */
+function buildLayer(name, guestRepo, driver) {
+    // The real openshell CLI errors on deleting an already-gone sandbox (exit 1,
+    // gRPC NotFound — field-tested 0.0.53, see the live suite's redundant-delete
+    // test), and compose() calls layer.teardown() unconditionally on every destroy —
+    // idempotent double-destroy (conformance contract) therefore lives here:
+    // emit the delete argv once, then [] ("nothing to tear down").
+    let torndown = false;
+    return {
+        execWrap(argv, opts) {
+            const envEntries = Object.entries(opts.env ?? {});
+            const wrapped = [
+                "openshell",
+                "sandbox",
+                "exec",
+                "-n",
+                name,
+                "--no-tty",
+                "--workdir",
+                opts.cwd ?? guestRepo,
+                "--",
+                // 0.0.53 exec has no --env: cross env as an in-guest `env K=V` prefix,
+                // omitted entirely when empty (a bare `env` would swallow argv[0]).
+                ...(envEntries.length > 0
+                    ? ["env", ...envEntries.map(([k, v]) => `${k}=${v}`)]
+                    : []),
+                ...argv,
+            ];
+            // cwd/env are CONSUMED into the wrapper (guest-side): passing them
+            // through would set a guest path as the HOST cwd and leak guest env
+            // (possibly secrets) into the host openshell process.
+            const { cwd: _cwd, env: _env, ...rest } = opts;
+            return [wrapped, rest];
+        },
+        crossUpload(stagingPath, guestPath) {
+            // `openshell sandbox upload NAME SRC DEST` always NESTS: the tree lands
+            // at DEST/<basename(SRC)> regardless of trailing slash/dot or whether
+            // DEST exists (field-tested, 0.0.53) — but compose() requires guestPath
+            // to BECOME the copy (mirroring local's cpSync semantics). So: upload
+            // into guest /tmp (nesting to the collision-free staging basename), then
+            // move into place in-guest. Chained via host `sh -c`; every embedded
+            // path is shQuote'd, and the in-guest script rides as ONE argv token.
+            const nested = `/tmp/${posixBasename(stagingPath)}`;
+            const move = `mkdir -p ${shQuote(posixDirname(guestPath))} && ` +
+                `rm -rf ${shQuote(guestPath)} && ` +
+                `mv ${shQuote(nested)} ${shQuote(guestPath)}`;
+            return [
+                "sh",
+                "-c",
+                argvToShell(["openshell", "sandbox", "upload", "--no-git-ignore", name, stagingPath, "/tmp"]) +
+                    " && " +
+                    argvToShell(["openshell", "sandbox", "exec", "-n", name, "--no-tty", "--", "sh", "-c", move]),
+            ];
+        },
+        crossDownload(guestPath, stagingPath) {
+            return ["openshell", "sandbox", "download", name, guestPath, stagingPath];
+        },
+        pathMap(kind) {
+            switch (kind) {
+                case "repo":
+                    return guestRepo;
+                case "home":
+                    return "/sandbox/.home";
+                case "tmp":
+                    return "/tmp";
+            }
+        },
+        teardown() {
+            if (torndown)
+                return [];
+            torndown = true;
+            return ["openshell", "sandbox", "delete", name];
+        },
+        aliasMap: (hostUrl) => {
+            return resolveGuestUrl(hostUrl, driver);
+        },
+    };
 }
 export function openshell(opts) {
     return new OpenShellContainment(opts ?? {}, opts?.cli);

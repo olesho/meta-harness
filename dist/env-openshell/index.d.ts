@@ -38,15 +38,26 @@ export declare class OpenShellContainment implements Containment {
         driver?: string;
         provider?: string;
         guestPath?: string;
+        /** Default agentId for sandbox naming when policy.agentId is absent. */
+        agentId?: string;
+        /** Image/Dockerfile ref for `sandbox create --from` (e.g. a node-bearing
+         *  image when the gateway's default image lacks node). */
+        from?: string;
     }, cli?: CliRunner);
     name(): string;
     preflight(_ctx: Context, _ws: Workspace): Promise<void>;
     layer(policy: PolicySpec): ContainmentLayer;
+    /** Create the sandbox (lifecycle step 4 — containment resources exist from
+     *  here) and return a layer closed over its name. All commands run via the
+     *  INNER workspace's exec (containment runs where inner runs, §5.1). */
+    acquire(ctx: Context, ws: Workspace, policy: PolicySpec): Promise<ContainmentLayer>;
 }
 export declare function openshell(opts?: {
     driver?: string;
     provider?: string;
     guestPath?: string;
+    agentId?: string;
+    from?: string;
     cli?: CliRunner;
 }): Containment;
 //# sourceMappingURL=index.d.ts.map

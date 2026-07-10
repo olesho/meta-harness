@@ -31,6 +31,10 @@ export interface ConformanceTarget {
   probeAlive?(ws: Workspace): Promise<boolean>
   /** Per-test timeout override (ms). Defaults to vitest's own default. */
   timeoutMs?: number
+  /** Strip backend-inherent stderr noise before fidelity assertions (e.g. the
+   *  openshell guest image's node emits an UNDICI proxy warning on every run).
+   *  Identity when omitted — local+none stays strict. */
+  filterStderr?(stderr: string): string
 }
 
 let seq = 0
@@ -60,16 +64,20 @@ async function acquire(t: ConformanceTarget, spec: WorkspaceSpec): Promise<Works
   await prov.preflight(ctx)
   const inner = await prov.create(ctx, spec)
   await contain.preflight(ctx, inner)
-  return compose(inner, contain.layer({}))
+  // Mirror env() step 4: a containment with an acquire hook creates its
+  // resources here and hands back a layer closed over them.
+  const layer = contain.acquire ? await contain.acquire(ctx, inner, {}) : contain.layer({})
+  return compose(inner, layer)
 }
 
 export function runConformance(t: ConformanceTarget): void {
   const tm = t.timeoutMs
   describe(`conformance: ${t.name}`, () => {
     test("exec: exit code, stdout and stderr fidelity", async () => {
+      const clean = t.filterStderr ?? ((s: string) => s)
       const ws = await acquire(t, specFor(t))
       const ok = await ws.exec(ctx, ["node", "-e", "process.stdout.write('hi')"])
-      expect(ok).toEqual({ code: 0, stdout: "hi", stderr: "" })
+      expect({ ...ok, stderr: clean(ok.stderr) }).toEqual({ code: 0, stdout: "hi", stderr: "" })
 
       const err = await ws.exec(ctx, [
         "node",
@@ -77,7 +85,7 @@ export function runConformance(t: ConformanceTarget): void {
         "process.stderr.write('boom'); process.exit(3)",
       ])
       expect(err.code).toBe(3)
-      expect(err.stderr).toBe("boom")
+      expect(clean(err.stderr)).toBe("boom")
       await ws.destroy(ctx, "success")
     }, tm)
 

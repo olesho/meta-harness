@@ -80,6 +80,13 @@ export interface Containment {
     /** Primitives consumed by the core compose() combinator (§5). Containments
      *  never hand-roll the Workspace decorator. */
     layer(policy: PolicySpec): ContainmentLayer;
+    /** OPTIONAL (structurally probed): acquire containment resources (e.g.
+     *  `openshell sandbox create`) and return a layer CLOSED OVER them. env()
+     *  prefers acquire over layer at lifecycle step 4 — "containment resources
+     *  exist from here". Runs its commands via the inner workspace's exec
+     *  (containment runs where inner runs, §5.1). Must best-effort delete its own
+     *  half-created resources before rethrowing so a failed acquire never leaks. */
+    acquire?(ctx: Context, ws: Workspace, policy: PolicySpec): Promise<ContainmentLayer>;
 }
 export interface ContainmentLayer {
     /** Wrap an exec, e.g. prefix `openshell sandbox exec -n … -- env K=V …`. An

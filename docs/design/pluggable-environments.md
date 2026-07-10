@@ -120,6 +120,16 @@ interface Containment {
   /** Primitives consumed by the core compose() combinator (§5). Containments
    *  never hand-roll the Workspace decorator. */
   layer(policy: PolicySpec): ContainmentLayer
+  /** OPTIONAL: acquire containment resources (e.g. `openshell sandbox create`)
+   *  and return a layer closed over them. env() prefers acquire over layer at
+   *  lifecycle step 4 (§4); commands run via the inner workspace's exec
+   *  (containment runs where inner runs, §5.1). Must best-effort delete its own
+   *  half-created resources before rethrowing. NOTE (v1 scoping): preflight's
+   *  gateway/provider check runs host-side via the injectable CliRunner while
+   *  acquire runs via ws.exec — identical for a local inner, but a REMOTE
+   *  provisioner would need preflight revisited (host-side check could
+   *  false-positive for a differently-configured remote host). */
+  acquire?(ctx: Context, ws: Workspace, policy: PolicySpec): Promise<ContainmentLayer>
 }
 
 interface ContainmentLayer {
@@ -158,6 +168,8 @@ The core `env()` factory drives the canonical acquisition order. Implementations
 2. provisioner.create      → inner Workspace                    ── resources exist from here
 3. containment.preflight(inner)     runtime capability checks, via inner exec
 4. compose(inner, layer)   → composed Workspace
+   (optional Containment.acquire creates containment resources here — preferred
+   over layer(policy) when present; acquire failure unwinds the inner)
 5. injector.redactions() registered, THEN injector.apply(composedWs)
 6. turns run (turn client, §7)
 7. destroy: injector.cleanup → containment teardown → inner destroy
