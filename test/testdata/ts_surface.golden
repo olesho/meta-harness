@@ -227,6 +227,7 @@ versions/index.ts
 
 env/index.ts
   Capability: type
+  ContainerWorkspace: class{destroy,download,exec,guestPath,hostAlias,upload}
   Containment: type
   ContainmentLayer: type
   CredentialInjector: type
@@ -247,6 +248,7 @@ env/index.ts
   WorkspaceSpec: type
   argvToShell: function
   compose: function
+  detectContainerRuntime: function
   env: function
   envPrefixedShell: function
   local: function

@@ -16,11 +16,11 @@ import type { ExecOpts, ExecResult, Workspace, WorkspaceSpec } from "./types.ts"
  */
 export function detectContainerRuntime(): "docker" | "podman" | null {
   try {
-    execSync("docker --version", { stdio: "ignore" })
+    execSync("docker --version", { stdio: ["pipe", "pipe", "pipe"] })
     return "docker"
   } catch {
     try {
-      execSync("podman --version", { stdio: "ignore" })
+      execSync("podman --version", { stdio: ["pipe", "pipe", "pipe"] })
       return "podman"
     } catch {
       return null
