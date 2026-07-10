@@ -13,39 +13,6 @@ import {
 import type { Workspace, WorkspaceSpec } from "../../src/env/types.ts"
 
 describe("Daytona provisioner", () => {
-  let fakeSdkClient: any
-
-  beforeEach(() => {
-    // Create a fake Daytona SDK client for testing
-    fakeSdkClient = {
-      create: vi.fn(async (opts: any) => ({
-        id: "test-sandbox-id",
-        process: {
-          executeCommand: vi.fn(async (cmd: string) => ({
-            result: "command output",
-            exitCode: 0,
-          })),
-        },
-        fs: {
-          uploadFile: vi.fn(async () => {}),
-          downloadFile: vi.fn(async () => Buffer.from("file content")),
-          getFileDetails: vi.fn(async () => ({ isDir: false, size: 100 })),
-          listFiles: vi.fn(async () => []),
-          createFolder: vi.fn(async () => {}),
-          deleteFile: vi.fn(async () => {}),
-        },
-        delete: vi.fn(async () => {}),
-      })),
-    }
-
-    // Mock the dynamic import to return our fake SDK
-    vi.stubGlobal("import", async (moduleName: string) => {
-      if (moduleName === "@daytonaio/sdk") {
-        return { Daytona: fakeSdkClient.constructor }
-      }
-      throw new Error(`Module not found: ${moduleName}`)
-    })
-  })
 
   test("provisioner name is 'daytona'", () => {
     const prov = daytona({ apiKey: "test-key" })
