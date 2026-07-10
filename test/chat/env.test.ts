@@ -1,7 +1,7 @@
 // Tests for cleanHarnessEnv — the port of run.go's cleanedEnv that strips
 // Claude Code's nesting markers so a nested `claude` persists its transcript.
 
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vitest"
 import { cleanHarnessEnv } from "../../src/chat/index.ts"
 import { isClaudeNestingEnvKey } from "../../src/chat/env.ts"
 

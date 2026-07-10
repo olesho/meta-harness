@@ -5,8 +5,9 @@
   // directly via the `bun` export condition (see package.json `exports`).
   //
   // `rewriteRelativeImportExtensions` rewrites the source's `./foo.ts` specifiers
-  // to `./foo.js` on emit; `nodenext` makes the output real Node ESM. The Bun-only
-  // CLI (src/cli) and all tests are excluded — the CLI stays Bun via `bin`.
+  // to `./foo.js` on emit; `nodenext` makes the output real Node ESM. The `run` and
+  // `structured-runner` CLIs are built to `dist/cli/**` and run under Node via `bin`;
+  // only the tests are excluded.
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "noEmit": false,
@@ -21,5 +22,5 @@
     "rootDir": "src"
   },
   "include": ["src"],
-  "exclude": ["src/cli/run.ts", "test", "**/*.test.ts", "**/*.spec.ts", "**/*.test.mts"]
+  "exclude": ["test", "**/*.test.ts", "**/*.spec.ts", "**/*.test.mts"]
 }

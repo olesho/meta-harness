@@ -2,7 +2,7 @@
 // pick one model, and assert the wrapper's selection path produces the right
 // CLI args and that the pick validates against the curated registry.
 
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vitest"
 import { newScreen } from "../../src/screen/index.ts"
 import { parseModelPicker, isKnownModel } from "../../src/discovery/models.ts"
 import { argsWithHarnessModel } from "../../src/wrapper/internal/mode.ts"

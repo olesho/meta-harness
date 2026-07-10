@@ -8,7 +8,7 @@
 // non-empty, plausible model list — the durable guard against the live picker
 // layout drifting away from parseModelPicker.
 
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vitest"
 import { discoverModels, isKnownModel } from "../../src/discovery/models.ts"
 import { Context } from "../../src/internal/async/index.ts"
 
@@ -16,7 +16,7 @@ const liveClaude = process.env.LIVE_MODELS === "1"
 const liveCodex = process.env.LIVE_MODELS === "1" && process.env.LIVE_CODEX === "1"
 const TEST_TIMEOUT = 60_000
 
-describe.if(liveClaude)("discoverModels (live claude-code)", () => {
+describe.skipIf(!liveClaude)("discoverModels (live claude-code)", () => {
   test(
     "returns the real model list",
     async () => {
@@ -33,7 +33,7 @@ describe.if(liveClaude)("discoverModels (live claude-code)", () => {
   )
 })
 
-describe.if(liveCodex)("discoverModels (live codex)", () => {
+describe.skipIf(!liveCodex)("discoverModels (live codex)", () => {
   test(
     "returns the real model list",
     async () => {

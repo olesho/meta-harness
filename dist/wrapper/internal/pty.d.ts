@@ -4,6 +4,14 @@ export declare const ErrPTYAllocation: Sentinel;
 /** A read on the PTY master failed. */
 export declare const ErrPTYRead: Sentinel;
 /**
+ * The Node interpreter that runs the PTY bridge could not be found. The bridge
+ * is spawned by name ("node") unless a real interpreter is resolvable; when the
+ * gate shell has no `node` on PATH the spawn fails ENOENT. Distinguishing this
+ * from a genuine {@link ErrPTYAllocation} keeps a missing interpreter from being
+ * mis-reported as a PTY failure (META-HARNESS-34).
+ */
+export declare const ErrNodeNotFound: Sentinel;
+/**
  * Resolve the PTY bridge path. By default it sits next to this module, but when
  * this module is bundled (e.g. esbuild inlines it into a consumer's server.mjs),
  * `import.meta.url` points at the bundle — not at ptyHost.mjs. Consumers that
@@ -12,6 +20,24 @@ export declare const ErrPTYRead: Sentinel;
  * environment before {@link PtyProcess.spawn} runs — no import-order constraint.
  */
 export declare function resolveHost(): string;
+/**
+ * Locate a real Node interpreter without falling back to a bare name. Resolution
+ * order: `META_HARNESS_NODE` → `node` on PATH → the active nvm install →
+ * {@link COMMON_NODE_PATHS}. Returns the absolute path, or null when nothing
+ * resolves (so callers — e.g. the test preload — can fail loudly). Every
+ * candidate is existence/executability checked before it is returned.
+ */
+export declare function findNode(env?: Record<string, string>): string | null;
+/**
+ * Resolve the interpreter used to spawn the PTY bridge (and, in tests, the
+ * `#!/usr/bin/env node` fake harness). In production the wrapper runs under Node,
+ * so it reuses `process.execPath` — the same interpreter, zero PATH lookup. Only
+ * when running under Bun (e.g. `bun test`, where `process.execPath` is bun) does
+ * it hunt for a real `node`, falling back to the bare name so the spawn still
+ * attempts and a miss surfaces as {@link ErrNodeNotFound}. `META_HARNESS_NODE`
+ * always wins, even under Node, for callers that must pin a specific interpreter.
+ */
+export declare function resolveNode(env?: Record<string, string>): string;
 /** The exit observation the bridge forwards from node-pty's onExit. */
 export interface PtyExit {
     exitCode: number;

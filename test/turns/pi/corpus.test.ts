@@ -2,7 +2,7 @@
 // interactive-turn capture through the screen emulator, asserting the busy
 // spinner fires mid-turn and the idle status line is recognized once settled.
 
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vitest"
 import { existsSync, readFileSync } from "node:fs"
 import { newScreen } from "../../../src/screen/index.ts"
 import * as pi from "../../../src/turns/harness/pi.ts"

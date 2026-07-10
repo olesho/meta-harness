@@ -1,6 +1,6 @@
 // Port of pkg/turns/harness/codex/input_test.go.
 
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vitest"
 import * as codex from "../../../src/turns/harness/codex.ts"
 import type { InputRequest } from "../../../src/turns/types.ts"
 

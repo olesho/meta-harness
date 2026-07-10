@@ -5,7 +5,10 @@
 
 import { existsSync, readFileSync } from "node:fs"
 import { dirname, join } from "node:path"
+import { fileURLToPath } from "node:url"
 import type { Snapshot } from "../../src/screen/index.ts"
+
+const thisDir = dirname(fileURLToPath(import.meta.url))
 
 /** Builds a synthetic Snapshot carrying only text, mirroring screen.Snapshot{Text}. */
 export function textSnap(text: string): Snapshot {
@@ -13,12 +16,12 @@ export function textSnap(text: string): Snapshot {
 }
 
 function repoRoot(): string {
-  let dir = import.meta.dir
+  let dir = thisDir
   for (let i = 0; i < 8; i++) {
     if (existsSync(join(dir, "test", "corpus"))) return dir
     dir = dirname(dir)
   }
-  throw new Error("could not locate test/corpus from " + import.meta.dir)
+  throw new Error("could not locate test/corpus from " + thisDir)
 }
 
 const root = repoRoot()

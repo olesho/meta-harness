@@ -3,9 +3,10 @@
   "version": "0.1.4",
   "private": true,
   "type": "module",
+  "packageManager": "npm@11.12.1",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
-  "//exports": "Conditional: Bun consumers (e.g. orche) resolve raw `src/**` TS via the `bun` condition; Node consumers (loomcli flue bundle + sandbox runner) resolve compiled `dist/**` via `import`. Keep `bun` FIRST so Bun never falls through to dist. `dist` is built by `npm run build` and committed (see tsconfig.build.json).",
+  "//exports": "Conditional: Node consumers (loomcli flue bundle + sandbox runner) resolve compiled `dist/**` via `import`. The `bun` condition is retained (points at raw `src/**` TS) so a future Bun consumer still resolves; keep `bun` FIRST so Bun never falls through to dist. `dist` is built by `npm run build` and committed (see tsconfig.build.json).",
   "exports": {
     ".": { "bun": "./src/index.ts", "types": "./dist/index.d.ts", "import": "./dist/index.js" },
     "./async": { "bun": "./src/async/index.ts", "types": "./dist/async/index.d.ts", "import": "./dist/async/index.js" },
@@ -19,18 +20,20 @@
     "./oneshot": { "bun": "./src/oneshot/index.ts", "types": "./dist/oneshot/index.d.ts", "import": "./dist/oneshot/index.js" }
   },
   "bin": {
-    "meta-harness-run": "./src/cli/run.ts",
+    "meta-harness-run": "./dist/cli/run.js",
     "meta-harness-structured-run": "./dist/cli/structured-runner.js"
   },
   "scripts": {
-    "test": "bun test",
+    "postinstall": "node scripts/postinstall.mjs",
+    "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "build": "node scripts/build.mjs"
+    "build": "node scripts/build.mjs",
+    "verify:exports": "node scripts/verify-exports.mjs"
   },
   "devDependencies": {
     "@types/node": "^22",
-    "bun-types": "^1.1",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^4.1.10"
   },
   "dependencies": {
     "@xterm/headless": "^5.5.0",

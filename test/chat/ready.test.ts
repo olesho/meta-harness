@@ -1,5 +1,5 @@
 // Port of pkg/chat/ready_test.go — per-harness submit key + pi send-readiness.
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vitest"
 import {
   submitKeyForHarness,
   requiresPromptReadiness,

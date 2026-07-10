@@ -2,7 +2,7 @@
 // a Screen and assert parseModelPicker returns the expected model list — plus
 // the curated isKnownModel/knownModels registry checks. No live CLI.
 
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vitest"
 import { newScreen } from "../../src/screen/index.ts"
 import {
   parseModelPicker,

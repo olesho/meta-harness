@@ -1,5 +1,5 @@
 // Port of pkg/chat/history_source_test.go — HistoryWithSource provenance.
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vitest"
 import { Conversation } from "../../src/chat/conversation.ts"
 import { newMemStore } from "../../src/chat/memstore.ts"
 import { generic, type Adapter } from "../../src/turns/index.ts"

@@ -1,4 +1,4 @@
-import { afterEach, expect, test } from "bun:test"
+import { afterEach, expect, test } from "vitest"
 import { mkdirSync, writeFileSync } from "node:fs"
 import path from "node:path"
 

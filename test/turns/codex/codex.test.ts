@@ -2,7 +2,7 @@
 // Corpus replay: bytes.raw → Screen → adapter, asserting no-fire on real
 // (post-0.142) recordings and fire on the synthetic legacy footer.
 
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vitest"
 import { newScreen } from "../../../src/screen/index.ts"
 import * as codex from "../../../src/turns/harness/codex.ts"
 import { TurnComplete } from "../../../src/turns/index.ts"

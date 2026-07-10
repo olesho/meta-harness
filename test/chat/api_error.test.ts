@@ -1,6 +1,6 @@
 // Port of pkg/chat/api_error_test.go — structured api-error fields forwarded
 // from a turns.Blocked event onto the emitted Turn.
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vitest"
 import { Conversation, EventBus } from "../../src/chat/conversation.ts"
 import { newMemStore } from "../../src/chat/memstore.ts"
 import { Blocked } from "../../src/turns/index.ts"

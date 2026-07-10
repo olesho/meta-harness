@@ -4,7 +4,7 @@
 // round-trips into the reply verbatim, and a mid-turn marker on a non-busy frame
 // does not truncate — rather than any specific glyph.
 
-import { afterEach, describe, expect, test } from "bun:test"
+import { afterEach, describe, expect, test } from "vitest"
 
 import { Context } from "../../src/internal/async/index.ts"
 import { TurnStateComplete, type Conversation } from "../../src/chat/index.ts"

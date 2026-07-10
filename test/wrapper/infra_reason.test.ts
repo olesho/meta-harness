@@ -4,7 +4,7 @@
 // /spawn .* failed/i. These assertions freeze the meta-harness wording so a
 // refactor can't silently break that classification on the orchestrator side.
 
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vitest"
 import {
   ErrBinaryNotFound,
   ErrPTYAllocation,

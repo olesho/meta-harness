@@ -1,5 +1,5 @@
 // Port of pkg/chat/input_test.go — policy/handler resolution, surfacing, Answer.
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vitest"
 import { Context } from "../../src/internal/async/index.ts"
 import {
   ErrNoControl,

@@ -3,7 +3,7 @@
 // next to ptyHost.mjs) point at the bridge's real location. Resolved lazily at
 // spawn time, so a plain env set (no import-order dance) takes effect.
 
-import { afterEach, describe, expect, test } from "bun:test"
+import { afterEach, describe, expect, test } from "vitest"
 import { resolveHost } from "../../src/wrapper/internal/pty.ts"
 
 const KEY = "META_HARNESS_PTY_HOST"

@@ -3,7 +3,7 @@
 // These drive Conversation.primeSessionID directly (a private method reached via
 // a bracket escape) with an injected writeStdin that simulates how Codex renders
 // the /status box in response to the primer's keystrokes — no disk, no PTY.
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vitest"
 import { Conversation } from "../../src/chat/conversation.ts"
 import { newMemStore } from "../../src/chat/memstore.ts"
 import { newScreen, type Screen } from "../../src/screen/index.ts"

@@ -1,6 +1,6 @@
 // Port of pkg/turns/harness/claudecode/turncomplete_busy_test.go.
 
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vitest"
 import * as claudecode from "../../../src/turns/harness/claudecode.ts"
 import type { Event } from "../../../src/turns/index.ts"
 import { TurnComplete } from "../../../src/turns/index.ts"

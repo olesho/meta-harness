@@ -6,7 +6,7 @@
 // submit is written anyway). Uses the writeStdin test seam plus a real Screen
 // fed by the test, so the echo gate is observed end to end without a PTY.
 
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vitest"
 
 import { Conversation, EventBus } from "../../src/chat/conversation.ts"
 import { newMemStore } from "../../src/chat/index.ts"

@@ -2,7 +2,7 @@
 // prompt in → clean reply out, one terminal turn, then teardown. Also asserts
 // the deadline path throws DeadlineError and env-clean strips leaked vars.
 
-import { afterEach, describe, expect, test } from "bun:test"
+import { afterEach, describe, expect, test } from "vitest"
 import { mkdtempSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"

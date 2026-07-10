@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test"
+import { expect, test } from "vitest"
 import { VERSION } from "../src/index.ts"
 
 test("library root exposes a VERSION string", () => {

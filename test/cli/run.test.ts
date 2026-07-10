@@ -1,9 +1,11 @@
 // Unit + subprocess tests for the `run` CLI (src/cli/run.ts). The subprocess
-// tests exec the real CLI under `bun`, driving one fake-harness turn end to end
-// (prompt on stdin → clean reply on stdout, exit 0) and a forced deadline
+// tests exec the real CLI under `node` (matching its `#!/usr/bin/env node`
+// production runtime; META-HARNESS-30/34), driving one fake-harness turn end to
+// end (prompt on stdin → clean reply on stdout, exit 0) and a forced deadline
 // (exit 124 + the literal `harness-wrapper run:` stderr anchor the orchestrator greps for).
 
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vitest"
+import { spawn } from "node:child_process"
 import { mkdtempSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { dirname, join } from "node:path"
@@ -21,9 +23,13 @@ import {
   DeadlineLine,
 } from "../../src/cli/run.ts"
 import { New, PromptRef, EnvVar, fakeHarnessBin } from "../chat/fakeharness.ts"
+import { resolveNode } from "../../src/wrapper/internal/pty.ts"
 
 const here = dirname(fileURLToPath(import.meta.url))
-const runCli = join(here, "..", "..", "src", "cli", "run.ts")
+const runCli = join(here, "..", "..", "dist", "cli", "run.js")
+// The CLI ships `#!/usr/bin/env node`; exec it under a real `node` so the
+// subprocess run matches production even when the test runner is bun.
+const nodeBin = resolveNode()
 
 describe("parseArgs", () => {
   test("bare name", () => {
@@ -117,17 +123,22 @@ interface RunResult {
 }
 
 async function execCli(args: string[], stdin: string, env: Record<string, string>): Promise<RunResult> {
-  const proc = Bun.spawn(["bun", runCli, ...args], {
-    stdin: new TextEncoder().encode(stdin),
-    stdout: "pipe",
-    stderr: "pipe",
+  const proc = spawn(nodeBin, [runCli, ...args], {
+    stdio: ["pipe", "pipe", "pipe"],
     env: { ...process.env, ...env },
   })
-  const [stdout, stderr, code] = await Promise.all([
-    new Response(proc.stdout).text(),
-    new Response(proc.stderr).text(),
-    proc.exited,
-  ])
+  let stdout = ""
+  let stderr = ""
+  proc.stdout.setEncoding("utf8")
+  proc.stderr.setEncoding("utf8")
+  proc.stdout.on("data", (d) => { stdout += d })
+  proc.stderr.on("data", (d) => { stderr += d })
+  proc.stdin.write(stdin)
+  proc.stdin.end()
+  const code: number = await new Promise((resolve, reject) => {
+    proc.on("error", reject)
+    proc.on("close", (c) => resolve(c ?? 0))
+  })
   return { code, stdout, stderr }
 }
 

@@ -7,7 +7,7 @@
 // forking harness, so these tests drive it through a SYNTHETIC forking adapter
 // that implements SessionIDLocator + resumeForksSessionID(): true — Codex no
 // longer implements locateSessionID (its /status scrape replaced disk-locate).
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vitest"
 import {
   Conversation,
   adapterResumeForks,

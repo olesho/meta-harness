@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vitest"
 import { HarnessAdapter } from "../../src/wrapper/internal/harnessAdapter.ts"
 import { Patterns as claudePatterns } from "../../src/wrapper/internal/harness/claude.ts"
 import { Patterns as codexPatterns } from "../../src/wrapper/internal/harness/codex.ts"

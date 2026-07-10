@@ -152,9 +152,10 @@ src/
   cli/                the `run` binary
   discovery/          harness version probing
   versions/           pinned version catalog
-test/                 bun test suites + a recorded PTY corpus
+test/                 vitest suites + a recorded PTY corpus
 dist/                 committed Node build (see Packaging)
 ```
 
 See **[Architecture](architecture.md)** for how these relate, the module boundaries the
-test suite enforces, and how the package is built and distributed for both Bun and Node.
+test suite enforces, and how the package is built and distributed for Node (Bun still
+supported).

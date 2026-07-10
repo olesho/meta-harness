@@ -1,6 +1,6 @@
 // Port of pkg/wrapper/wrapper_test.go — Run() across the mock harness modes.
 
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vitest"
 
 import {
   ErrBinaryNotFound,

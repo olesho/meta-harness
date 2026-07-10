@@ -3,7 +3,7 @@
 // real timeout. classifyExit carries that distinction in the reason string via
 // the context's cancellation cause.
 
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vitest"
 import { classifyExit, StatusInterrupted, StatusIdle } from "../../src/wrapper/index.ts"
 import { ctxCanceled, ctxDeadlineExceeded } from "../../src/async/index.ts"
 
