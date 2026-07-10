@@ -126,12 +126,12 @@ Capture a few scenarios (short reply, multi-turn, tool call, and adversarial
 replay tests under `test/turns/newcli/`. Then run the gate:
 
 ```bash
-bun test
+npm test
 ```
 
 Two suites will also nudge you: [`test/contract.test.ts`](../../../test/contract.test.ts)
 fails until you regenerate the public-surface golden for your new exports
-(`UPDATE_GOLDEN=1 bun test test/contract.test.ts`), and
+(`UPDATE_GOLDEN=1 npm test -- test/contract.test.ts`), and
 [`test/exports-guard.test.ts`](../../../test/exports-guard.test.ts) fails if a public barrel
 accidentally re-exports something internal.
 
@@ -146,7 +146,7 @@ accidentally re-exports something internal.
       exported; `resolveAdapter` case added.
 - [ ] Transcript reader (if it has a log).
 - [ ] Readiness markers (if it has a composer).
-- [ ] Corpus + replay tests; `bun test` green; golden regenerated.
+- [ ] Corpus + replay tests; `npm test` green; golden regenerated.
 - [ ] Once verified against a real upstream version, set `pinned` / `verified_at`.
 
 The [Backend/Adapter seam](../architecture.md#the-backendadapter-seam) is what makes this

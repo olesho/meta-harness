@@ -15,35 +15,37 @@ A thin wrapper around the shared one-shot loop (`meta-harness/oneshot`):
   `124` deadline (+ the literal stderr line `harness-wrapper run: context
   deadline exceeded`, which fires BOTH of the orchestrator's timeout signals).
 
-Run directly with Bun:
+Run directly with Node (against the compiled `dist`):
 
 ```sh
-echo "your prompt" | bun src/cli/run.ts claude -- --some-harness-flag
+npm run build
+echo "your prompt" | node dist/cli/run.js claude -- --some-harness-flag
 ```
 
-## `bun build --compile` is NOT self-contained here
+## The image is NOT a single self-contained binary
 
-Evaluated: `bun build --compile ./src/cli/run.ts --outfile meta-harness-run`
-produces a single executable that embeds the JS, but it is **not** a standalone
-binary for this project. The transitive dependency `node-pty` (via
-`src/wrapper/internal/pty.ts`) has two runtime requirements Bun cannot inline:
+The CLI runs on Node from the compiled `dist/cli/run.js`. There is no
+`--compile` single-file executable: the transitive dependency `node-pty` (via
+`src/wrapper/internal/pty.ts`) has two runtime requirements that cannot be
+inlined into one file:
 
-1. **A `node` interpreter on PATH.** Under Bun, node-pty does not drive the pty
-   in-process; it spawns a helper bridge `node ptyHost.mjs` (see
-   `src/wrapper/internal/ptyHost.mjs`). That bridge is launched with `node`, so
-   the image must ship a Node.js runtime even though the CLI itself runs on Bun.
-   (Background: node-pty's native data stream is dead under Bun — see the
-   `meta-harness-node-pty-bun-broken` note — hence the out-of-process bridge.)
+1. **A `node` interpreter on PATH.** node-pty spawns a helper bridge
+   `node ptyHost.mjs` (see `src/wrapper/internal/ptyHost.mjs`) rather than
+   driving the pty in-process. The bridge is launched with `node`, so the image
+   must ship a Node.js runtime. (Historical background: node-pty's native data
+   stream was dead under Bun — see the `meta-harness-node-pty-bun-broken` note —
+   which is why the out-of-process bridge was introduced. The bridge remains in
+   place and is still safe under Node, so the CLI keeps using it.)
 
 2. **The native `.node` addon on disk.** node-pty loads its compiled addon
-   (`pty.node`) from the filesystem via `require`/`dlopen`. `bun --compile`
-   cannot embed a `.node`; the addon must exist as a real file next to the
-   materialized `node_modules/node-pty` (matching the image's libc/arch).
+   (`pty.node`) from the filesystem via `require`/`dlopen`. The addon must exist
+   as a real file next to the materialized `node_modules/node-pty` (matching the
+   image's libc/arch); it cannot be embedded.
 
 ### Residual runtime deps the image MUST provide
 
-- the `bun` runtime (or the compiled `meta-harness-run` executable),
-- a `node` interpreter on `PATH`,
+- a `node` interpreter on `PATH` (runs both the CLI and the pty bridge),
+- the compiled `dist/**` (or the source tree + an install to build it),
 - `src/wrapper/internal/ptyHost.mjs` materialized on disk,
 - the `node-pty` package with its built `pty.node` addon for the image's
   platform/arch,
@@ -52,10 +54,10 @@ binary for this project. The transitive dependency `node-pty` (via
 
 ### Recommended image layout
 
-Ship the meta-harness source tree (or `node_modules` install) plus Bun and Node,
-and invoke `bun /app/src/cli/run.ts …`. Do not rely on a lone `--compile` output.
-If a compiled binary is desired for startup speed, still co-locate `node`,
-`ptyHost.mjs`, and the `pty.node` addon alongside it.
+Ship the built `dist/**` (or the meta-harness source tree plus a `node_modules`
+install and `npm run build`) plus a Node.js runtime, and invoke
+`node /app/dist/cli/run.js …`. Co-locate `node`, `ptyHost.mjs`, and the
+`pty.node` addon so the pty bridge can start.
 
 ## Config knobs (env)
 

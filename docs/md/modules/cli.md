@@ -6,8 +6,9 @@ the clean reply to **stdout**. It exists to be baked into a container image and 
 once per turn by an orchestrator — its exit codes and a fixed stderr line are the contract
 that orchestrator parses.
 
-Source: [`src/cli/run.ts`](../../../src/cli/run.ts). It runs on **Bun** (declared as the
-package `bin` `meta-harness-run`) and is excluded from the Node `dist` build.
+Source: [`src/cli/run.ts`](../../../src/cli/run.ts). It runs on **Node** from the
+compiled [`dist/cli/run.js`](../../../dist/cli/run.js) (declared as the package `bin`
+`meta-harness-run`).
 
 ---
 
@@ -18,7 +19,7 @@ run [--effort E] [--model M] <name> -- <harness args…>
 ```
 
 ```bash
-echo "Summarize README.md in one sentence." | bun src/cli/run.ts claude -- --some-flag
+echo "Summarize README.md in one sentence." | node dist/cli/run.js claude -- --some-flag
 ```
 
 - **stdin** → the prompt; **stdout** → the clean reply (trailing newline ensured).
@@ -76,18 +77,17 @@ itself (searched on `PATH`).
 
 ## Packaging
 
-This is where the [PTY bridge](../architecture.md#the-pty-bridge) constraint bites. Even
-though the CLI runs on Bun, **node-pty needs Node and a native addon**, so
-`bun build --compile` does **not** produce a self-contained binary. An image that runs
-this CLI must provide:
+This is where the [PTY bridge](../architecture.md#the-pty-bridge) constraint bites.
+**node-pty needs Node and a native addon**, so there is no single self-contained
+binary. An image that runs this CLI must provide:
 
-- the **`bun`** runtime (or the compiled `meta-harness-run`),
-- a **`node`** interpreter on `PATH` (node-pty spawns `node ptyHost.mjs`),
+- a **`node`** interpreter on `PATH` (runs the CLI and node-pty's `node ptyHost.mjs` bridge),
+- the compiled **`dist/**`** (or the source tree plus an install and `npm run build`),
 - [`ptyHost.mjs`](../../../src/wrapper/internal/ptyHost.mjs) materialized on disk,
 - the **`node-pty`** package with its built `pty.node` addon for the image's libc/arch,
 - the **harness binaries** (`claude`, `codex`) on `PATH`, or their paths via
   `HARNESS_BINARY*`.
 
-Recommended layout: ship the meta-harness source tree (or an installed `node_modules`)
-plus Bun and Node, and invoke `bun /app/src/cli/run.ts …`. The authoritative note is
-[`src/cli/PACKAGING.md`](../../../src/cli/PACKAGING.md).
+Recommended layout: ship the built `dist/**` (or the meta-harness source tree plus an
+installed `node_modules`) and a Node runtime, and invoke `node /app/dist/cli/run.js …`.
+The authoritative note is [`src/cli/PACKAGING.md`](../../../src/cli/PACKAGING.md).

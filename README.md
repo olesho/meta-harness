@@ -15,8 +15,8 @@ Docs live in [`docs/`](docs/README.md), split by format:
 ## Develop
 
 ```bash
-bun install
-bun test        # the release gate
+npm install
+npm test        # the release gate
 ```
 
 ## Session resume

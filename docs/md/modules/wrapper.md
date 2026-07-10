@@ -336,8 +336,9 @@ is the TS analogue of Go's `slog.Record`.
 
 ## How it works
 
-- **The PTY bridge.** node-pty's native data stream doesn't work under Bun, so the
-  wrapper never drives the PTY in-process. It spawns a small Node helper,
+- **The PTY bridge.** node-pty's native data stream didn't work under Bun (the reason
+  the bridge exists), so the wrapper never drives the PTY in-process — it remains the
+  bridged design under Node. It spawns a small Node helper,
   [`ptyHost.mjs`](../../../src/wrapper/internal/ptyHost.mjs), and talks to it over a
   length-framed stdio protocol (`r` ready, `o` output, `x` exit ← host; `i` stdin, `w`
   resize, `k` kill → host). Consequences for packaging are in

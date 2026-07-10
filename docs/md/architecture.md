@@ -3,7 +3,7 @@
 This document explains how meta-harness is put together: the layers and the direction
 of their dependencies, how data flows through a single turn, the seams that keep the
 layers decoupled, the module boundaries the test suite enforces, the library's Go
-heritage, and how it is packaged for both Bun and Node.
+heritage, and how it is packaged for Node (with Bun still supported).
 
 For the API of any individual layer, see the [module reference](modules/). For the
 vocabulary used throughout, see [Concepts](concepts.md).
@@ -204,7 +204,7 @@ removed export, a changed constant, or a type→value reclassification fails lou
 forces a conscious golden update:
 
 ```bash
-UPDATE_GOLDEN=1 bun test test/contract.test.ts
+UPDATE_GOLDEN=1 npm test -- test/contract.test.ts
 ```
 
 This is the TS analogue of the Go original's `go_api.golden`, widened from one package
@@ -240,8 +240,10 @@ first argument.
 
 ## Packaging & distribution
 
-meta-harness has **two consumers with two runtimes**, and the package serves both from
-one source tree via conditional exports in [`package.json`](../../package.json):
+meta-harness runs on **Node** — the `run` CLI, the tests, and every downstream
+consumer load the compiled `dist/**`. The package still exposes a `bun` condition
+(pointing at raw `src/**` TS) so a future Bun consumer resolves without a build, via
+conditional exports in [`package.json`](../../package.json):
 
 ```jsonc
 "exports": {
@@ -251,11 +253,11 @@ one source tree via conditional exports in [`package.json`](../../package.json):
 }
 ```
 
-- **Bun consumers** (e.g. the orchestrator) resolve the `bun` condition and import the
-  **raw `src/**` TypeScript** directly — no build step. The `bun` condition is listed
-  **first** so Bun never falls through to `dist`.
-- **Node consumers** (e.g. a bundler or sandbox runner) resolve `import` and load the
-  **compiled `dist/**` JavaScript** (+ `.d.ts`).
+- **Node consumers** (the loomcli flue bundle + the sandbox runner) resolve `import`
+  and load the **compiled `dist/**` JavaScript** (+ `.d.ts`). This is the primary path.
+- **Bun consumers**, if any, resolve the `bun` condition and import the **raw `src/**`
+  TypeScript** directly — no build step. The `bun` condition is listed **first** so Bun
+  never falls through to `dist`; no live consumer relies on it post-migration.
 
 `dist/` is **built and committed**. `npm run build` runs
 [`scripts/build.mjs`](../../scripts/build.mjs), which:
@@ -263,22 +265,23 @@ one source tree via conditional exports in [`package.json`](../../package.json):
 1. Compiles `src/**` → `dist/**` (ESM + declarations) via
    [`tsconfig.build.json`](../../tsconfig.build.json). `rewriteRelativeImportExtensions`
    turns the source's `./foo.ts` specifiers into `./foo.js` for real Node ESM output.
-   The Bun-only CLI (`src/cli`) and all tests are excluded.
+   All tests are excluded.
 2. Copies the raw PTY bridge `ptyHost.mjs` (not a `.ts` input, so `tsc` won't emit it)
    next to its compiled importer.
 
 ### The PTY bridge
 
-The one piece of genuine runtime awkwardness: **node-pty's native data stream does not
-work under Bun.** So `wrapper` never drives the PTY in-process — it spawns a small Node
-helper, [`ptyHost.mjs`](../../src/wrapper/internal/ptyHost.mjs), and talks to it over a
-length-framed stdio protocol. This has consequences for anyone shipping the CLI in a
-container:
+The one piece of genuine runtime awkwardness, historically: **node-pty's native data
+stream did not work under Bun** (see the `meta-harness-node-pty-bun-broken` note). So
+`wrapper` never drives the PTY in-process — it spawns a small Node helper,
+[`ptyHost.mjs`](../../src/wrapper/internal/ptyHost.mjs), and talks to it over a
+length-framed stdio protocol. The bridge is retained under Node (it is still correct and
+safe there) and has consequences for anyone shipping the CLI in a container:
 
-- a `node` interpreter must be on `PATH` (even though the CLI itself runs on Bun),
+- a `node` interpreter must be on `PATH` (it runs both the CLI and the bridge),
 - `ptyHost.mjs` must exist on disk next to its importer,
 - node-pty's compiled `pty.node` addon must be present for the image's libc/arch, and
-- `bun build --compile` is therefore **not** self-contained.
+- the image is therefore **not** a single self-contained binary.
 
 The full image-layout guidance lives in [`src/cli/PACKAGING.md`](../../src/cli/PACKAGING.md)
 and is summarized in the [CLI module doc](modules/cli.md#packaging).

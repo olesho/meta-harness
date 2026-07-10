@@ -104,7 +104,7 @@ orchestrator invokes a turn:
 
 ```bash
 echo "Summarize README.md in one sentence." \
-  | HARNESS_WRAPPER_RUN_TIMEOUT=5m bun src/cli/run.ts claude -- --some-flag
+  | HARNESS_WRAPPER_RUN_TIMEOUT=5m node dist/cli/run.js claude -- --some-flag
 ```
 
 Exit codes are the contract: `0` ok, `1` errored/fatal, `2` usage, `124` deadline (with a

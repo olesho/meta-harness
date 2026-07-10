@@ -9,17 +9,16 @@ This walks you from a clone to a running turn — first as a full
 
 ## Prerequisites
 
-- **[Bun](https://bun.sh)** ≥ 1.1 — the primary runtime and test runner.
-- **Node.js** ≥ 20 on `PATH` — required at runtime even under Bun, because the PTY
-  bridge (`ptyHost.mjs`) runs on Node. See
+- **[Node.js](https://nodejs.org)** ≥ 20 — the runtime, package manager (`npm`), and
+  the host for the PTY bridge (`ptyHost.mjs`). See
   [Architecture › The PTY bridge](architecture.md#the-pty-bridge).
 - **At least one harness binary** to actually drive — `claude`, `codex`, `opencode`,
   or `pi` — installed and on `PATH` (or with a known absolute path). Check what you have
   with [`discovery`](modules/discovery.md):
 
   ```bash
-  # from the checkout:
-  bun -e 'import("./src/discovery/index.ts").then(d => console.log(d.discover()))'
+  # from the checkout (after `npm run build`):
+  node -e 'import("./dist/discovery/index.js").then(d => console.log(d.discover()))'
   # as a consumer of the package: import("meta-harness/discovery")
   ```
 
@@ -31,7 +30,7 @@ the suite uses recorded corpora and in-process fakes.
 ## Install
 
 ```bash
-bun install
+npm install
 ```
 
 ---
@@ -39,28 +38,28 @@ bun install
 ## Verify the checkout
 
 ```bash
-bun test        # the full suite — this is the release gate
-bun run typecheck   # tsc --noEmit against src + test
+npm test            # the full suite (vitest run) — this is the release gate
+npm run typecheck   # tsc --noEmit against src + test
 ```
 
-`bun test` is the project's release gate: it exercises the wrapper classifier, the turn
+`npm test` is the project's release gate: it exercises the wrapper classifier, the turn
 adapters (against a recorded PTY corpus), the chat state machine (against an in-process
 fake harness), the transcript parsers, and the public-surface contract. It needs no
 network and no harness binaries.
 
 ---
 
-## Build (for Node consumers)
+## Build
 
-Bun consumers import `src/**` directly and never need a build. If you are consuming
-meta-harness from **Node**, build the committed `dist/`:
+Node consumers (and the `run` CLI) load the committed `dist/`. Rebuild it after
+changing `src/`:
 
 ```bash
-bun run build       # runs scripts/build.mjs → dist/** (ESM + .d.ts) + ptyHost.mjs
+npm run build       # runs scripts/build.mjs → dist/** (ESM + .d.ts) + ptyHost.mjs
 ```
 
 See [Architecture › Packaging](architecture.md#packaging--distribution) for why `dist/`
-is committed and how the export conditions route Bun vs Node.
+is committed and how the export conditions route Node (and a still-supported Bun).
 
 ---
 
@@ -162,7 +161,7 @@ The same one-shot loop is available as a disposable process — prompt on **stdi
 reply on **stdout** — which is how an orchestrator invokes a turn:
 
 ```bash
-echo "Summarize README.md in one sentence." | bun src/cli/run.ts claude -- --some-harness-flag
+echo "Summarize README.md in one sentence." | node dist/cli/run.js claude -- --some-harness-flag
 ```
 
 Grammar: `run [--effort E] [--model M] <name> -- <harness args…>`. Exit codes are
