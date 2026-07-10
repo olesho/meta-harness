@@ -7,6 +7,7 @@ import { homedir } from "node:os";
 import path from "node:path";
 import { wrap } from "../../internal/async/index.js";
 import { ErrEmptySessionID, ErrEmptyWorkingDir, ErrSessionNotFound } from "../errors.js";
+import { usageFromClaudeJSONL } from "../usage.js";
 import { events } from "./parseClaude.js";
 // claudeCWDSanitize matches every character Claude Code rewrites when naming a
 // project dir: anything that is not an ASCII letter or digit (including '.').
@@ -40,6 +41,25 @@ export class ClaudeCodeReader {
             throw wrap(`claudecode transcript: read ${file}`, err);
         }
         return events(data);
+    }
+    // readUsage returns the session's token totals (summed per API call), or null
+    // when the transcript records no usage. Same locate rules as read().
+    readUsage(harnessSessionID, workingDir = "") {
+        if (harnessSessionID === "") {
+            throw wrap("claudecode usage: empty session id", ErrEmptySessionID);
+        }
+        if (workingDir === "") {
+            throw wrap("claudecode usage: empty working dir", ErrEmptyWorkingDir);
+        }
+        const file = this.locate(harnessSessionID, workingDir);
+        let data;
+        try {
+            data = readFileSync(file, "utf8");
+        }
+        catch (err) {
+            throw wrap(`claudecode usage: read ${file}`, err);
+        }
+        return usageFromClaudeJSONL(data);
     }
     resolveRoot() {
         if (this.projectsRoot !== "")

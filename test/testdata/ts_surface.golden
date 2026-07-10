@@ -90,8 +90,8 @@ turns/index.ts
   pi: object{New,PiAdapter,PromptReady}
 
 transcript/index.ts
-  ClaudeCodeReader: class{locate,read,resolveRoot}
-  CodexReader: class{locate,locateLatestSession,read,resolveRoot}
+  ClaudeCodeReader: class{locate,read,readUsage,resolveRoot}
+  CodexReader: class{locate,locateLatestSession,read,readUsage,resolveRoot}
   ErrEmptySessionID: object{code,name}
   ErrEmptyWorkingDir: object{code,name}
   ErrSessionNotFound: object{code,name}
@@ -112,6 +112,7 @@ transcript/index.ts
   SourceFile: string="file"
   SourceLive: string="live"
   Turn: type
+  Usage: type
   claudecodeEvents: function
   codexEvents: function
   encodedCWD: function
@@ -125,6 +126,9 @@ transcript/index.ts
   toPublicJSON: function
   turnsFromEvents: function
   unmarshalParsedEvents: function
+  usageFromClaudeJSONL: function
+  usageFromCodexJSONL: function
+  usageToPublicJSON: function
 
 chat/index.ts
   Adapter: type

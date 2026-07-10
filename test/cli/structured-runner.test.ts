@@ -130,5 +130,15 @@ describe("structured-runner main() — one-turn JSON contract (real pty + fake h
     // finds nothing — a graceful empty array (or a captured transcript_error),
     // NEVER a crash that erases the reply.
     expect(Array.isArray(payload.transcript_entries)).toBe(true)
+    // Same for usage: no on-disk session → the usage key is simply absent
+    // (best-effort telemetry, never a crash). Fixture-level extraction is
+    // covered in test/transcript/usage.test.ts.
+    expect(payload.usage).toBeUndefined()
   }, 25000)
+})
+
+test("readUsage: empty session id → null (no locate attempted)", async () => {
+  const { readUsage } = await import("../../src/cli/structured-runner.ts")
+  expect(readUsage("claude-code", "", "/tmp")).toBeNull()
+  expect(readUsage("codex", "", "/tmp")).toBeNull()
 })

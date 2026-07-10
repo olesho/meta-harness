@@ -6,6 +6,7 @@ import { homedir } from "node:os";
 import path from "node:path";
 import { wrap } from "../../internal/async/index.js";
 import { ErrEmptySessionID, ErrSessionNotFound } from "../errors.js";
+import { usageFromCodexJSONL } from "../usage.js";
 import { locateLatestSession, walkJSONL } from "./locate.js";
 import { events } from "./parseCodex.js";
 export class CodexReader {
@@ -22,6 +23,23 @@ export class CodexReader {
         }
         const file = this.locate(harnessSessionID);
         return parseJSONL(file);
+    }
+    // readUsage returns the session's cumulative token totals (the last
+    // token_count event), or null when the rollout records none. workingDir is
+    // ignored, mirroring read().
+    readUsage(harnessSessionID, _workingDir = "") {
+        if (harnessSessionID === "") {
+            throw wrap("codex usage: empty session id", ErrEmptySessionID);
+        }
+        const file = this.locate(harnessSessionID);
+        let data;
+        try {
+            data = readFileSync(file, "utf8");
+        }
+        catch (err) {
+            throw wrap(`codex usage: open ${file}`, err);
+        }
+        return usageFromCodexJSONL(data);
     }
     // locateLatestSession is the disk-based fallback used when the screen-scrape
     // session-id extractor finds nothing (Codex 0.142+).

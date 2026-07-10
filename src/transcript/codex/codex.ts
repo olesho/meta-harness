@@ -9,6 +9,7 @@ import path from "node:path"
 import { wrap } from "../../internal/async/index.ts"
 import { ErrEmptySessionID, ErrSessionNotFound } from "../errors.ts"
 import type { Event } from "../event.ts"
+import { usageFromCodexJSONL, type Usage } from "../usage.ts"
 import { locateLatestSession, walkJSONL } from "./locate.ts"
 import { events } from "./parseCodex.ts"
 
@@ -28,6 +29,23 @@ export class CodexReader {
     }
     const file = this.locate(harnessSessionID)
     return parseJSONL(file)
+  }
+
+  // readUsage returns the session's cumulative token totals (the last
+  // token_count event), or null when the rollout records none. workingDir is
+  // ignored, mirroring read().
+  readUsage(harnessSessionID: string, _workingDir = ""): Usage | null {
+    if (harnessSessionID === "") {
+      throw wrap("codex usage: empty session id", ErrEmptySessionID)
+    }
+    const file = this.locate(harnessSessionID)
+    let data: string
+    try {
+      data = readFileSync(file, "utf8")
+    } catch (err) {
+      throw wrap(`codex usage: open ${file}`, err)
+    }
+    return usageFromCodexJSONL(data)
   }
 
   // locateLatestSession is the disk-based fallback used when the screen-scrape
