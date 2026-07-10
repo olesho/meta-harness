@@ -27,7 +27,8 @@
     "postinstall": "node scripts/postinstall.mjs",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "build": "node scripts/build.mjs"
+    "build": "node scripts/build.mjs",
+    "verify:exports": "node scripts/verify-exports.mjs"
   },
   "devDependencies": {
     "@types/node": "^22",
