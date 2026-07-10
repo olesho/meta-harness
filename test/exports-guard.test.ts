@@ -20,6 +20,7 @@ const PUBLIC_BARRELS = [
   "oneshot/index.ts",
   "env/index.ts",
   "env-openshell/index.ts",
+  "env-daytona/index.ts",
 ]
 
 // Matches `from "...internal..."` / `import("...internal...")` in any barrel.

@@ -31,6 +31,7 @@ const PUBLIC_BARRELS = [
   "versions/index.ts",
   "env/index.ts",
   "env-openshell/index.ts",
+  "env-daytona/index.ts",
   "index.ts",
 ]
 
