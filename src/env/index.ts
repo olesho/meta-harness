@@ -34,3 +34,13 @@ export { local } from "./local.ts"
 export { none } from "./none.ts"
 export { shouldKeep, TeardownError } from "./retention.ts"
 export { argvToShell, envPrefixedShell, shQuote } from "./argv.ts"
+
+// Host-side structured-turn client (design §7). Imports the exit constants +
+// result-schema type from src/turnproto (the ONE source of truth); turnproto is
+// dependency-light and never reaches into src/cli, so this barrel stays clean.
+export {
+  runStructuredTurn,
+  TurnProtocolError,
+  TranscriptRetrievalUnsupportedError,
+  type TurnConfig,
+} from "./turn.ts"
