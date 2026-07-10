@@ -66,14 +66,16 @@ describe.skipIf(!enabled)("openshell live (Tier-4)", () => {
   runConformance({
     name: "local + openshell (live)",
     makeProvisioner: () => local({ root: mkdtempSync(join(tmpdir(), "os-live-")) }),
-    makeContainment: () =>
-      openshell({ agentId: `mh-live-${++n}`, from: "node:22-slim" }),
+    // No `from`: the gateway's default image ships node (v22 at time of
+    // writing) and a writable /sandbox — a bare `--from node:22-slim` dies at
+    // provisioning because that image's entrypoint (node REPL) exits at once.
+    makeContainment: () => openshell({ agentId: `mh-live-${++n}` }),
   })
 
   // Part B: openshell-specific lifecycle assertions.
   async function acquireLive(agentId: string): Promise<{ ws: Workspace; name: string }> {
     const prov = local({ root: mkdtempSync(join(tmpdir(), "os-live-b-")) })
-    const contain = openshell({ agentId, from: "node:22-slim" })
+    const contain = openshell({ agentId })
     const inner = await prov.create(ctx, { image: "img", name: `b-${agentId}` })
     const layer = await contain.acquire!(ctx, inner, {})
     return { ws: compose(inner, layer), name: sandboxName(agentId) }
