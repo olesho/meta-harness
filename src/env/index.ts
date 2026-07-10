@@ -34,6 +34,7 @@ export { local } from "./local.ts"
 export { none } from "./none.ts"
 export { shouldKeep, TeardownError } from "./retention.ts"
 export { argvToShell, envPrefixedShell, shQuote } from "./argv.ts"
+export { ContainerWorkspace, detectContainerRuntime } from "./container.ts"
 
 // Host-side structured-turn client (design §7). Imports the exit constants +
 // result-schema type from src/turnproto (the ONE source of truth); turnproto is
