@@ -260,7 +260,7 @@ env/index.ts
   shouldKeep: function
 
 env-openshell/index.ts
-  OpenShellContainment: class{layer,name,preflight}
+  OpenShellContainment: class{acquire,layer,name,preflight}
   generatePolicy: function
   openshell: function
   resolveGuestUrl: function

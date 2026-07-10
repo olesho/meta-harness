@@ -238,82 +238,6 @@ export class OpenShellContainment implements Containment {
     }
   }
 
-  /** Layer primitives closed over a REAL sandbox name. */
-  private buildLayer(name: string): ContainmentLayer {
-    const guestRepo = this.guestPath
-    const driver = this.driver
-    // The real openshell CLI errors on deleting an already-gone sandbox, and
-    // compose() calls layer.teardown() unconditionally on every destroy —
-    // idempotent double-destroy (conformance contract) therefore lives here:
-    // emit the delete argv once, then [] ("nothing to tear down").
-    let torndown = false
-
-    return {
-      execWrap(argv: string[], opts: ExecOpts): [string[], ExecOpts] {
-        const envEntries = Object.entries(opts.env ?? {})
-        const wrapped = [
-          "openshell",
-          "sandbox",
-          "exec",
-          "-n",
-          name,
-          "--no-tty",
-          "--workdir",
-          opts.cwd ?? guestRepo,
-          "--",
-          // 0.0.53 exec has no --env: cross env as an in-guest `env K=V` prefix,
-          // omitted entirely when empty (a bare `env` would swallow argv[0]).
-          ...(envEntries.length > 0
-            ? ["env", ...envEntries.map(([k, v]) => `${k}=${v}`)]
-            : []),
-          ...argv,
-        ]
-        // cwd/env are CONSUMED into the wrapper (guest-side): passing them
-        // through would set a guest path as the HOST cwd and leak guest env
-        // (possibly secrets) into the host openshell process.
-        const { cwd: _cwd, env: _env, ...rest } = opts
-        return [wrapped, rest]
-      },
-
-      crossUpload(stagingPath: string, guestPath: string): string[] {
-        return [
-          "openshell",
-          "sandbox",
-          "upload",
-          "--no-git-ignore",
-          name,
-          stagingPath,
-          guestPath,
-        ]
-      },
-
-      crossDownload(guestPath: string, stagingPath: string): string[] {
-        return ["openshell", "sandbox", "download", name, guestPath, stagingPath]
-      },
-
-      pathMap(kind: "repo" | "home" | "tmp"): string {
-        switch (kind) {
-          case "repo":
-            return guestRepo
-          case "home":
-            return "/sandbox/.home"
-          case "tmp":
-            return "/tmp"
-        }
-      },
-
-      teardown(): string[] {
-        if (torndown) return []
-        torndown = true
-        return ["openshell", "sandbox", "delete", name]
-      },
-
-      aliasMap: (hostUrl: string): string => {
-        return resolveGuestUrl(hostUrl, driver)
-      },
-    }
-  }
-
   layer(policy: PolicySpec): ContainmentLayer {
     // Unit-test seam: a caller that already owns a sandbox names it explicitly.
     // Production goes through acquire(), which creates the sandbox and returns
@@ -325,7 +249,7 @@ export class OpenShellContainment implements Containment {
           "pass policy.sandboxName (unit-test seam)",
       )
     }
-    return this.buildLayer(name)
+    return buildLayer(name, this.guestPath, this.driver)
   }
 
   /** Create the sandbox (lifecycle step 4 — containment resources exist from
@@ -420,7 +344,83 @@ export class OpenShellContainment implements Containment {
       throw err
     }
 
-    return this.buildLayer(name)
+    return buildLayer(name, this.guestPath, this.driver)
+  }
+}
+
+/** Layer primitives closed over a REAL sandbox name. Module-scoped (not a class
+ *  method) so the erased-at-runtime `private` keyword can't leak it onto the
+ *  public class surface. */
+function buildLayer(name: string, guestRepo: string, driver: string): ContainmentLayer {
+  // The real openshell CLI errors on deleting an already-gone sandbox, and
+  // compose() calls layer.teardown() unconditionally on every destroy —
+  // idempotent double-destroy (conformance contract) therefore lives here:
+  // emit the delete argv once, then [] ("nothing to tear down").
+  let torndown = false
+
+  return {
+    execWrap(argv: string[], opts: ExecOpts): [string[], ExecOpts] {
+      const envEntries = Object.entries(opts.env ?? {})
+      const wrapped = [
+        "openshell",
+        "sandbox",
+        "exec",
+        "-n",
+        name,
+        "--no-tty",
+        "--workdir",
+        opts.cwd ?? guestRepo,
+        "--",
+        // 0.0.53 exec has no --env: cross env as an in-guest `env K=V` prefix,
+        // omitted entirely when empty (a bare `env` would swallow argv[0]).
+        ...(envEntries.length > 0
+          ? ["env", ...envEntries.map(([k, v]) => `${k}=${v}`)]
+          : []),
+        ...argv,
+      ]
+      // cwd/env are CONSUMED into the wrapper (guest-side): passing them
+      // through would set a guest path as the HOST cwd and leak guest env
+      // (possibly secrets) into the host openshell process.
+      const { cwd: _cwd, env: _env, ...rest } = opts
+      return [wrapped, rest]
+    },
+
+    crossUpload(stagingPath: string, guestPath: string): string[] {
+      return [
+        "openshell",
+        "sandbox",
+        "upload",
+        "--no-git-ignore",
+        name,
+        stagingPath,
+        guestPath,
+      ]
+    },
+
+    crossDownload(guestPath: string, stagingPath: string): string[] {
+      return ["openshell", "sandbox", "download", name, guestPath, stagingPath]
+    },
+
+    pathMap(kind: "repo" | "home" | "tmp"): string {
+      switch (kind) {
+        case "repo":
+          return guestRepo
+        case "home":
+          return "/sandbox/.home"
+        case "tmp":
+          return "/tmp"
+      }
+    },
+
+    teardown(): string[] {
+      if (torndown) return []
+      torndown = true
+      return ["openshell", "sandbox", "delete", name]
+    },
+
+    aliasMap: (hostUrl: string): string => {
+      return resolveGuestUrl(hostUrl, driver)
+    },
   }
 }
 
