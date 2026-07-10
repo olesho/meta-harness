@@ -19,6 +19,7 @@ import type {
   ContainmentLayer,
   ExecOpts,
   PolicySpec,
+  Workspace,
 } from "../env/types.ts"
 
 /** CLI runner result shape. */
@@ -208,7 +209,7 @@ export class OpenShellContainment implements Containment {
     return "openshell"
   }
 
-  async preflight(ctx: Context): Promise<void> {
+  async preflight(_ctx: Context, _ws: Workspace): Promise<void> {
     // Check gateway connectivity
     const st = this.cli(["openshell", "status"])
     if (st.code !== 0) {

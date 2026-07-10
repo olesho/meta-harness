@@ -1,5 +1,5 @@
 import type { Context } from "../async/index.ts";
-import type { Containment, ContainmentLayer, PolicySpec } from "../env/types.ts";
+import type { Containment, ContainmentLayer, PolicySpec, Workspace } from "../env/types.ts";
 /** CLI runner result shape. */
 export interface CliResult {
     code: number;
@@ -40,7 +40,7 @@ export declare class OpenShellContainment implements Containment {
         guestPath?: string;
     }, cli?: CliRunner);
     name(): string;
-    preflight(ctx: Context): Promise<void>;
+    preflight(_ctx: Context, _ws: Workspace): Promise<void>;
     layer(policy: PolicySpec): ContainmentLayer;
 }
 export declare function openshell(opts?: {

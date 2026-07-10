@@ -152,7 +152,7 @@ export class OpenShellContainment {
     name() {
         return "openshell";
     }
-    async preflight(ctx) {
+    async preflight(_ctx, _ws) {
         // Check gateway connectivity
         const st = this.cli(["openshell", "status"]);
         if (st.code !== 0) {

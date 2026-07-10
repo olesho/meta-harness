@@ -13,7 +13,8 @@ import {
   type CliResult,
   type CliRunner,
 } from "../src/env-openshell"
-import { Context, cancel } from "../src/async"
+import { Context } from "../src/async"
+import type { Workspace } from "../src/env"
 
 describe("sandboxName", () => {
   it("generates a valid sandbox name from an agentId", () => {
@@ -209,9 +210,18 @@ describe("generatePolicy", () => {
 describe("OpenShellContainment", () => {
   let cli: CliRunner
   let calls: Array<{ argv: string[] }>
+  let mockWorkspace: Workspace
 
   beforeEach(() => {
     calls = []
+    mockWorkspace = {
+      exec: async () => ({ code: 0, stdout: "", stderr: "" }),
+      upload: async () => {},
+      download: async () => {},
+      guestPath: () => "/sandbox/repo",
+      hostAlias: (url: string) => url,
+      destroy: async () => {},
+    }
     cli = (argv: string[]) => {
       calls.push({ argv })
       // Simulate successful responses for preflight checks
@@ -227,30 +237,30 @@ describe("OpenShellContainment", () => {
 
   describe("preflight", () => {
     it("checks gateway connectivity", async () => {
-      const ctx = new Context()
+      const ctx = Context.background()
       const containment = openshell({ cli })
-      await containment.preflight(ctx)
+      await containment.preflight(ctx, mockWorkspace)
       expect(calls.some((c) => c.argv[1] === "status")).toBe(true)
     })
 
     it("checks provider registration", async () => {
-      const ctx = new Context()
+      const ctx = Context.background()
       const containment = openshell({ cli })
-      await containment.preflight(ctx)
+      await containment.preflight(ctx, mockWorkspace)
       expect(
         calls.some((c) => c.argv[1] === "provider" && c.argv[2] === "get"),
       ).toBe(true)
     })
 
     it("throws when gateway is disconnected", async () => {
-      const ctx = new Context()
+      const ctx = Context.background()
       cli = () => ({ code: 0, stdout: "Status: Disconnected", stderr: "" })
       const containment = openshell({ cli })
-      await expect(containment.preflight(ctx)).rejects.toThrow(/not Connected/)
+      await expect(containment.preflight(ctx, mockWorkspace)).rejects.toThrow(/not Connected/)
     })
 
     it("throws when provider is not registered", async () => {
-      const ctx = new Context()
+      const ctx = Context.background()
       cli = (argv: string[]) => {
         if (argv[1] === "status") {
           return { code: 0, stdout: "Status: Connected", stderr: "" }
@@ -261,7 +271,7 @@ describe("OpenShellContainment", () => {
         return { code: 0, stdout: "", stderr: "" }
       }
       const containment = openshell({ cli })
-      await expect(containment.preflight(ctx)).rejects.toThrow(/not registered/)
+      await expect(containment.preflight(ctx, mockWorkspace)).rejects.toThrow(/not registered/)
     })
   })
 
