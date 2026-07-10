@@ -7,7 +7,7 @@ import { copyFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "
 import { tmpdir } from "node:os"
 import { basename, join } from "node:path"
 
-import { Context } from "./index.ts"
+import type { Context } from "../internal/async/index.ts"
 import type { ExecOpts, ExecResult, Workspace, WorkspaceSpec } from "./types.ts"
 
 /**

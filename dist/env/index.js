@@ -15,6 +15,7 @@ export { local } from "./local.js";
 export { none } from "./none.js";
 export { shouldKeep, TeardownError } from "./retention.js";
 export { argvToShell, envPrefixedShell, shQuote } from "./argv.js";
+export { ContainerWorkspace, detectContainerRuntime } from "./container.js";
 // Host-side structured-turn client (design §7). Imports the exit constants +
 // result-schema type from src/turnproto (the ONE source of truth); turnproto is
 // dependency-light and never reaches into src/cli, so this barrel stays clean.
