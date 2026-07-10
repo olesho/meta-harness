@@ -1,0 +1,58 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`generatePolicy > generates semi-trusted tier golden YAML 1`] = `
+"version: 1
+filesystem_policy:
+  include_workdir: false
+  read_only: ['/usr', '/lib', '/etc', '/bin']
+  read_write: [/sandbox, /tmp]
+process: { run_as_user: sandbox, run_as_group: sandbox }
+landlock: { compatibility: best_effort }
+network_policies:
+  model:
+    endpoints: [{ host: api.anthropic.com, port: 443, protocol: rest, access: full, enforcement: enforce }]
+    binaries: [{ path: /usr/local/bin/claude }]
+  fleet:
+    endpoints: [{ host: localhost, port: 53343, protocol: rest, access: full, enforcement: enforce }]
+    binaries: [{ path: /usr/local/bin/harness-wrapper }, { path: /usr/local/bin/orche }]
+  # git hub: bundle-out ⇒ NO network endpoint
+"
+`;
+
+exports[`generatePolicy > generates trusted-internal tier golden YAML 1`] = `
+"version: 1
+filesystem_policy:
+  include_workdir: false
+  read_only: ['/usr', '/lib']
+  read_write: [/sandbox, /tmp]
+process: { run_as_user: sandbox, run_as_group: sandbox }
+landlock: { compatibility: best_effort }
+network_policies:
+  model:
+    endpoints: [{ host: api.anthropic.com, port: 443, protocol: rest, access: full, enforcement: observe }]
+    binaries: [{ path: /usr/local/bin/claude }]
+  fleet:
+    endpoints: [{ host: localhost, port: 53343, protocol: rest, access: full, enforcement: observe }]
+    binaries: [{ path: /usr/local/bin/harness-wrapper }, { path: /usr/local/bin/orche }]
+  # git hub: bundle-out ⇒ NO network endpoint
+"
+`;
+
+exports[`generatePolicy > generates untrusted tier golden YAML 1`] = `
+"version: 1
+filesystem_policy:
+  include_workdir: false
+  read_only: ['/usr', '/lib', '/lib64', '/etc', '/bin', '/sbin', '/opt']
+  read_write: [/sandbox, /tmp]
+process: { run_as_user: sandbox, run_as_group: sandbox }
+landlock: { compatibility: best_effort }
+network_policies:
+  model:
+    endpoints: [{ host: api.anthropic.com, port: 443, protocol: rest, access: full, enforcement: enforce }]
+    binaries: [{ path: /usr/local/bin/claude }]
+  fleet:
+    endpoints: [{ host: localhost, port: 53343, protocol: rest, access: full, enforcement: enforce }]
+    binaries: [{ path: /usr/local/bin/harness-wrapper }, { path: /usr/local/bin/orche }]
+  # git hub: bundle-out ⇒ NO network endpoint
+"
+`;

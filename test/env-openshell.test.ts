@@ -94,6 +94,18 @@ describe("generatePolicy", () => {
     expect(yaml).toContain("enforcement: enforce")
   })
 
+  it("generates untrusted tier golden YAML", () => {
+    const yaml = generatePolicy({
+      tier: "untrusted",
+      modelHost: "api.anthropic.com",
+      modelPort: 443,
+      fleetHost: "localhost",
+      fleetPort: 53343,
+      harnessPath: "/usr/local/bin/harness-wrapper",
+    })
+    expect(yaml).toMatchSnapshot()
+  })
+
   it("generates valid YAML for semi-trusted tier", () => {
     const yaml = generatePolicy({
       tier: "semi-trusted",
@@ -108,6 +120,18 @@ describe("generatePolicy", () => {
     expect(yaml).toContain("enforcement: enforce")
   })
 
+  it("generates semi-trusted tier golden YAML", () => {
+    const yaml = generatePolicy({
+      tier: "semi-trusted",
+      modelHost: "api.anthropic.com",
+      modelPort: 443,
+      fleetHost: "localhost",
+      fleetPort: 53343,
+      harnessPath: "/usr/local/bin/harness-wrapper",
+    })
+    expect(yaml).toMatchSnapshot()
+  })
+
   it("generates valid YAML for trusted-internal tier", () => {
     const yaml = generatePolicy({
       tier: "trusted-internal",
@@ -119,6 +143,18 @@ describe("generatePolicy", () => {
     expect(yaml).toContain("read_only:")
     expect(yaml).toContain("/usr")
     expect(yaml).toContain("enforcement: observe")
+  })
+
+  it("generates trusted-internal tier golden YAML", () => {
+    const yaml = generatePolicy({
+      tier: "trusted-internal",
+      modelHost: "api.anthropic.com",
+      modelPort: 443,
+      fleetHost: "localhost",
+      fleetPort: 53343,
+      harnessPath: "/usr/local/bin/harness-wrapper",
+    })
+    expect(yaml).toMatchSnapshot()
   })
 
   it("includes model and fleet endpoints", () => {
@@ -144,6 +180,17 @@ describe("generatePolicy", () => {
       harnessPath: "/usr/local/bin/harness-wrapper",
     })
     expect(yaml).toContain("port: 443")
+  })
+
+  it("uses custom harness path in fleet policy", () => {
+    const yaml = generatePolicy({
+      tier: "untrusted",
+      modelHost: "api.anthropic.com",
+      fleetHost: "localhost",
+      fleetPort: 53343,
+      harnessPath: "/opt/meta-harness/run",
+    })
+    expect(yaml).toContain("/opt/meta-harness/run")
   })
 
   it("throws on unknown tier", () => {
