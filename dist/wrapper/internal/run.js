@@ -7,7 +7,8 @@ import { isSentinel } from "../../internal/async/errors.js";
 import { ErrBinaryNotFound, validateConfig } from "./config.js";
 import { argsWithHarnessEffort } from "./effort.js";
 import { argsWithHarnessModel } from "./mode.js";
-import { binaryNotFoundError, PtyProcess, resolveBinary } from "./pty.js";
+import { binaryNotFoundError, PtyProcess } from "./pty.js";
+import { resolvePath } from "../../discovery/discovery.js";
 import { applyDefaults, startSession, } from "./session.js";
 import { StatusBinaryNotFound } from "./status.js";
 import { ErrNone } from "./errorclass.js";
@@ -43,8 +44,11 @@ export async function start(ctx, cfg) {
     const env = cfg.env ?? [];
     const envRecord = envToRecord(env);
     // Preflight the binary: node-pty only surfaces a missing harness as an opaque
-    // exit(1), so resolve it up front and fail with ErrBinaryNotFound.
-    const resolved = resolveBinary(cfg.binaryPath ?? "", envRecord);
+    // exit(1), so resolve it up front and fail with ErrBinaryNotFound. Defer to
+    // the discovery SSOT (resolvePath) so the wrapper benefits from the full
+    // resolution chain — env overrides, PATH, and well-known dirs — making spawn
+    // robust to a stripped PATH regardless of the calling runtime (bun/node).
+    const resolved = resolvePath(cfg.binaryPath ?? "", envRecord);
     if (resolved === null)
         throw binaryNotFoundError(cfg.binaryPath ?? "");
     cfg.trace?.emit({
