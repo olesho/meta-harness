@@ -15,7 +15,7 @@
 //      hint), and that history() reads the on-disk transcript back under that
 //      pinned id after the turn completes.
 
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vitest"
 import { mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"

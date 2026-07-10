@@ -1,5 +1,5 @@
 // Port of pkg/chat/control_test.go — the FIFO control-token turnstile.
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vitest"
 import { newControlQueue } from "../../src/chat/control.ts"
 import { ErrClosed } from "../../src/chat/errors.ts"
 import { isSentinel } from "../../src/internal/async/index.ts"

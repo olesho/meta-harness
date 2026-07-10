@@ -1,6 +1,6 @@
 // Port of pkg/turns/harness/pi/pi_test.go.
 
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vitest"
 import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"

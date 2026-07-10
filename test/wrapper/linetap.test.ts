@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vitest"
 import { newLineSplitter } from "../../src/wrapper/internal/linetap.ts"
 
 const enc = (s: string) => new TextEncoder().encode(s)

@@ -2,7 +2,7 @@
 // classified mid-run, non-terminal, keeps the harness alive, de-duplicated,
 // and never contaminating the terminal Result.Status.
 
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vitest"
 
 import {
   start,

@@ -4,7 +4,7 @@
 // paste leaves the prompt sitting in the composer ("› <text>"), the screen
 // otherwise settled, and no rollout is ever written.
 
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vitest"
 import { newScreen } from "../../../src/screen/index.ts"
 import type { Snapshot } from "../../../src/screen/index.ts"
 import * as codex from "../../../src/turns/harness/codex.ts"

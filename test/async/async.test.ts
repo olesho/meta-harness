@@ -1,7 +1,7 @@
 // Behavioral tests for the public `meta-harness/async` seam: the Context
 // re-export and the fromAbortSignal adapter the orchestrator uses to drive cancellation.
 
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vitest"
 import {
   Context,
   ctxCanceled,

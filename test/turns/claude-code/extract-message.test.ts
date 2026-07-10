@@ -1,6 +1,6 @@
 // Port of pkg/turns/harness/claudecode/extract_message_test.go.
 
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vitest"
 import * as claudecode from "../../../src/turns/harness/claudecode.ts"
 import { textSnap } from "../corpus.ts"
 

@@ -6,7 +6,7 @@
 // flags before launch. The raw-hint capture stays as a backstop for older
 // builds and must not clobber the seeded id (first-write-wins).
 
-import { afterEach, describe, expect, test } from "bun:test"
+import { afterEach, describe, expect, test } from "vitest"
 import { mkdtempSync, readFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"

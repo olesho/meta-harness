@@ -1,7 +1,7 @@
 // Port of pkg/turns/harness/claudecode/claudecode_test.go.
 // Corpus replay: bytes.raw → Screen → adapter, asserting marker fire/no-fire.
 
-import { afterEach, describe, expect, test } from "bun:test"
+import { afterEach, describe, expect, test } from "vitest"
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"

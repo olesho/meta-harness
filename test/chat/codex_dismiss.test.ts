@@ -1,5 +1,5 @@
 // Port of pkg/chat/codex_dismiss_test.go — Codex interstitial auto-dismiss.
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vitest"
 import { codex } from "../../src/turns/index.ts"
 import type { InputRequest as TurnsInputRequest } from "../../src/turns/index.ts"
 import { KeyRecorder, newTestConv } from "./helpers.ts"

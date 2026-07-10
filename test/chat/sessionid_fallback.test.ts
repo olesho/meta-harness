@@ -1,7 +1,7 @@
 // Codex 0.142 session-id capture via the own-output /status scrape (replacing
 // the removed disk-locate fallback), exercised in both the direct-extract and
 // idle-completion paths.
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vitest"
 import { Conversation, EventBus, Signal } from "../../src/chat/conversation.ts"
 import { newMemStore } from "../../src/chat/memstore.ts"
 import { newScreen, type Screen } from "../../src/screen/index.ts"

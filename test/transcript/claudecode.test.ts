@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test"
+import { expect, test } from "vitest"
 import { mkdirSync, realpathSync, symlinkSync, writeFileSync } from "node:fs"
 import path from "node:path"
 

@@ -1,7 +1,7 @@
 // Structured sandbox runner — arg grammar (safe transport) + a real one-turn
 // integration over the fake harness asserting the JSON result-line contract.
 
-import { afterEach, describe, expect, test } from "bun:test"
+import { afterEach, describe, expect, test } from "vitest"
 import { mkdtempSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"

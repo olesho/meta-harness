@@ -1,6 +1,6 @@
 // Port of pkg/turns/harness/claudecode/busy_test.go.
 
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vitest"
 import { newScreen } from "../../../src/screen/index.ts"
 import * as claudecode from "../../../src/turns/harness/claudecode.ts"
 import { corpusBytes, textSnap } from "../corpus.ts"

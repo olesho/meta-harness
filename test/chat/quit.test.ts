@@ -1,5 +1,5 @@
 // Port of pkg/chat/quit_test.go — graceful quit sequence + raw session-id capture.
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vitest"
 import { Conversation } from "../../src/chat/conversation.ts"
 import { newMemStore } from "../../src/chat/memstore.ts"
 import { claudecode, generic } from "../../src/turns/index.ts"

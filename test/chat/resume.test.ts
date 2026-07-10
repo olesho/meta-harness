@@ -4,7 +4,7 @@
 // Reopen reuses the SAME chat session id, relaunches in resume mode, and reads
 // back the stored session's history — and that both surface the right sentinels.
 
-import { afterEach, describe, expect, test } from "bun:test"
+import { afterEach, describe, expect, test } from "vitest"
 import { readFileSync } from "node:fs"
 import { mkdtempSync } from "node:fs"
 import { tmpdir } from "node:os"

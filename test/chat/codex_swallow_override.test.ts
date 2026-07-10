@@ -6,7 +6,7 @@
 // pre-send watermark, followed by assistant output) completes the turn with the
 // clean transcript reply; anything less keeps the errored verdict.
 
-import { afterEach, describe, expect, test } from "bun:test"
+import { afterEach, describe, expect, test } from "vitest"
 import { mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"

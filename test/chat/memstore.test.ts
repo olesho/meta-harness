@@ -1,5 +1,5 @@
 // Port of pkg/chat/memstore/memstore_test.go.
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vitest"
 import { newMemStore } from "../../src/chat/memstore.ts"
 import type { Session, Turn } from "../../src/chat/types.ts"
 

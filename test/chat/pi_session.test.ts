@@ -3,7 +3,7 @@
 // conflict guard rejects raw session-control flags before launch; and env-derived
 // session dirs are honored by the reader (absolute and cwd-anchored relative).
 
-import { afterEach, describe, expect, test } from "bun:test"
+import { afterEach, describe, expect, test } from "vitest"
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"

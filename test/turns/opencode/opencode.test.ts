@@ -1,6 +1,6 @@
 // Port of pkg/turns/harness/opencode/opencode_test.go.
 
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vitest"
 import { newScreen } from "../../../src/screen/index.ts"
 import * as opencode from "../../../src/turns/harness/opencode.ts"
 import { TurnComplete } from "../../../src/turns/index.ts"

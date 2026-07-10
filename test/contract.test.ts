@@ -11,7 +11,7 @@
 // from one package to the whole public surface. It also freezes the Phase-0
 // guard: NO internal/** symbol may leak into any public barrel.
 
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vitest"
 import { readFileSync, writeFileSync } from "node:fs"
 import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"

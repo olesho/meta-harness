@@ -1,6 +1,6 @@
 // Port of pkg/turns/generic/generic_test.go.
 
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vitest"
 import * as generic from "../../src/turns/generic.ts"
 import type { Kind } from "../../src/turns/index.ts"
 import { Blocked, Errored, TurnComplete } from "../../src/turns/index.ts"

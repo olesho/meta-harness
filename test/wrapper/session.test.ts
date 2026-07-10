@@ -1,7 +1,7 @@
 // Port of pkg/wrapper/session_test.go — the live Session handle: start/wait/
 // stop lifecycle, ordered events, snapshots, and recent-output observability.
 
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vitest"
 
 import {
   ClassifierFunc,

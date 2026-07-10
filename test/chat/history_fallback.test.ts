@@ -4,7 +4,7 @@
 // than silently masking the problem. Not Pi-specific — driven via a generic
 // adapter with a throwing readTranscript.
 
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vitest"
 import { Conversation } from "../../src/chat/conversation.ts"
 import { newMemStore } from "../../src/chat/memstore.ts"
 import { generic, type Adapter } from "../../src/turns/index.ts"

@@ -1,6 +1,6 @@
 // Port of pkg/turns/harness/claudecode/input_test.go.
 
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vitest"
 import * as claudecode from "../../../src/turns/harness/claudecode.ts"
 import type { Event, InputOption } from "../../../src/turns/index.ts"
 import { InputRequested, InputResolved, type Kind } from "../../../src/turns/index.ts"

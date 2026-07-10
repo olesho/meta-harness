@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vitest"
 import { newScreen, Screen } from "../../src/screen/index.ts"
 
 // Mirrors harness-wrapper/pkg/screen/screen_test.go. Assertions are

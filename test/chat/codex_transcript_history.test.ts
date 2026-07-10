@@ -1,7 +1,7 @@
 // CodexAdapter.readTranscript wired into Conversation.historyWithSource:
 // a Codex session with a non-empty harnessSessionID returns the rollout's turns
 // sourced from the on-disk transcript (HistorySourceTranscript).
-import { describe, expect, test, afterEach } from "bun:test"
+import { describe, expect, test, afterEach } from "vitest"
 import { mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"

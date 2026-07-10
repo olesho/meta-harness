@@ -4,7 +4,7 @@
 // A swallowed prompt must end the turn errored, never completed, and the raw
 // ready screen must never be persisted as assistant text.
 
-import { afterEach, describe, expect, test } from "bun:test"
+import { afterEach, describe, expect, test } from "vitest"
 
 import { Context } from "../../src/internal/async/index.ts"
 import { TurnStateErrored, type Conversation } from "../../src/chat/index.ts"

@@ -1,6 +1,6 @@
 // Port of pkg/chat/quiescence_test.go — claude-code marker-defer + settled-only
 // completion + fallback prompt-readiness guard.
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vitest"
 import { Conversation, EventBus, Signal } from "../../src/chat/conversation.ts"
 import { newMemStore } from "../../src/chat/memstore.ts"
 import { newScreen } from "../../src/screen/index.ts"

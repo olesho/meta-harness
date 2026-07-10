@@ -1,7 +1,7 @@
 // Port of pkg/turns/watcher_test.go, plus a Watcher smoke test that exercises
 // the actual session + screen pumps (the Go version relied on goroutines).
 
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vitest"
 import { newScreen } from "../../src/screen/index.ts"
 import type { Adapter, Event } from "../../src/turns/index.ts"
 import { TurnComplete, Watch } from "../../src/turns/index.ts"

@@ -8,7 +8,7 @@
 // non-empty, plausible model list — the durable guard against the live picker
 // layout drifting away from parseModelPicker.
 
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vitest"
 import { discoverModels, isKnownModel } from "../../src/discovery/models.ts"
 import { Context } from "../../src/internal/async/index.ts"
 

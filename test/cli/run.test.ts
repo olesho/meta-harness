@@ -3,7 +3,7 @@
 // (prompt on stdin → clean reply on stdout, exit 0) and a forced deadline
 // (exit 124 + the literal `harness-wrapper run:` stderr anchor the orchestrator greps for).
 
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vitest"
 import { spawn } from "node:child_process"
 import { mkdtempSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
