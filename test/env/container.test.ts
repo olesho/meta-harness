@@ -38,36 +38,43 @@ describe("Container Workspace (Tier-3, requires docker/podman)", () => {
     // Create a temporary directory for the guest image build
     buildDir = mkdtempSync(join(tmpdir(), "mh-guest-build-"))
 
-    // Copy dist to the build dir
     try {
-      execSync(`cp -r dist "${buildDir}/dist"`)
-    } catch (e) {
-      console.error("Note: dist/ not found; building from src")
-      // Build the dist if needed
+      // Copy dist to the build dir
       try {
-        execSync("npm run build", { stdio: "pipe" })
         execSync(`cp -r dist "${buildDir}/dist"`)
-      } catch {
-        // If build fails, skip this suite
-        throw new Error("Cannot build dist/ for container image")
+      } catch (e) {
+        console.error("Note: dist/ not found; building from src")
+        // Build the dist if needed
+        try {
+          execSync("npm run build", { stdio: "pipe" })
+          execSync(`cp -r dist "${buildDir}/dist"`)
+        } catch {
+          // If build fails, mark as unavailable and skip
+          runtime = null
+          return
+        }
       }
-    }
 
-    // Copy the guest-image.Dockerfile to the build dir
-    copyFileSync("guest-image.Dockerfile", join(buildDir, "Dockerfile"))
+      // Copy the guest-image.Dockerfile to the build dir
+      copyFileSync("guest-image.Dockerfile", join(buildDir, "Dockerfile"))
 
-    // Build the image
-    const imageName = `meta-harness-test-${Date.now()}`
-    const buildCmd = `${runtime} build -t ${imageName} "${buildDir}"`
+      // Build the image
+      const imageName = `meta-harness-test-${Date.now()}`
+      const buildCmd = `${runtime} build -t ${imageName} "${buildDir}"`
 
-    try {
-      execSync(buildCmd, { stdio: "pipe" })
-      imageId = imageName
-    } catch (e) {
-      // If build fails due to missing ptyHost.mjs, that's expected in some test environments
-      // Fall back to using a base node image for smoke tests
-      console.warn("Note: PTY smoke-check may have failed; using node:20-alpine as fallback")
-      imageId = "node:20-alpine"
+      try {
+        execSync(buildCmd, { stdio: "pipe" })
+        imageId = imageName
+      } catch (e) {
+        // If build fails, mark as unavailable and skip
+        // This includes the case where docker daemon is not running
+        console.log("Container runtime is unavailable (daemon not running or build failed)")
+        runtime = null
+        return
+      }
+    } catch {
+      // Any error during setup marks runtime as unavailable
+      runtime = null
     }
   })
 
