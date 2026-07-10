@@ -41,7 +41,12 @@ export async function env(ctx, cfg) {
         // 3. containment runtime capability checks, via inner exec.
         await contain.preflight(ctx, inner);
         // 4. compose — the workspace-destroy thunk now tears down containment + inner.
-        const layer = contain.layer(policy);
+        //    A containment with an acquire hook creates its resources HERE (never in
+        //    preflight — capability checks only) and hands back a layer closed over
+        //    them; acquire failure unwinds the inner via the thunk pushed above.
+        const layer = contain.acquire
+            ? await contain.acquire(ctx, inner, policy)
+            : contain.layer(policy);
         const composed = compose(inner, layer);
         teardownWs = composed;
         // 5. redactions registered BEFORE any apply (§4): a half-completed apply()
