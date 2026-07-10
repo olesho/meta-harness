@@ -8,6 +8,8 @@
 // between codebases: the Go env.go list was manually synced with the TS probe
 // and diverged (CLAUDE_CODE_OAUTH_TOKEN is in Go but was missing from TS).
 
+import { shQuote } from "../env/argv.ts"
+
 export const CREDENTIAL_SENSITIVE_ENV_NAMES = [
   "DAYTONA_API_KEY",
   "GITHUB_TOKEN",
@@ -51,8 +53,4 @@ export function credentialLeakProbe(): string {
 
   // Shell-quote the entire node -e argument
   return "node -e " + shQuote(code)
-}
-
-function shQuote(value: string): string {
-  return "'" + value.replace(/'/g, "'\\''") + "'"
 }

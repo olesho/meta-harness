@@ -4,24 +4,78 @@
   "private": true,
   "type": "module",
   "packageManager": "npm@11.12.1",
-  "engines": { "node": ">=18" },
+  "engines": {
+    "node": ">=18"
+  },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "//exports": "Conditional: Node consumers (loomcli flue bundle + sandbox runner) resolve compiled `dist/**` via `import`. The `bun` condition is retained (points at raw `src/**` TS) so a future Bun consumer still resolves; keep `bun` FIRST so Bun never falls through to dist. `dist` is built by `npm run build` and committed (see tsconfig.build.json).",
   "exports": {
-    ".": { "bun": "./src/index.ts", "types": "./dist/index.d.ts", "import": "./dist/index.js" },
-    "./async": { "bun": "./src/async/index.ts", "types": "./dist/async/index.d.ts", "import": "./dist/async/index.js" },
-    "./screen": { "bun": "./src/screen/index.ts", "types": "./dist/screen/index.d.ts", "import": "./dist/screen/index.js" },
-    "./wrapper": { "bun": "./src/wrapper/index.ts", "types": "./dist/wrapper/index.d.ts", "import": "./dist/wrapper/index.js" },
-    "./turns": { "bun": "./src/turns/index.ts", "types": "./dist/turns/index.d.ts", "import": "./dist/turns/index.js" },
-    "./transcript": { "bun": "./src/transcript/index.ts", "types": "./dist/transcript/index.d.ts", "import": "./dist/transcript/index.js" },
-    "./chat": { "bun": "./src/chat/index.ts", "types": "./dist/chat/index.d.ts", "import": "./dist/chat/index.js" },
-    "./discovery": { "bun": "./src/discovery/index.ts", "types": "./dist/discovery/index.d.ts", "import": "./dist/discovery/index.js" },
-    "./versions": { "bun": "./src/versions/index.ts", "types": "./dist/versions/index.d.ts", "import": "./dist/versions/index.js" },
-    "./oneshot": { "bun": "./src/oneshot/index.ts", "types": "./dist/oneshot/index.d.ts", "import": "./dist/oneshot/index.js" },
-    "./env": { "bun": "./src/env/index.ts", "types": "./dist/env/index.d.ts", "import": "./dist/env/index.js" },
-    "./env-openshell": { "bun": "./src/env-openshell/index.ts", "types": "./dist/env-openshell/index.d.ts", "import": "./dist/env-openshell/index.js" },
-    "./env-daytona": { "bun": "./src/env-daytona/index.ts", "types": "./dist/env-daytona/index.d.ts", "import": "./dist/env-daytona/index.js" }
+    ".": {
+      "bun": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./async": {
+      "bun": "./src/async/index.ts",
+      "types": "./dist/async/index.d.ts",
+      "import": "./dist/async/index.js"
+    },
+    "./screen": {
+      "bun": "./src/screen/index.ts",
+      "types": "./dist/screen/index.d.ts",
+      "import": "./dist/screen/index.js"
+    },
+    "./wrapper": {
+      "bun": "./src/wrapper/index.ts",
+      "types": "./dist/wrapper/index.d.ts",
+      "import": "./dist/wrapper/index.js"
+    },
+    "./turns": {
+      "bun": "./src/turns/index.ts",
+      "types": "./dist/turns/index.d.ts",
+      "import": "./dist/turns/index.js"
+    },
+    "./transcript": {
+      "bun": "./src/transcript/index.ts",
+      "types": "./dist/transcript/index.d.ts",
+      "import": "./dist/transcript/index.js"
+    },
+    "./chat": {
+      "bun": "./src/chat/index.ts",
+      "types": "./dist/chat/index.d.ts",
+      "import": "./dist/chat/index.js"
+    },
+    "./discovery": {
+      "bun": "./src/discovery/index.ts",
+      "types": "./dist/discovery/index.d.ts",
+      "import": "./dist/discovery/index.js"
+    },
+    "./versions": {
+      "bun": "./src/versions/index.ts",
+      "types": "./dist/versions/index.d.ts",
+      "import": "./dist/versions/index.js"
+    },
+    "./oneshot": {
+      "bun": "./src/oneshot/index.ts",
+      "types": "./dist/oneshot/index.d.ts",
+      "import": "./dist/oneshot/index.js"
+    },
+    "./env": {
+      "bun": "./src/env/index.ts",
+      "types": "./dist/env/index.d.ts",
+      "import": "./dist/env/index.js"
+    },
+    "./env-openshell": {
+      "bun": "./src/env-openshell/index.ts",
+      "types": "./dist/env-openshell/index.d.ts",
+      "import": "./dist/env-openshell/index.js"
+    },
+    "./env-daytona": {
+      "bun": "./src/env-daytona/index.ts",
+      "types": "./dist/env-daytona/index.d.ts",
+      "import": "./dist/env-daytona/index.js"
+    }
   },
   "bin": {
     "meta-harness-run": "./dist/cli/run.js",
@@ -35,6 +89,7 @@
     "verify:exports": "node scripts/verify-exports.mjs"
   },
   "devDependencies": {
+    "@daytonaio/sdk": "^0.196.0",
     "@types/node": "^22",
     "typescript": "^5",
     "vitest": "^4.1.10"
@@ -42,5 +97,13 @@
   "dependencies": {
     "@xterm/headless": "^5.5.0",
     "node-pty": "^1.0.0"
+  },
+  "peerDependencies": {
+    "@daytonaio/sdk": "*"
+  },
+  "peerDependenciesMeta": {
+    "@daytonaio/sdk": {
+      "optional": true
+    }
   }
 }
