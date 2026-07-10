@@ -7,7 +7,8 @@
 // onData / onExit callbacks plus write / resize / kill.
 
 import { spawn, type ChildProcess } from "node:child_process"
-import { accessSync, constants, statSync } from "node:fs"
+import { accessSync, constants, readdirSync, statSync } from "node:fs"
+import { homedir } from "node:os"
 import { delimiter, dirname, isAbsolute, join } from "node:path"
 import { fileURLToPath } from "node:url"
 
@@ -24,6 +25,17 @@ export const ErrPTYRead: Sentinel = defineSentinel(
   "wrapper:pty-read",
   "wrapper: pty read failed",
 )
+/**
+ * The Node interpreter that runs the PTY bridge could not be found. The bridge
+ * is spawned by name ("node") unless a real interpreter is resolvable; when the
+ * gate shell has no `node` on PATH the spawn fails ENOENT. Distinguishing this
+ * from a genuine {@link ErrPTYAllocation} keeps a missing interpreter from being
+ * mis-reported as a PTY failure (META-HARNESS-34).
+ */
+export const ErrNodeNotFound: Sentinel = defineSentinel(
+  "wrapper:node-not-found",
+  "wrapper: node interpreter not found for the PTY bridge; add node to PATH or set META_HARNESS_NODE",
+)
 
 /**
  * Resolve the PTY bridge path. By default it sits next to this module, but when
@@ -37,6 +49,90 @@ export function resolveHost(): string {
   const override = process.env.META_HARNESS_PTY_HOST?.trim()
   if (override) return override
   return join(dirname(fileURLToPath(import.meta.url)), "ptyHost.mjs")
+}
+
+/**
+ * Well-known absolute node locations to probe when `node` isn't on PATH — the
+ * usual Homebrew / system prefixes. Ordered most- to least-preferred.
+ */
+const COMMON_NODE_PATHS = [
+  "/opt/homebrew/bin/node",
+  "/usr/local/bin/node",
+  "/usr/bin/node",
+]
+
+/**
+ * Locate a real Node interpreter without falling back to a bare name. Resolution
+ * order: `META_HARNESS_NODE` → `node` on PATH → the active nvm install →
+ * {@link COMMON_NODE_PATHS}. Returns the absolute path, or null when nothing
+ * resolves (so callers — e.g. the test preload — can fail loudly). Every
+ * candidate is existence/executability checked before it is returned.
+ */
+export function findNode(env?: Record<string, string>): string | null {
+  const override = (env?.META_HARNESS_NODE ?? process.env.META_HARNESS_NODE)?.trim()
+  if (override) return isExecutable(override) ? override : null
+  const onPath = resolveBinary("node", env)
+  if (onPath) return onPath
+  return nvmDefaultNode() ?? firstExecutable(COMMON_NODE_PATHS)
+}
+
+/**
+ * Resolve the interpreter used to spawn the PTY bridge (and, in tests, the
+ * `#!/usr/bin/env node` fake harness). In production the wrapper runs under Node,
+ * so it reuses `process.execPath` — the same interpreter, zero PATH lookup. Only
+ * when running under Bun (e.g. `bun test`, where `process.execPath` is bun) does
+ * it hunt for a real `node`, falling back to the bare name so the spawn still
+ * attempts and a miss surfaces as {@link ErrNodeNotFound}. `META_HARNESS_NODE`
+ * always wins, even under Node, for callers that must pin a specific interpreter.
+ */
+export function resolveNode(env?: Record<string, string>): string {
+  const override = (env?.META_HARNESS_NODE ?? process.env.META_HARNESS_NODE)?.trim()
+  if (override) return override
+  // Production path: already a Node process — reuse it, no PATH dependency.
+  if (!process.versions.bun) return process.execPath
+  return findNode(env) ?? "node"
+}
+
+/**
+ * Resolve the interpreter for the active nvm install. `~/.nvm/alias/default`
+ * often names an alias (e.g. `lts/*`) rather than a concrete version, so instead
+ * of chasing the alias chain we enumerate `~/.nvm/versions/node/*` and pick the
+ * highest version whose `bin/node` is executable. Returns null when nvm isn't
+ * installed or holds no usable node.
+ */
+function nvmDefaultNode(): string | null {
+  const versionsDir = join(homedir(), ".nvm", "versions", "node")
+  let entries: string[]
+  try {
+    entries = readdirSync(versionsDir)
+  } catch {
+    return null
+  }
+  const sorted = entries
+    .filter((v) => v.startsWith("v"))
+    .sort(compareNodeVersionsDesc)
+  for (const v of sorted) {
+    const candidate = join(versionsDir, v, "bin", "node")
+    if (isExecutable(candidate)) return candidate
+  }
+  return null
+}
+
+/** Descending semver-ish compare of `vX.Y.Z` directory names. */
+function compareNodeVersionsDesc(a: string, b: string): number {
+  const pa = a.replace(/^v/, "").split(".").map((n) => Number(n) || 0)
+  const pb = b.replace(/^v/, "").split(".").map((n) => Number(n) || 0)
+  for (let i = 0; i < 3; i++) {
+    const d = (pb[i] ?? 0) - (pa[i] ?? 0)
+    if (d !== 0) return d
+  }
+  return 0
+}
+
+/** First executable path in the list, or null. */
+function firstExecutable(paths: string[]): string | null {
+  for (const p of paths) if (isExecutable(p)) return p
+  return null
 }
 
 const T_READY = "r".charCodeAt(0)
@@ -98,7 +194,7 @@ export class PtyProcess {
    * bridge dies before reporting ready.
    */
   static spawn(opts: PtySpawnOptions): Promise<PtyProcess> {
-    const child = spawn("node", [resolveHost(), JSON.stringify(opts)], {
+    const child = spawn(resolveNode(), [resolveHost(), JSON.stringify(opts)], {
       stdio: ["pipe", "pipe", "inherit"],
     })
     const p = new PtyProcess(child)
@@ -114,6 +210,13 @@ export class PtyProcess {
       const onEarlyExit = (err: unknown) => {
         if (settled) return
         settled = true
+        // A bridge-spawn ENOENT means the Node interpreter itself is missing —
+        // not a PTY failure. Surface it as ErrNodeNotFound so the real cause
+        // (no `node` on PATH) is diagnosable instead of an opaque allocation error.
+        if (isSpawnENOENT(err)) {
+          reject(wrap("wrapper: pty allocation failed", ErrNodeNotFound))
+          return
+        }
         reject(wrap("wrapper: pty allocation failed", err ?? ErrPTYAllocation))
       }
 
@@ -242,6 +345,18 @@ export function resolveBinary(
     if (isExecutable(candidate)) return candidate
   }
   return null
+}
+
+/** Walk an error's cause chain for a spawn ENOENT (missing executable). */
+function isSpawnENOENT(err: unknown): boolean {
+  const seen = new Set<unknown>()
+  let cur: unknown = err
+  while (cur && typeof cur === "object" && !seen.has(cur)) {
+    seen.add(cur)
+    if ((cur as { code?: unknown }).code === "ENOENT") return true
+    cur = (cur as { cause?: unknown }).cause
+  }
+  return false
 }
 
 function isExecutable(p: string): boolean {

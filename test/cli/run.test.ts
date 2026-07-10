@@ -1,6 +1,7 @@
 // Unit + subprocess tests for the `run` CLI (src/cli/run.ts). The subprocess
-// tests exec the real CLI under `bun`, driving one fake-harness turn end to end
-// (prompt on stdin → clean reply on stdout, exit 0) and a forced deadline
+// tests exec the real CLI under `node` (matching its `#!/usr/bin/env node`
+// production runtime; META-HARNESS-30/34), driving one fake-harness turn end to
+// end (prompt on stdin → clean reply on stdout, exit 0) and a forced deadline
 // (exit 124 + the literal `harness-wrapper run:` stderr anchor the orchestrator greps for).
 
 import { describe, expect, test } from "vitest"
@@ -22,9 +23,13 @@ import {
   DeadlineLine,
 } from "../../src/cli/run.ts"
 import { New, PromptRef, EnvVar, fakeHarnessBin } from "../chat/fakeharness.ts"
+import { resolveNode } from "../../src/wrapper/internal/pty.ts"
 
 const here = dirname(fileURLToPath(import.meta.url))
 const runCli = join(here, "..", "..", "dist", "cli", "run.js")
+// The CLI ships `#!/usr/bin/env node`; exec it under a real `node` so the
+// subprocess run matches production even when the test runner is bun.
+const nodeBin = resolveNode()
 
 describe("parseArgs", () => {
   test("bare name", () => {
@@ -118,7 +123,7 @@ interface RunResult {
 }
 
 async function execCli(args: string[], stdin: string, env: Record<string, string>): Promise<RunResult> {
-  const proc = spawn(process.execPath, [runCli, ...args], {
+  const proc = spawn(nodeBin, [runCli, ...args], {
     stdio: ["pipe", "pipe", "pipe"],
     env: { ...process.env, ...env },
   })
