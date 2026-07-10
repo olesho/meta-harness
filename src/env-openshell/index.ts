@@ -197,6 +197,11 @@ export class OpenShellContainment implements Containment {
       driver?: string
       provider?: string
       guestPath?: string
+      /** Default agentId for sandbox naming when policy.agentId is absent. */
+      agentId?: string
+      /** Image/Dockerfile ref for `sandbox create --from` (e.g. a node-bearing
+       *  image when the gateway's default image lacks node). */
+      from?: string
     },
     private cli: CliRunner = spawnOpenShellCli,
   ) {
@@ -233,42 +238,41 @@ export class OpenShellContainment implements Containment {
     }
   }
 
-  layer(policy: PolicySpec): ContainmentLayer {
-    const tier = (policy.tier as string) ?? "semi-trusted"
-    const modelHost = (policy.modelHost as string) ?? "api.anthropic.com"
-    const modelPort = (policy.modelPort as number) ?? 443
-    const fleetHost = (policy.fleetHost as string) ?? "localhost"
-    const fleetPort = (policy.fleetPort as number) ?? 53343
-    const harnessPath = (policy.harnessPath as string) ?? "/usr/local/bin/harness-wrapper"
-
-    const policyYaml = generatePolicy({
-      tier,
-      modelHost,
-      modelPort,
-      fleetHost,
-      fleetPort,
-      harnessPath,
-    })
+  /** Layer primitives closed over a REAL sandbox name. */
+  private buildLayer(name: string): ContainmentLayer {
+    const guestRepo = this.guestPath
+    const driver = this.driver
+    // The real openshell CLI errors on deleting an already-gone sandbox, and
+    // compose() calls layer.teardown() unconditionally on every destroy —
+    // idempotent double-destroy (conformance contract) therefore lives here:
+    // emit the delete argv once, then [] ("nothing to tear down").
+    let torndown = false
 
     return {
       execWrap(argv: string[], opts: ExecOpts): [string[], ExecOpts] {
-        // No sandbox name available at layer creation; caller provides via outer Containment
-        // This is a limitation of the current design — we'll need to refactor this.
-        // For now, return a marker that the caller must replace.
+        const envEntries = Object.entries(opts.env ?? {})
         const wrapped = [
           "openshell",
           "sandbox",
           "exec",
           "-n",
-          "__SANDBOX_NAME__", // placeholder
+          name,
           "--no-tty",
           "--workdir",
-          "/sandbox/repo",
+          opts.cwd ?? guestRepo,
           "--",
-          "env",
+          // 0.0.53 exec has no --env: cross env as an in-guest `env K=V` prefix,
+          // omitted entirely when empty (a bare `env` would swallow argv[0]).
+          ...(envEntries.length > 0
+            ? ["env", ...envEntries.map(([k, v]) => `${k}=${v}`)]
+            : []),
           ...argv,
         ]
-        return [wrapped, opts]
+        // cwd/env are CONSUMED into the wrapper (guest-side): passing them
+        // through would set a guest path as the HOST cwd and leak guest env
+        // (possibly secrets) into the host openshell process.
+        const { cwd: _cwd, env: _env, ...rest } = opts
+        return [wrapped, rest]
       },
 
       crossUpload(stagingPath: string, guestPath: string): string[] {
@@ -277,27 +281,20 @@ export class OpenShellContainment implements Containment {
           "sandbox",
           "upload",
           "--no-git-ignore",
-          "__SANDBOX_NAME__",
+          name,
           stagingPath,
           guestPath,
         ]
       },
 
       crossDownload(guestPath: string, stagingPath: string): string[] {
-        return [
-          "openshell",
-          "sandbox",
-          "download",
-          "__SANDBOX_NAME__",
-          guestPath,
-          stagingPath,
-        ]
+        return ["openshell", "sandbox", "download", name, guestPath, stagingPath]
       },
 
       pathMap(kind: "repo" | "home" | "tmp"): string {
         switch (kind) {
           case "repo":
-            return "/sandbox/repo"
+            return guestRepo
           case "home":
             return "/sandbox/.home"
           case "tmp":
@@ -306,13 +303,124 @@ export class OpenShellContainment implements Containment {
       },
 
       teardown(): string[] {
-        return ["openshell", "sandbox", "delete", "__SANDBOX_NAME__"]
+        if (torndown) return []
+        torndown = true
+        return ["openshell", "sandbox", "delete", name]
       },
 
       aliasMap: (hostUrl: string): string => {
-        return resolveGuestUrl(hostUrl, this.driver)
+        return resolveGuestUrl(hostUrl, driver)
       },
     }
+  }
+
+  layer(policy: PolicySpec): ContainmentLayer {
+    // Unit-test seam: a caller that already owns a sandbox names it explicitly.
+    // Production goes through acquire(), which creates the sandbox and returns
+    // a layer closed over the real name.
+    const name = policy.sandboxName
+    if (typeof name !== "string" || name.length === 0) {
+      throw new Error(
+        "openshell.layer: no sandbox name — use acquire() (production path) or " +
+          "pass policy.sandboxName (unit-test seam)",
+      )
+    }
+    return this.buildLayer(name)
+  }
+
+  /** Create the sandbox (lifecycle step 4 — containment resources exist from
+   *  here) and return a layer closed over its name. All commands run via the
+   *  INNER workspace's exec (containment runs where inner runs, §5.1). */
+  async acquire(ctx: Context, ws: Workspace, policy: PolicySpec): Promise<ContainmentLayer> {
+    const agentId = (policy.agentId as string | undefined) ?? this.opts.agentId
+    if (!agentId) {
+      throw new Error(
+        "openshell.acquire: no agentId — set policy.agentId or openshell({ agentId })",
+      )
+    }
+    const name = sandboxName(agentId)
+
+    // Crash recovery: best-effort delete of a leftover sandbox under the same
+    // deterministic name from a crashed prior run.
+    try {
+      await ws.exec(ctx, ["openshell", "sandbox", "delete", name])
+    } catch {
+      // best-effort only
+    }
+
+    // Explicit tier ⇒ stage a generated policy file; absent ⇒ gateway default.
+    let policyPath: string | undefined
+    if (typeof policy.tier === "string") {
+      const yaml = generatePolicy({
+        tier: policy.tier,
+        modelHost: (policy.modelHost as string) ?? "api.anthropic.com",
+        modelPort: (policy.modelPort as number) ?? 443,
+        fleetHost: (policy.fleetHost as string) ?? "localhost",
+        fleetPort: (policy.fleetPort as number) ?? 53343,
+        harnessPath: (policy.harnessPath as string) ?? "/usr/local/bin/harness-wrapper",
+      })
+      policyPath = `${ws.guestPath("tmp")}/openshell-policy-${name}.yaml`
+      const staged = await ws.exec(ctx, ["sh", "-c", `cat > '${policyPath}'`], {
+        stdin: yaml,
+      })
+      if (staged.code !== 0) {
+        throw new Error(
+          `openshell.acquire: staging policy file failed (exit ${staged.code}): ` +
+            `${staged.stderr || staged.stdout}`,
+        )
+      }
+    }
+
+    const created = await ws.exec(ctx, [
+      "openshell",
+      "sandbox",
+      "create",
+      "--name",
+      name,
+      ...(this.opts.from ? ["--from", this.opts.from] : []),
+      ...(policyPath ? ["--policy", policyPath] : []),
+    ])
+    if (created.code !== 0) {
+      throw new Error(
+        `openshell.acquire: sandbox create failed (exit ${created.code}): ` +
+          `${created.stderr || created.stdout}`,
+      )
+    }
+
+    // Anything fallible after create must not leak the sandbox: best-effort
+    // delete before rethrowing.
+    try {
+      // Guest layout prep (default image layout is not guaranteed). One
+      // multi-arg mkdir: fully succeeds or fully fails, no partial case.
+      const prep = await ws.exec(ctx, [
+        "openshell",
+        "sandbox",
+        "exec",
+        "-n",
+        name,
+        "--no-tty",
+        "--",
+        "mkdir",
+        "-p",
+        this.guestPath,
+        "/sandbox/.home",
+      ])
+      if (prep.code !== 0) {
+        throw new Error(
+          `openshell.acquire: guest layout prep failed (exit ${prep.code}): ` +
+            `${prep.stderr || prep.stdout}`,
+        )
+      }
+    } catch (err) {
+      try {
+        await ws.exec(ctx, ["openshell", "sandbox", "delete", name])
+      } catch {
+        // best-effort only
+      }
+      throw err
+    }
+
+    return this.buildLayer(name)
   }
 }
 
@@ -320,6 +428,8 @@ export function openshell(opts?: {
   driver?: string
   provider?: string
   guestPath?: string
+  agentId?: string
+  from?: string
   cli?: CliRunner
 }): Containment {
   return new OpenShellContainment(opts ?? {}, opts?.cli)

@@ -38,7 +38,10 @@ async function acquire(t: ConformanceTarget, spec: WorkspaceSpec): Promise<Works
   await prov.preflight(ctx)
   const inner = await prov.create(ctx, spec)
   await contain.preflight(ctx, inner)
-  return compose(inner, contain.layer({}))
+  // Mirror env() step 4: a containment with an acquire hook creates its
+  // resources here and hands back a layer closed over them.
+  const layer = contain.acquire ? await contain.acquire(ctx, inner, {}) : contain.layer({})
+  return compose(inner, layer)
 }
 
 export function runConformance(t: ConformanceTarget): void {
