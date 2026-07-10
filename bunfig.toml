@@ -1,9 +1,0 @@
-# Bun test configuration.
-#
-# The release gate runs `bun test` directly (bypassing package.json scripts), so
-# a Bun test preload is the only in-repo lever that runs before any test. This
-# one guarantees a real `node` is on PATH for the PTY bridge and the fake harness
-# (META-HARNESS-34); without it, every PTY-backed test fails in the nvm-less gate
-# shell. Shared with vitest via `setupFiles` (see vitest.config.ts).
-[test]
-preload = ["./test/setup/ensure-node-on-path.ts"]
