@@ -16,7 +16,7 @@ const liveClaude = process.env.LIVE_MODELS === "1"
 const liveCodex = process.env.LIVE_MODELS === "1" && process.env.LIVE_CODEX === "1"
 const TEST_TIMEOUT = 60_000
 
-describe.runIf(liveClaude)("discoverModels (live claude-code)", () => {
+describe.skipIf(!liveClaude)("discoverModels (live claude-code)", () => {
   test(
     "returns the real model list",
     async () => {
@@ -33,7 +33,7 @@ describe.runIf(liveClaude)("discoverModels (live claude-code)", () => {
   )
 })
 
-describe.runIf(liveCodex)("discoverModels (live codex)", () => {
+describe.skipIf(!liveCodex)("discoverModels (live codex)", () => {
   test(
     "returns the real model list",
     async () => {
