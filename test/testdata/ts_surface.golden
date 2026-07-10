@@ -225,5 +225,31 @@ versions/index.ts
   pinned: function
   readFrom: function
 
+env/index.ts
+  Capability: type
+  Containment: type
+  ContainmentLayer: type
+  CredentialInjector: type
+  EnvConfig: type
+  Environment: type
+  ExecOpts: type
+  ExecResult: type
+  Outcome: type
+  PolicySpec: type
+  Provisioner: type
+  Redactor: type
+  Retention: type
+  TeardownError: class{}
+  Workspace: type
+  WorkspaceSpec: type
+  argvToShell: function
+  compose: function
+  env: function
+  envPrefixedShell: function
+  local: function
+  none: function
+  shQuote: function
+  shouldKeep: function
+
 index.ts
   VERSION: string="0.0.0"

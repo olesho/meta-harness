@@ -29,6 +29,7 @@ const PUBLIC_BARRELS = [
   "chat/index.ts",
   "discovery/index.ts",
   "versions/index.ts",
+  "env/index.ts",
   "index.ts",
 ]
 

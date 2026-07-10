@@ -134,7 +134,7 @@ interface ContainmentLayer {
 function compose(inner: Workspace, layer: ContainmentLayer): Workspace
 ```
 
-`WorkspaceSpec`: image ref, labels, retention (`"always" | "keep-on-failure"`), auto-stop/auto-delete intervals (Daytona), and a **deterministic name** for crash recovery (orche `sandboxName` pattern, `openshell.ts:133` — a crashed run's leftover can be found and deleted before recreate).
+`WorkspaceSpec`: image ref, labels, retention (`retention?: "always" | "keep-on-failure"` — ABSENT ⇒ destroy on both success and failure, the common case), auto-stop/auto-delete intervals (Daytona), and a **deterministic name** for crash recovery (orche `sandboxName` pattern, `openshell.ts:133` — a crashed run's leftover can be found and deleted before recreate).
 
 `PolicySpec`: trust tier + filesystem/network policy inputs. The OpenShell policy generator is a straight port of orche `policy.ts` (filesystem read-only sets per tier, `run_as_user: sandbox`, landlock, per-binary network egress, the no-git-network-endpoint invariant).
 
