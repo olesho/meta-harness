@@ -295,6 +295,10 @@ export class OpenShellContainment implements Containment {
       }
     }
 
+    // `create` with no trailing command attaches an interactive shell and
+    // never exits under piped stdio (field-tested, 0.0.53) — run `true` as the
+    // initial command instead: create exits once it returns, and the sandbox
+    // is kept alive (deleting on command exit is opt-in via --no-keep).
     const created = await ws.exec(ctx, [
       "openshell",
       "sandbox",
@@ -303,6 +307,9 @@ export class OpenShellContainment implements Containment {
       name,
       ...(this.opts.from ? ["--from", this.opts.from] : []),
       ...(policyPath ? ["--policy", policyPath] : []),
+      "--no-tty",
+      "--",
+      "true",
     ])
     if (created.code !== 0) {
       throw new Error(

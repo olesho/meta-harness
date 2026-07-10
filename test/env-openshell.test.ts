@@ -542,7 +542,9 @@ describe("OpenShellContainment", () => {
 
       expect(calls.map((c) => c.argv)).toEqual([
         ["openshell", "sandbox", "delete", name],
-        ["openshell", "sandbox", "create", "--name", name],
+        // `-- true`: an initial command makes create exit instead of attaching
+        // an interactive shell; the sandbox is kept alive (no --no-keep).
+        ["openshell", "sandbox", "create", "--name", name, "--no-tty", "--", "true"],
         [
           "openshell",
           "sandbox",
@@ -575,6 +577,9 @@ describe("OpenShellContainment", () => {
         sandboxName("acq-from"),
         "--from",
         "node:22-slim",
+        "--no-tty",
+        "--",
+        "true",
       ])
     })
 
@@ -591,7 +596,7 @@ describe("OpenShellContainment", () => {
       expect(staged.opts?.stdin).toContain("enforcement: enforce")
 
       const create = calls.find((c) => c.argv[2] === "create")!
-      expect(create.argv.slice(-2)).toEqual(["--policy", path])
+      expect(create.argv.join(" ")).toContain(`--policy ${path}`)
     })
 
     it("derives the name from policy.agentId over opts.agentId", async () => {
