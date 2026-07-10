@@ -13,13 +13,13 @@
 
 import { createHash } from "node:crypto"
 import { spawnSync } from "node:child_process"
-import type { Context } from "../async"
+import type { Context } from "../async/index.ts"
 import type {
   Containment,
   ContainmentLayer,
   ExecOpts,
   PolicySpec,
-} from "../env/types"
+} from "../env/types.ts"
 
 /** CLI runner result shape. */
 export interface CliResult {

@@ -255,5 +255,12 @@ env/index.ts
   shQuote: function
   shouldKeep: function
 
+env-openshell/index.ts
+  OpenShellContainment: class{layer,name,preflight}
+  generatePolicy: function
+  openshell: function
+  resolveGuestUrl: function
+  sandboxName: function
+
 index.ts
   VERSION: string="0.0.0"
