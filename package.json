@@ -19,7 +19,8 @@
     "./discovery": { "bun": "./src/discovery/index.ts", "types": "./dist/discovery/index.d.ts", "import": "./dist/discovery/index.js" },
     "./versions": { "bun": "./src/versions/index.ts", "types": "./dist/versions/index.d.ts", "import": "./dist/versions/index.js" },
     "./oneshot": { "bun": "./src/oneshot/index.ts", "types": "./dist/oneshot/index.d.ts", "import": "./dist/oneshot/index.js" },
-    "./env": { "bun": "./src/env/index.ts", "types": "./dist/env/index.d.ts", "import": "./dist/env/index.js" }
+    "./env": { "bun": "./src/env/index.ts", "types": "./dist/env/index.d.ts", "import": "./dist/env/index.js" },
+    "./env-openshell": { "bun": "./src/env-openshell/index.ts", "types": "./dist/env-openshell/index.d.ts", "import": "./dist/env-openshell/index.js" }
   },
   "bin": {
     "meta-harness-run": "./dist/cli/run.js",

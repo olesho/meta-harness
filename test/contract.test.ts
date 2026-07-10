@@ -20,7 +20,7 @@ const here = dirname(fileURLToPath(import.meta.url))
 const srcRoot = join(here, "..", "src")
 const goldenPath = join(here, "testdata", "ts_surface.golden")
 
-// The eight public subpath barrels named in package.json `exports` (root last).
+// The public subpath barrels named in package.json `exports` (root last).
 const PUBLIC_BARRELS = [
   "screen/index.ts",
   "wrapper/index.ts",
@@ -30,6 +30,7 @@ const PUBLIC_BARRELS = [
   "discovery/index.ts",
   "versions/index.ts",
   "env/index.ts",
+  "env-openshell/index.ts",
   "index.ts",
 ]
 
