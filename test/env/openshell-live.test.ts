@@ -70,6 +70,18 @@ describe.skipIf(!enabled)("openshell live (Tier-4)", () => {
     // writing) and a writable /sandbox — a bare `--from node:22-slim` dies at
     // provisioning because that image's entrypoint (node REPL) exits at once.
     makeContainment: () => openshell({ agentId: `mh-live-${++n}` }),
+    // The guest image's node emits an UNDICI-EHPA proxy warning on every run
+    // (the image sets env-proxy vars); strip that inherent noise so the
+    // fidelity assertions test the containment, not the image.
+    filterStderr: (s) =>
+      s
+        .split("\n")
+        .filter(
+          (l) => !/^\(node:\d+\)/.test(l) && !l.startsWith("(Use `node --trace-warnings"),
+        )
+        .join("\n")
+        .replace(/^\n+/, "")
+        .replace(/\n+$/, ""),
   })
 
   // Part B: openshell-specific lifecycle assertions.

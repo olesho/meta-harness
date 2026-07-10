@@ -13,6 +13,7 @@
 
 import { createHash } from "node:crypto"
 import { spawnSync } from "node:child_process"
+import { argvToShell, shQuote } from "../env/argv.ts"
 import type { Context } from "../async/index.ts"
 import type {
   Containment,
@@ -355,12 +356,23 @@ export class OpenShellContainment implements Containment {
   }
 }
 
+/** POSIX-only path helpers: guest and staging paths are always /-separated. */
+function posixBasename(p: string): string {
+  const i = p.lastIndexOf("/")
+  return i >= 0 ? p.slice(i + 1) : p
+}
+function posixDirname(p: string): string {
+  const i = p.lastIndexOf("/")
+  return i > 0 ? p.slice(0, i) : "/"
+}
+
 /** Layer primitives closed over a REAL sandbox name. Module-scoped (not a class
  *  method) so the erased-at-runtime `private` keyword can't leak it onto the
  *  public class surface. */
 function buildLayer(name: string, guestRepo: string, driver: string): ContainmentLayer {
-  // The real openshell CLI errors on deleting an already-gone sandbox, and
-  // compose() calls layer.teardown() unconditionally on every destroy —
+  // The real openshell CLI errors on deleting an already-gone sandbox (exit 1,
+  // gRPC NotFound — field-tested 0.0.53, see the live suite's redundant-delete
+  // test), and compose() calls layer.teardown() unconditionally on every destroy —
   // idempotent double-destroy (conformance contract) therefore lives here:
   // emit the delete argv once, then [] ("nothing to tear down").
   let torndown = false
@@ -393,14 +405,24 @@ function buildLayer(name: string, guestRepo: string, driver: string): Containmen
     },
 
     crossUpload(stagingPath: string, guestPath: string): string[] {
+      // `openshell sandbox upload NAME SRC DEST` always NESTS: the tree lands
+      // at DEST/<basename(SRC)> regardless of trailing slash/dot or whether
+      // DEST exists (field-tested, 0.0.53) — but compose() requires guestPath
+      // to BECOME the copy (mirroring local's cpSync semantics). So: upload
+      // into guest /tmp (nesting to the collision-free staging basename), then
+      // move into place in-guest. Chained via host `sh -c`; every embedded
+      // path is shQuote'd, and the in-guest script rides as ONE argv token.
+      const nested = `/tmp/${posixBasename(stagingPath)}`
+      const move =
+        `mkdir -p ${shQuote(posixDirname(guestPath))} && ` +
+        `rm -rf ${shQuote(guestPath)} && ` +
+        `mv ${shQuote(nested)} ${shQuote(guestPath)}`
       return [
-        "openshell",
-        "sandbox",
-        "upload",
-        "--no-git-ignore",
-        name,
-        stagingPath,
-        guestPath,
+        "sh",
+        "-c",
+        argvToShell(["openshell", "sandbox", "upload", "--no-git-ignore", name, stagingPath, "/tmp"]) +
+          " && " +
+          argvToShell(["openshell", "sandbox", "exec", "-n", name, "--no-tty", "--", "sh", "-c", move]),
       ]
     },
 

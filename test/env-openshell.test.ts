@@ -15,6 +15,7 @@ import {
 } from "../src/env-openshell"
 import { Context } from "../src/async"
 import { compose, env } from "../src/env"
+import { shQuote } from "../src/env/argv.ts"
 import type {
   Containment,
   ContainmentLayer,
@@ -379,19 +380,42 @@ describe("OpenShellContainment", () => {
     })
 
     describe("crossUpload", () => {
-      it("generates upload argv with the real name", () => {
+      // `openshell sandbox upload` always nests the tree at DEST/<basename(SRC)>
+      // (field-tested, 0.0.53), so the layer uploads into guest /tmp and moves
+      // into place in-guest, chained through a single host `sh -c`.
+      it("uploads into guest /tmp then moves into place, with the real name", () => {
         const containment = openshell({ cli })
         const layer = containment.layer(SB)
-        const argv = layer.crossUpload("/tmp/file", "/sandbox/repo/file")
-        expect(argv).toEqual([
-          "openshell",
-          "sandbox",
-          "upload",
-          "--no-git-ignore",
-          "openshell-test-sb",
-          "/tmp/file",
-          "/sandbox/repo/file",
-        ])
+        const argv = layer.crossUpload("/host/tmp/env-stage-1-tree", "/sandbox/repo/tree")
+        expect(argv.slice(0, 2)).toEqual(["sh", "-c"])
+        const script = argv[2]!
+        expect(script).toContain(
+          "'openshell' 'sandbox' 'upload' '--no-git-ignore' 'openshell-test-sb' " +
+            "'/host/tmp/env-stage-1-tree' '/tmp'",
+        )
+        expect(script).toContain("'openshell' 'sandbox' 'exec' '-n' 'openshell-test-sb' '--no-tty' '--' 'sh' '-c'")
+        // The in-guest move rides as ONE shQuote'd token: mkdir parent, clear
+        // the target, move the nested upload into place.
+        expect(script).toContain(
+          "'mkdir -p '\\''/sandbox/repo'\\'' && rm -rf '\\''/sandbox/repo/tree'\\'' && " +
+            "mv '\\''/tmp/env-stage-1-tree'\\'' '\\''/sandbox/repo/tree'\\'''",
+        )
+      })
+
+      it("quotes hostile guest paths so they cannot break out of the script", () => {
+        const containment = openshell({ cli })
+        const layer = containment.layer(SB)
+        const hostile = "/sandbox/repo/a b; rm -rf $HOME"
+        const argv = layer.crossUpload("/host/tmp/env-stage-2-x", hostile)
+        expect(argv.slice(0, 2)).toEqual(["sh", "-c"])
+        // The in-guest move must be built with strict shQuote at BOTH layers:
+        // hostile path quoted inside the move script, the whole move re-quoted
+        // as one token of the outer host command.
+        const move =
+          `mkdir -p ${shQuote("/sandbox/repo")} && ` +
+          `rm -rf ${shQuote(hostile)} && ` +
+          `mv ${shQuote("/tmp/env-stage-2-x")} ${shQuote(hostile)}`
+        expect(argv[2]).toContain(shQuote(move))
       })
     })
 
