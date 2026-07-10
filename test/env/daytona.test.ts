@@ -121,9 +121,13 @@ describe("File credential injector", () => {
     })
 
     // Create a mock workspace
+    const execCalls: string[] = []
     const mockWs: Partial<Workspace> = {
       upload: vi.fn(async () => {}),
-      exec: vi.fn(async () => ({ code: 0, stdout: "", stderr: "" })),
+      exec: vi.fn(async (ctx, argv) => {
+        execCalls.push(argv.join(" "))
+        return { code: 0, stdout: "", stderr: "" }
+      }),
       download: vi.fn(async () => {}),
       guestPath: () => "/home/test",
       hostAlias: (url) => url,
@@ -136,9 +140,41 @@ describe("File credential injector", () => {
     await injector.apply(ctx, mockWs as Workspace)
     expect(mockWs.upload).toHaveBeenCalled()
 
-    // cleanup should remove it
+    // cleanup should call exec to remove the file
     await injector.cleanup(ctx, mockWs as Workspace)
-    // cleanup is idempotent and swallows errors
+    expect(mockWs.exec).toHaveBeenCalled()
+    // verify it tried to remove the file
+    const rmCall = execCalls.find((call) => call.includes("rm"))
+    expect(rmCall).toBeTruthy()
+  })
+
+  test("injector cleanup is idempotent even after failed apply", async () => {
+    const token = "secret-token-failure"
+    const injector = fileCredentialInjector({
+      token,
+      guestPath: "~/.daytona/token",
+    })
+
+    // Create a mock workspace that fails on upload
+    const mockWs: Partial<Workspace> = {
+      upload: vi.fn(async () => {
+        throw new Error("upload failed")
+      }),
+      exec: vi.fn(async () => ({ code: 0, stdout: "", stderr: "" })),
+      download: vi.fn(async () => {}),
+      guestPath: () => "/home/test",
+      hostAlias: (url) => url,
+      destroy: vi.fn(async () => {}),
+    }
+
+    const ctx = Context.background()
+
+    // apply should fail
+    await expect(injector.apply(ctx, mockWs as Workspace)).rejects.toThrow()
+
+    // cleanup should still work (idempotent)
+    await injector.cleanup(ctx, mockWs as Workspace)
+    expect(mockWs.exec).toHaveBeenCalled()
   })
 })
 
@@ -194,5 +230,28 @@ describe("Credential leak probe", () => {
     // The command should have the expected structure
     expect(cmd).toContain("for (const name of names)")
     expect(cmd).toContain("if (process.env[name])")
+  })
+
+  test("leak probe and file injector redactions are independent", () => {
+    // The leak probe is for guest-env scope (detecting leaks at runtime)
+    // The file injector is for credential delivery (applying credentials)
+    // Both should reference CLAUDE_CODE_OAUTH_TOKEN since it's in both scopes
+
+    const token = "oauth-token-xyz"
+    const injector = fileCredentialInjector({
+      token,
+      guestPath: "~/.daytona/token",
+    })
+
+    const probeCmd = credentialLeakProbe()
+    const injectorRedactions = injector.redactions()
+
+    // CLAUDE_CODE_OAUTH_TOKEN should be in the leak probe
+    expect(CREDENTIAL_SENSITIVE_ENV_NAMES).toContain("CLAUDE_CODE_OAUTH_TOKEN")
+    expect(probeCmd).toContain("CLAUDE_CODE_OAUTH_TOKEN")
+
+    // The injector redacts the actual token value, not the env name
+    expect(injectorRedactions).toContain(token)
+    expect(injectorRedactions).not.toContain("CLAUDE_CODE_OAUTH_TOKEN")
   })
 })
