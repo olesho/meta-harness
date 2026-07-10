@@ -10,6 +10,7 @@ import path from "node:path"
 import { wrap } from "../../internal/async/index.ts"
 import { ErrEmptySessionID, ErrEmptyWorkingDir, ErrSessionNotFound } from "../errors.ts"
 import type { Event } from "../event.ts"
+import { usageFromClaudeJSONL, type Usage } from "../usage.ts"
 import { events } from "./parseClaude.ts"
 
 // claudeCWDSanitize matches every character Claude Code rewrites when naming a
@@ -47,6 +48,25 @@ export class ClaudeCodeReader {
       throw wrap(`claudecode transcript: read ${file}`, err)
     }
     return events(data)
+  }
+
+  // readUsage returns the session's token totals (summed per API call), or null
+  // when the transcript records no usage. Same locate rules as read().
+  readUsage(harnessSessionID: string, workingDir = ""): Usage | null {
+    if (harnessSessionID === "") {
+      throw wrap("claudecode usage: empty session id", ErrEmptySessionID)
+    }
+    if (workingDir === "") {
+      throw wrap("claudecode usage: empty working dir", ErrEmptyWorkingDir)
+    }
+    const file = this.locate(harnessSessionID, workingDir)
+    let data: string
+    try {
+      data = readFileSync(file, "utf8")
+    } catch (err) {
+      throw wrap(`claudecode usage: read ${file}`, err)
+    }
+    return usageFromClaudeJSONL(data)
   }
 
   private resolveRoot(): string {

@@ -7,6 +7,9 @@
 export { SchemaVersion, RoleUser, RoleAssistant, RoleTool, RoleSystem, EventText, EventToolUse, EventToolResult, EventSessionMeta, SourceLive, SourceFile, eventID, turnsFromEvents, envelope, toPublicJSON, } from "./event.js";
 // Durable wire codec.
 export { marshalParsedEvents, unmarshalParsedEvents } from "./eventWire.js";
+// Token-usage extraction (separate from the Event DTO, which carries no token
+// fields by contract).
+export { usageFromClaudeJSONL, usageFromCodexJSONL, usageToPublicJSON, } from "./usage.js";
 // Error sentinels.
 export { ErrEmptySessionID, ErrEmptyWorkingDir, ErrSessionNotFound } from "./errors.js";
 // Per-harness readers.

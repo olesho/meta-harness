@@ -25,7 +25,12 @@ import { pathToFileURL } from "node:url"
 
 import { runOneShotDetailed, cleanEnv, type OneShotOutcome } from "../oneshot/index.ts"
 import { Context } from "../async/index.ts"
-import { ClaudeCodeReader, CodexReader, toPublicJSON } from "../transcript/index.ts"
+import {
+  ClaudeCodeReader,
+  CodexReader,
+  toPublicJSON,
+  usageToPublicJSON,
+} from "../transcript/index.ts"
 
 export const ExitOK = 0
 export const ExitError = 1
@@ -165,6 +170,18 @@ export function readTranscript(
   return reader.read(harnessSessionID, workingDir).map(toPublicJSON)
 }
 
+/** readUsage reads the session's token totals; null when none recorded. */
+export function readUsage(
+  harness: string,
+  harnessSessionID: string,
+  workingDir: string,
+): Record<string, number> | null {
+  if (!harnessSessionID) return null
+  const reader = harness === "claude-code" ? new ClaudeCodeReader() : new CodexReader()
+  const usage = reader.readUsage(harnessSessionID, workingDir)
+  return usage ? usageToPublicJSON(usage) : null
+}
+
 function exitFor(status: OneShotOutcome["status"]): number {
   if (status === "completed") return ExitOK
   if (status === "deadline") return ExitDeadline
@@ -191,7 +208,7 @@ usage: structured-runner --prompt-file <path> [--effort E] [--model M] <name> --
   --                everything after is forwarded verbatim to the harness
 
 Emits ONE JSON line on stdout: { status, reply, harnessSessionID, transcript_entries,
-reason?, transcript_error?, working_dir }. Exit: 0 completed · 1 errored · 2 usage · 124 deadline.
+usage?, reason?, transcript_error?, working_dir }. Exit: 0 completed · 1 errored · 2 usage · 124 deadline.
 `
 
 export async function main(argv: string[]): Promise<number> {
@@ -260,8 +277,8 @@ export async function main(argv: string[]): Promise<number> {
     cancel()
   }
 
-  // Read the transcript back in-guest — best-effort so a Reader failure never
-  // erases a successful reply.
+  // Read the transcript + usage back in-guest — best-effort so a Reader failure
+  // never erases a successful reply.
   let transcriptEntries: Array<Record<string, unknown>> = []
   let transcriptError: string | undefined
   try {
@@ -269,12 +286,20 @@ export async function main(argv: string[]): Promise<number> {
   } catch (err) {
     transcriptError = err instanceof Error ? err.message : String(err)
   }
+  let usage: Record<string, number> | null = null
+  try {
+    usage = readUsage(harness, outcome.harnessSessionID ?? "", workingDir)
+  } catch {
+    // usage is additive telemetry — a read failure must not fail the turn, and
+    // transcript_error already carries the locate/read diagnosis when both fail.
+  }
 
   emit({
     status: outcome.status,
     reply: outcome.status === "completed" ? outcome.reply : "",
     harnessSessionID: outcome.harnessSessionID ?? "",
     transcript_entries: transcriptEntries,
+    usage: usage ?? undefined,
     reason: reasonOf(outcome),
     transcript_error: transcriptError,
     working_dir: workingDir,

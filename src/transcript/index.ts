@@ -30,6 +30,15 @@ export {
 // Durable wire codec.
 export { marshalParsedEvents, unmarshalParsedEvents } from "./eventWire.ts"
 
+// Token-usage extraction (separate from the Event DTO, which carries no token
+// fields by contract).
+export {
+  usageFromClaudeJSONL,
+  usageFromCodexJSONL,
+  usageToPublicJSON,
+  type Usage,
+} from "./usage.ts"
+
 // Reader interface.
 export type { Reader } from "./reader.ts"
 

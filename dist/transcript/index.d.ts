@@ -1,5 +1,6 @@
 export { SchemaVersion, RoleUser, RoleAssistant, RoleTool, RoleSystem, EventText, EventToolUse, EventToolResult, EventSessionMeta, SourceLive, SourceFile, eventID, turnsFromEvents, envelope, toPublicJSON, type Event, type Turn, type ParsedEvent, type EventEnvelope, } from "./event.ts";
 export { marshalParsedEvents, unmarshalParsedEvents } from "./eventWire.ts";
+export { usageFromClaudeJSONL, usageFromCodexJSONL, usageToPublicJSON, type Usage, } from "./usage.ts";
 export type { Reader } from "./reader.ts";
 export { ErrEmptySessionID, ErrEmptyWorkingDir, ErrSessionNotFound } from "./errors.ts";
 export { PiReader, slugForCwd } from "./pi/pi.ts";
