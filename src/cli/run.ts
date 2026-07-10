@@ -1,4 +1,4 @@
-#!/usr/bin/env bun
+#!/usr/bin/env node
 // meta-harness `run` CLI — the separate-process one-shot mode.
 //
 // This is the TypeScript port of the Go `harness-wrapper run` one-shot contract:
@@ -183,7 +183,7 @@ export function parseGoDuration(s: string): number | null {
 
 async function readStdin(): Promise<string> {
   const chunks: Uint8Array[] = []
-  for await (const chunk of Bun.stdin.stream()) {
+  for await (const chunk of process.stdin) {
     chunks.push(chunk)
   }
   let len = 0
