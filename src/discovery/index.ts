@@ -10,10 +10,12 @@ export {
   type Info,
   type Probe,
   lookup,
+  resolvePath,
   discover,
   registerProbe,
   resetCache,
   defaultProbeTimeoutMs,
+  WELL_KNOWN_DIRS,
 } from "./discovery.ts"
 export { SemverDashVProbe, semverRe } from "./probes.ts"
 export {
