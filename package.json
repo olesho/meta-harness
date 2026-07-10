@@ -24,6 +24,7 @@
     "meta-harness-structured-run": "./dist/cli/structured-runner.js"
   },
   "scripts": {
+    "postinstall": "node scripts/postinstall.mjs",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "build": "node scripts/build.mjs"
