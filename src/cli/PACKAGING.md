@@ -66,3 +66,59 @@ install and `npm run build`) plus a Node.js runtime, and invoke
   override the resolved harness executable path.
 - `CLAUDECODE` / `CLAUDE_CODE_*` are stripped from the child harness env
   (env-clean), mirroring the Go `run.go` one-shot.
+
+## Downstream consumer pin (Orche) — META-HARNESS-33
+
+The Bun→Node migration (META-HARNESS-30/31/32) is downstream-consumed by the
+**Orche** repo, which installs meta-harness as a `github:` dependency and imports
+the built `dist/**` over the `exports` map under `node` (e.g.
+`import('meta-harness/chat')` from `packages/agent`). Phase 4 of the migration is
+bumping Orche's pin from the pre-migration release to the migrated commit.
+
+**Migrated commit** (Bun→Node, `dist/**` rebuilt incl. `dist/cli/run.js`):
+
+- `dev` HEAD `9e61ec6b632987c3e0356055ae5a23e16a8cbb09` (`meta-harness@0.1.3`).
+- Supersedes the old pin `8c608b0ff32d0332a2d4714ce4742c715158f8d7`
+  (`chore: release v0.1.3`), which is a clean ancestor — a forward bump spanning
+  the whole migration, no version change.
+
+**Edits on the Orche side** (repo `olesho/orche`). The pin appears in *two*
+workspace manifests — bump both so the whole workspace resolves one meta-harness
+install (a split pin would materialize two copies):
+
+```diff
+--- a/packages/agent/package.json
++++ b/packages/agent/package.json
+-    "meta-harness": "github:olesho/meta-harness#8c608b0ff32d0332a2d4714ce4742c715158f8d7"
++    "meta-harness": "github:olesho/meta-harness#9e61ec6b632987c3e0356055ae5a23e16a8cbb09"
+--- a/apps/web/package.json
++++ b/apps/web/package.json
+-    "meta-harness": "github:olesho/meta-harness#8c608b0ff32d0332a2d4714ce4742c715158f8d7"
++    "meta-harness": "github:olesho/meta-harness#9e61ec6b632987c3e0356055ae5a23e16a8cbb09"
+```
+
+**Lockfile.** Refresh with `npm install` (regenerates `package-lock.json`) — do
+**not** hand-edit: the `node_modules/meta-harness` entry carries an `integrity`
+sha512 over the packed git tarball that can only be computed by fetching the
+commit. `npm install` rewrites all three touchpoints (the two manifest mirrors +
+the `node_modules/meta-harness` `resolved`/`integrity`/`version`).
+
+**Precondition.** The `github:` spec resolves from GitHub `olesho/meta-harness`,
+so `dev` (`9e61ec6`) must be pushed there before Orche's `npm install` /
+`npm ci` can fetch it. Publishing `dev` and pushing to Orche are outside this
+ticket's worktree (and this environment has no GitHub fetch), so the `npm
+install` regen + the Orche agent-suite run happen once the migration branch is
+published.
+
+**Verification done here (against the migrated tree, commit `9e61ec6`).**
+`npm run verify:exports` (`scripts/verify-exports.mjs`) imports every public
+subpath under plain Node; all 10 load, including the one Orche depends on:
+
+```
+OK  meta-harness/chat        37 exports  (./dist/chat/index.js)
+...
+verify-exports: all 10 public subpath exports load under Node
+```
+
+That is the acceptance check `import('meta-harness/chat')` under Node, exercised
+against exactly the code Orche's bumped pin will install.
