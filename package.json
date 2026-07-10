@@ -19,7 +19,7 @@
     "./oneshot": { "bun": "./src/oneshot/index.ts", "types": "./dist/oneshot/index.d.ts", "import": "./dist/oneshot/index.js" }
   },
   "bin": {
-    "meta-harness-run": "./src/cli/run.ts",
+    "meta-harness-run": "./dist/cli/run.js",
     "meta-harness-structured-run": "./dist/cli/structured-runner.js"
   },
   "scripts": {
