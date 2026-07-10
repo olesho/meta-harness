@@ -11,4 +11,5 @@
 export { daytona } from "./daytona.js";
 export { fileCredentialInjector } from "./file-injector.js";
 export { CREDENTIAL_SENSITIVE_ENV_NAMES, credentialLeakProbe, } from "./leak-probe.js";
+export { sweep } from "./sweep.js";
 //# sourceMappingURL=index.js.map
