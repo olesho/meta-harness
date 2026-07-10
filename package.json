@@ -5,7 +5,7 @@
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
-  "//exports": "Conditional: Bun consumers (e.g. orche) resolve raw `src/**` TS via the `bun` condition; Node consumers (loomcli flue bundle + sandbox runner) resolve compiled `dist/**` via `import`. Keep `bun` FIRST so Bun never falls through to dist. `dist` is built by `npm run build` and committed (see tsconfig.build.json).",
+  "//exports": "Conditional: Node consumers (loomcli flue bundle + sandbox runner) resolve compiled `dist/**` via `import`. The `bun` condition is retained (points at raw `src/**` TS) so a future Bun consumer still resolves; keep `bun` FIRST so Bun never falls through to dist. `dist` is built by `npm run build` and committed (see tsconfig.build.json).",
   "exports": {
     ".": { "bun": "./src/index.ts", "types": "./dist/index.d.ts", "import": "./dist/index.js" },
     "./async": { "bun": "./src/async/index.ts", "types": "./dist/async/index.d.ts", "import": "./dist/async/index.js" },
@@ -29,7 +29,6 @@
   },
   "devDependencies": {
     "@types/node": "^22",
-    "bun-types": "^1.1",
     "typescript": "^5",
     "vitest": "^4.1.10"
   },
