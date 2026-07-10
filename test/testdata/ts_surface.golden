@@ -202,6 +202,7 @@ discovery/index.ts
   ModelInfo: type
   Probe: type
   SemverDashVProbe: class{detect}
+  WELL_KNOWN_DIRS: object{0,1,2,3}
   defaultModel: function
   defaultProbeTimeoutMs: number=10000
   discover: function
@@ -212,6 +213,7 @@ discovery/index.ts
   parseModelPicker: function
   registerProbe: function
   resetCache: function
+  resolvePath: function
   semverRe: object{}
 
 versions/index.ts

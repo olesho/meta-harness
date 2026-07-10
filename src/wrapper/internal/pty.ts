@@ -330,6 +330,10 @@ function encode(s: string): Uint8Array {
  * ErrBinaryNotFound before ever spawning the bridge — node-pty only surfaces a
  * missing binary as an opaque exit(1), which is indistinguishable from a real
  * harness failure.
+ *
+ * @deprecated PATH/abs-path only. The spawn path (run.ts) now defers to the
+ * discovery SSOT `resolvePath()`, which additionally consults env overrides and
+ * well-known dirs. Kept for backwards compatibility with any external caller.
  */
 export function resolveBinary(
   binaryPath: string,
