@@ -27,13 +27,43 @@ function claudeBlockingDialog(text) {
 const codexUpdateAnchor = "Update available!";
 const codexMigrationAnchor = "Choose how you'd like Codex to proceed";
 const codexContinueAnchor = "Press enter to continue";
+// Genuine command / apply-patch approval anchors (mirrored from the turns codex
+// adapter — full sentences captured live from codex-cli 0.144.4).
+const codexApprovalAnchors = [
+    "Would you like to run the following command?",
+    "Would you like to make the following edits?",
+];
 // promptRE matches the idle composer prompt indicator on its own line — the "›"
 // Codex prints at the start of the input box once it is ready for input.
 const codexPromptRE = /^[^\S\r\n]*›/m;
+// codexMenuHighlightRE matches a "›"-highlighted numbered menu row anywhere on
+// screen. Used ONLY inside codexBlockingDialog, gated by an approval anchor.
+const codexMenuHighlightRE = /^[^\S\r\n]*›[^\S\r\n]*\d+\./m;
 function codexBlockingInterstitial(text) {
     return (text.includes(codexUpdateAnchor) ||
         text.includes(codexMigrationAnchor) ||
         text.includes(codexContinueAnchor));
+}
+// codexBlockingDialog gates a genuine approval dialog (command / apply-patch).
+//
+// It diverges STRUCTURALLY from the bare-includes() codexBlockingInterstitial on
+// purpose: the interstitial anchors ("Update available!", …) are not prose-like,
+// so a bare substring match is safe. The approval anchors are plausible
+// assistant prose ("Would you like to run the tests?"), and a bare-includes()
+// match on an ordinary idle reply would pin readyForInput false forever —
+// awaitPromptReady would block sends indefinitely and maybeIdleComplete would
+// never complete the turn (a silent hang). So this predicate additionally
+// requires a "›"-highlighted numbered menu row, which ordinary prose lacks.
+//
+// The turns adapter (src/turns/harness/codex.ts) uses a strict per-row highlight
+// flag; ready.ts cannot reach its parsed options, so the screen-wide regex here
+// is acceptable — a scrollback-echo false positive additionally needs the anchor
+// text on the same idle screen, and its blast radius is one conservative
+// not-ready beat, not the detection deadlock the per-row flag guards against.
+function codexBlockingDialog(text) {
+    if (!codexApprovalAnchors.some((a) => text.includes(a)))
+        return false;
+    return codexMenuHighlightRE.test(text);
 }
 function codexPromptReady(text) {
     return codexPromptRE.test(text);
@@ -77,6 +107,11 @@ export function readyForInput(harness, text) {
             // A blocking startup interstitial renders its own "›" highlight and looks
             // ready — treat it as not-ready so Send waits for the auto-dismiss.
             if (codexBlockingInterstitial(text))
+                return false;
+            // A genuine approval dialog (anchor + highlighted menu row) is likewise
+            // not-ready while it is up, even though its highlighted menu row satisfies
+            // codexPromptReady.
+            if (codexBlockingDialog(text))
                 return false;
             return codexPromptReady(text);
         case "pi":

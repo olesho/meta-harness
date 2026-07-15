@@ -26,6 +26,8 @@ import type {
   InputRequest,
 } from "../types.ts"
 import { InputRequested, InputResolved, TurnComplete } from "../types.ts"
+import type { Status } from "../wrapper.ts"
+import { StatusWaitingForInput } from "../wrapper.ts"
 
 const enc = new TextEncoder()
 
@@ -82,6 +84,28 @@ export class CodexAdapter extends GenericAdapter implements Adapter {
 
   override name(): string {
     return "codex"
+  }
+
+  /**
+   * Suppresses the generic `waiting_for_input → TurnComplete` mapping while a
+   * structured input request is on screen (lastInputID !== ""). The
+   * InputRequested event already represents that state; letting the generic
+   * mapping complete the turn mid-dialog is the false-TurnComplete bug this task
+   * fixes — the consumer would find no task_complete in the rollout and treat
+   * the reply as errored while the approval dialog is still up. The turn resumes
+   * (InputResolved, then the real completion) once the dialog clears.
+   *
+   * Scope: lastInputID is also set while an auto-dismissed interstitial is still
+   * clearing (the chat layer wrote the dismiss keys but the next dialog-free
+   * onScreen has not yet fired). Suppressing TurnComplete there too is intended —
+   * a turn must not complete while ANY structured dialog is on screen.
+   *
+   * All other statuses (Blocked / Errored / Idle / …) delegate to super even
+   * mid-dialog: a crash during a dialog must still error the turn.
+   */
+  override onWrapperStatus(status: Status, reason: string): Event[] {
+    if (status === StatusWaitingForInput && this.lastInputID !== "") return []
+    return super.onWrapperStatus(status, reason)
   }
 
   override onScreen(snap: Snapshot): Event[] {
@@ -225,12 +249,27 @@ const updateAnchor = "Update available!"
 const migrationAnchor = "Choose how you'd like Codex to proceed"
 const continueAnchor = "Press enter to continue"
 
+// approvalAnchors are the full-sentence questions codex renders at the top of a
+// genuine command / apply-patch approval dialog. Captured live from codex-cli
+// 0.144.4 (test/corpus/codex/approval-command, approval-patch). Full sentences,
+// not prose fragments, so the ready-side gate (src/chat/ready.ts) stays tight.
+const approvalAnchors = [
+  "Would you like to run the following command?",
+  "Would you like to make the following edits?",
+]
+
 export const KindUpdateNotice = "codex_update_notice"
 export const KindModelMigration = "codex_model_migration"
 export const KindNotice = "codex_notice"
+// KindApproval marks a genuine command / apply-patch approval prompt. This exact
+// string is pinned by the chat contract fixture (test/chat/codex_dismiss.test.ts)
+// and by orche's default handler contract — do not rename.
+export const KindApproval = "approval_prompt"
 
-// menuRE matches a Codex numbered menu row, with optional "›" highlight marker.
-const menuRE = /^[^\S\r\n]*(?:›[^\S\r\n]*)?(\d+)\.[^\S\r\n]+(.+?)[^\S\r\n]*$/gm
+// menuRE matches a Codex numbered menu row. Group 1 captures the "›" highlight
+// marker on the currently-selected row (undefined when absent); group 2 the
+// digit; group 3 the label.
+const menuRE = /^[^\S\r\n]*(›)?[^\S\r\n]*(\d+)\.[^\S\r\n]+(.+?)[^\S\r\n]*$/gm
 
 // promptRE matches the idle composer prompt indicator — the "›" glyph alone.
 const promptRE = /^[^\S\r\n]*›/m
@@ -244,6 +283,21 @@ const composerRowRE = /^[^\S\r\n]*›(.*)$/
  * text and returns the structured request, or null when none is present.
  */
 export function DetectInput(text: string): InputRequest | null {
+  // KindApproval is checked FIRST — before updateAnchor / migration / continue —
+  // for two safety reasons (both would otherwise mis-handle an approval dialog
+  // whose body incidentally quotes an interstitial anchor):
+  //   1. continueAnchor→KindNotice and migrationAnchor→KindModelMigration both
+  //      AUTO-DISMISS with a bare "\r", which on an approval dialog would press
+  //      Enter on the highlighted "Yes" — i.e. auto-approve. The approval footer
+  //      is "Press enter to confirm or esc to cancel" (not "…continue"), so no
+  //      real dialog collides today, but the ordering makes that guarantee
+  //      independent of codex's exact footer wording.
+  //   2. The updateAnchor branch `return null`s the whole function when its skip
+  //      gate fails — an approval body mentioning "Update available!" would be
+  //      swallowed to null, silently reviving the false-TurnComplete failure
+  //      this detection exists to kill.
+  const approval = detectApproval(text)
+  if (approval) return approval
   if (text.includes(updateAnchor)) {
     const opts = parseMenuOptions(text)
     const req: InputRequest = {
@@ -280,6 +334,58 @@ export function DetectInput(text: string): InputRequest | null {
     return req
   }
   return null
+}
+
+/**
+ * detectApproval recognizes a genuine command / apply-patch approval dialog and
+ * returns the structured request, or null.
+ *
+ * The gate is MANDATORY-STRICT, not best-effort: once this surfaces, step-5's
+ * onWrapperStatus override suppresses TurnComplete and ready.ts blocks sends, so
+ * a false positive DEADLOCKS the turn (strictly worse than the false-complete it
+ * replaces). Beyond the anchor it therefore requires ALL of:
+ *   - a proceed-aliased parsed row,
+ *   - a deny-aliased parsed row (mirrors the update dialog's skip-row gate), and
+ *   - the "›" highlight marker on at least one PARSED menu row.
+ *
+ * The highlight is a per-row property (parseMenuOptions records it from menuRE's
+ * marker group), NOT a screen-wide regex: scrollback prompt echoes render past
+ * prompts as "› <text>" rows, so a user prompt that began with "1. " echoes as
+ * "› 1. …" and a screen-wide scan would match it anywhere on screen — combined
+ * with a quoted anchor and a proceed/deny-shaped enumeration the whole gate would
+ * false-positive into a deadlocked turn.
+ *
+ * The per-row flag alone is NOT sufficient either, because parseMenuOptions reads
+ * the WHOLE screen: an echo row is itself a parsed row, so `› 4. Deploy the thing`
+ * above a prose spoof lends its highlight to the gate (digit dedup only saves the
+ * case where the echo's digit collides with a real menu digit). So the rows are
+ * parsed from the text AFTER the anchor — codex renders scrollback above the
+ * dialog, so a past-prompt echo can never sit inside that tail. Verified against
+ * the corpus: the live dialogs' menus follow their anchor, so this does not
+ * perturb their parsed options or their inputID.
+ *
+ * Residual (accepted, documented): a highlighted numbered row rendered BELOW a
+ * prose-quoted anchor — e.g. the user typing "4. something" into the composer
+ * while such a reply is on screen — is still counted. Codex replaces the composer
+ * with the dialog while a real approval is up, so this shape is contrived; the
+ * ready-side gate (src/chat/ready.ts) is independent of it.
+ */
+function detectApproval(text: string): InputRequest | null {
+  const anchor = approvalAnchors.find((a) => text.includes(a))
+  if (!anchor) return null
+  const tail = text.slice(text.indexOf(anchor) + anchor.length)
+  const opts = parseMenuOptions(tail)
+  const req: InputRequest = {
+    id: "",
+    kind: KindApproval,
+    prompt: anchor,
+    options: opts,
+  }
+  if (findByAlias(req, "proceed") === null) return null
+  if (findByAlias(req, "deny") === null) return null
+  if (!opts.some((o) => o.highlighted)) return null
+  req.id = inputID(req)
+  return req
 }
 
 /** Reports whether the idle composer prompt is on screen (gate behind DetectInput). */
@@ -330,8 +436,14 @@ function parseMenuOptions(text: string): InputOption[] {
   const opts: InputOption[] = []
   const seen = new Set<string>()
   for (const m of text.matchAll(menuRE)) {
-    const num = m[1]!
-    const label = cleanLabel(m[2]!)
+    const highlighted = m[1] !== undefined
+    const num = m[2]!
+    const label = cleanLabel(m[3]!)
+    // Dedup keeps the FIRST occurrence of a digit, so a scrollback echo that
+    // collides with an already-parsed menu digit is dropped. Note this is NOT by
+    // itself a defense against echoes lending a spurious "›" highlight to the
+    // approval gate (a non-colliding digit survives) — detectApproval parses from
+    // the anchor tail for that; see its comment.
     if (seen.has(num) || label === "") continue
     seen.add(num)
     opts.push({
@@ -339,6 +451,7 @@ function parseMenuOptions(text: string): InputOption[] {
       alias: aliasForLabel(label),
       label,
       keys: enc.encode(num + "\r"),
+      highlighted,
     })
   }
   return opts
@@ -352,9 +465,27 @@ function cleanLabel(s: string): string {
 
 function aliasForLabel(label: string): string {
   const l = label.toLowerCase()
+  // Interstitial tokens first so classification of update / notice menus is
+  // unchanged ("Skip" must not become deny-adjacent). Notice/menu option aliases
+  // may shift (a "Continue" row now aliases "proceed" where it had ""), but
+  // nothing downstream acts on notice option aliases.
   if (l.includes("skip")) return "skip"
   if (l.includes("update")) return "update"
+  // Yes/No approval vocabulary, mirroring claudecode.ts aliasForLabel.
+  if (containsAny(l, "proceed", "accept", "trust", "yes", "continue")) return "proceed"
+  // The deny tokens are comma/space-suffixed ("no,", "no ") on purpose so they
+  // never match "now"/"notice"; that leaves a bare "No" (lowercasing to exactly
+  // "no") matching neither, so an exact-match case is added codex-side — the
+  // approval gate REQUIRES a deny row, and real dialogs render a bare "2. No".
+  if (l === "no") return "deny"
+  if (containsAny(l, "exit", "deny", "reject", "cancel", "no,", "no ", "don't", "do not")) {
+    return "deny"
+  }
   return ""
+}
+
+function containsAny(s: string, ...subs: string[]): boolean {
+  return subs.some((sub) => s.includes(sub))
 }
 
 function findByAlias(req: InputRequest, alias: string): InputOption | null {
