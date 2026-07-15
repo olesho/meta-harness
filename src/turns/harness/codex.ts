@@ -353,14 +353,28 @@ export function DetectInput(text: string): InputRequest | null {
  * prompts as "› <text>" rows, so a user prompt that began with "1. " echoes as
  * "› 1. …" and a screen-wide scan would match it anywhere on screen — combined
  * with a quoted anchor and a proceed/deny-shaped enumeration the whole gate would
- * false-positive. Tying the marker to the same deduped rows that supply the
- * proceed/deny aliases closes that hole (an echo that collides on an already-seen
- * digit is deduped away and never contributes a highlight).
+ * false-positive into a deadlocked turn.
+ *
+ * The per-row flag alone is NOT sufficient either, because parseMenuOptions reads
+ * the WHOLE screen: an echo row is itself a parsed row, so `› 4. Deploy the thing`
+ * above a prose spoof lends its highlight to the gate (digit dedup only saves the
+ * case where the echo's digit collides with a real menu digit). So the rows are
+ * parsed from the text AFTER the anchor — codex renders scrollback above the
+ * dialog, so a past-prompt echo can never sit inside that tail. Verified against
+ * the corpus: the live dialogs' menus follow their anchor, so this does not
+ * perturb their parsed options or their inputID.
+ *
+ * Residual (accepted, documented): a highlighted numbered row rendered BELOW a
+ * prose-quoted anchor — e.g. the user typing "4. something" into the composer
+ * while such a reply is on screen — is still counted. Codex replaces the composer
+ * with the dialog while a real approval is up, so this shape is contrived; the
+ * ready-side gate (src/chat/ready.ts) is independent of it.
  */
 function detectApproval(text: string): InputRequest | null {
   const anchor = approvalAnchors.find((a) => text.includes(a))
   if (!anchor) return null
-  const opts = parseMenuOptions(text)
+  const tail = text.slice(text.indexOf(anchor) + anchor.length)
+  const opts = parseMenuOptions(tail)
   const req: InputRequest = {
     id: "",
     kind: KindApproval,
@@ -425,10 +439,11 @@ function parseMenuOptions(text: string): InputOption[] {
     const highlighted = m[1] !== undefined
     const num = m[2]!
     const label = cleanLabel(m[3]!)
-    // Dedup keeps the FIRST occurrence of a digit. A real dialog renders its
-    // highlighted row before any scrollback echo, so the live selector wins; an
-    // echo that collides on an already-seen digit is dropped and never lends its
-    // highlight to the approval gate.
+    // Dedup keeps the FIRST occurrence of a digit, so a scrollback echo that
+    // collides with an already-parsed menu digit is dropped. Note this is NOT by
+    // itself a defense against echoes lending a spurious "›" highlight to the
+    // approval gate (a non-colliding digit survives) — detectApproval parses from
+    // the anchor tail for that; see its comment.
     if (seen.has(num) || label === "") continue
     seen.add(num)
     opts.push({
