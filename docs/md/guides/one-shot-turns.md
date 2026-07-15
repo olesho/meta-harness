@@ -121,9 +121,12 @@ in the [CLI module doc](../modules/cli.md).
 | Turns | exactly one | many |
 | Process lifetime | opened + torn down per call | persists across turns |
 | Trust prompts | auto-accepted | you handle / policy |
+| Clarifying questions | unanswerable → deadline | surfaced; `answer()` resumes |
 | Store | internal `MemStore` | yours |
 | Interactive answers | no | `answer()` |
 | Best for | orchestrated steps, batch prompts | interactive sessions, follow-ups |
 
 Reach for one-shot for orchestrated or batch work; reach for a conversation when you need
-follow-up turns or interactive prompt handling.
+follow-up turns or interactive prompt handling — including when the model may stop
+mid-turn to [ask a clarifying question](handling-input.md#clarifying-questions-question--question_review),
+which a one-shot cannot answer (it runs to the deadline).

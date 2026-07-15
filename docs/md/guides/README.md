@@ -9,7 +9,7 @@ the [module reference](../modules/); for the mental model, [Concepts](../concept
 | [One-shot turns](one-shot-turns.md) | Run a single prompt → reply, in-process or via the CLI. |
 | [Resuming sessions](resuming-sessions.md) | Continue a prior harness session with `resume` / `Reopen`. |
 | [Reading history](reading-history.md) | Get conversation history and know its source (transcript vs store). |
-| [Handling input requests](handling-input.md) | Resolve trust dialogs and prompts — automatically or interactively. |
+| [Handling input requests](handling-input.md) | Resolve trust dialogs, prompts, and mid-turn clarifying questions — automatically or interactively. |
 | [Adding a harness](adding-a-harness.md) | Teach meta-harness a new coding agent. |
 
 All examples assume:

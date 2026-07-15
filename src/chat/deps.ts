@@ -17,6 +17,8 @@ export interface TurnsInputOption {
   alias?: string
   label: string
   keys: Uint8Array
+  /** Explanatory text rendered under the label, when the dialog shows one. */
+  description?: string
 }
 
 export interface TurnsInputRequest {
@@ -24,6 +26,12 @@ export interface TurnsInputRequest {
   kind: string
   prompt: string
   options: TurnsInputOption[]
+  /** For kind "question": the dialog's header/tab label, when rendered. */
+  header?: string
+  /** True when the prompt accepts multiple selections (each keys toggles). */
+  multiSelect?: boolean
+  /** Bytes that commit a multi-select answer after the toggles. */
+  submitKeys?: Uint8Array
 }
 
 /** One transcript entry read from the harness's own session log. */

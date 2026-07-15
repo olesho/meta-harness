@@ -253,11 +253,22 @@ See [Guides › Reading history](guides/reading-history.md).
 
 ## Input request
 
-When a harness blocks on an interactive prompt (trust dialog, y/n confirmation, a menu),
-the turns layer reports an **`InputRequest`**: `{ id, kind, prompt, options? }`, where
-each `InputOption` carries an `id`, a human `label`, a portable `alias` (`"proceed"` /
-`"deny"` / `"yes"` / `"no"`), and the raw `keys` to write. The `id` is a content hash —
-stable across redraws of the *same* prompt, different for a new one.
+When a harness blocks on an interactive prompt (trust dialog, y/n confirmation, a menu,
+a mid-turn clarifying question), the turns layer reports an **`InputRequest`**:
+`{ id, kind, prompt, options?, header?, multiSelect?, submitKeys? }`, where each
+`InputOption` carries an `id`, a human `label`, an optional `description`, a portable
+`alias` (`"proceed"` / `"deny"` / `"yes"` / `"no"` / `"other"`), and the raw `keys` to
+write. The `id` is a content hash — stable across redraws of the *same* prompt,
+different for a new one.
+
+Two kinds carry the **clarifying-question** dialog (Claude Code's `AskUserQuestion`
+tool): `"question"` — one question with its options — and `"question_review"` — the
+Submit/Cancel confirmation after the last question of a multi-question or multi-select
+dialog. A multi-question dialog surfaces one `question` request per question, each
+resolving as the next appears. These dialogs are why detection matters: the screen is
+neither busy nor a ready composer while one is up, so an undetected question is a
+silent hang, not a completed turn. See
+[Guides › Handling input](guides/handling-input.md#clarifying-questions-question--question_review).
 
 ### Disposition & InputPolicy
 

@@ -35,6 +35,40 @@ export function trustRequest(): TurnsInputRequest {
   }
 }
 
+/** A single-select clarifying-question request (AskUserQuestion dialog). */
+export function questionRequest(): TurnsInputRequest {
+  return {
+    id: "q-1",
+    kind: "question",
+    prompt: "Which color should I use?",
+    header: "Color",
+    options: [
+      { id: "1", alias: "", label: "Red", keys: enc.encode("1"), description: "Use red." },
+      { id: "2", alias: "", label: "Blue", keys: enc.encode("2"), description: "Use blue." },
+      { id: "3", alias: "other", label: "Type something.", keys: enc.encode("3\r") },
+      { id: "4", alias: "", label: "Chat about this", keys: enc.encode("4\r") },
+    ],
+  }
+}
+
+/** A multi-select clarifying-question request (checkbox rows + Tab commit). */
+export function multiSelectQuestionRequest(): TurnsInputRequest {
+  return {
+    id: "q-ms-1",
+    kind: "question",
+    prompt: "Which toppings should I add?",
+    header: "Toppings",
+    multiSelect: true,
+    submitKeys: enc.encode("\t"),
+    options: [
+      { id: "1", alias: "", label: "Cheese", keys: enc.encode("1") },
+      { id: "2", alias: "", label: "Mushrooms", keys: enc.encode("2") },
+      { id: "3", alias: "", label: "Olives", keys: enc.encode("3") },
+      { id: "4", alias: "other", label: "Type something", keys: enc.encode("4") },
+    ],
+  }
+}
+
 /** Builds a Conversation with an injected key recorder, mirroring newTestConv. */
 export function newTestConv(opts: Partial<Options>, rec: KeyRecorder): Conversation {
   return new Conversation({

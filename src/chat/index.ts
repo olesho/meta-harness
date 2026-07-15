@@ -54,6 +54,7 @@ export {
   ErrNoInputPending,
   ErrStaleInputRequest,
   ErrUnknownOption,
+  ErrNotMultiSelect,
   ErrQuitUnsupported,
   ErrResumeUnsupported,
   ErrNoHarnessSession,

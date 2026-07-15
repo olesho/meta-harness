@@ -115,6 +115,7 @@ class EmptyPromptError extends Error {}              // "one-shot: empty prompt"
 
 ```ts
 AutoAcceptTrust: InputPolicy   // answers the claude-code trust/bypass dialog with "proceed"
+                               // (trust_prompt ONLY — see the question caveat below)
 cleanEnv(env: string[]): string[]        // strip CLAUDECODE / CLAUDE_CODE_* so a nested harness is clean
 isLeakedClaudeEnv(key: string): boolean  // predicate cleanEnv() uses
 ```
@@ -124,6 +125,14 @@ isLeakedClaudeEnv(key: string): boolean  // predicate cleanEnv() uses
 never blocked behind Claude Code's folder-trust prompt. Pass your `env` through `cleanEnv`
 (the [CLI](cli.md) does this for you) so a harness launched from inside Claude Code doesn't
 inherit the outer session context.
+
+> **Clarifying-question caveat.** `AutoAcceptTrust` covers `trust_prompt` only. If the
+> model stops mid-turn to ask a [clarifying question](chat.md#clarifying-questions)
+> (`question` / `question_review`), the one-shot has no client to answer it and no
+> `inputPolicy` knob to arm — the turn waits until the `ctx` deadline (`DeadlineError` /
+> the `deadline` outcome). If your prompts can trigger `AskUserQuestion`, either instruct
+> the model not to ask (answer from assumptions instead) or drive a
+> [conversation](chat.md) and answer the question.
 
 ---
 

@@ -132,10 +132,17 @@ has no quit sequence.
 
 ```ts
 answer(ctx: Context, requestID: string, ans: InputAnswer): Promise<void>
+pendingInput(): InputRequest | null
 ```
-Resolve the currently-pending [interactive prompt](#interactive-input). `requestID` must
-match the surfaced request. Throws [`ErrNoInputPending`](#errors),
-[`ErrStaleInputRequest`](#errors), [`ErrUnknownOption`](#errors).
+`answer` resolves the currently-pending [interactive prompt](#interactive-input).
+`requestID` must match the surfaced request. `ans` names an option by id, alias, or
+label; multi-select prompts take `optionIDs` (every option to toggle before the commit).
+Throws [`ErrNoInputPending`](#errors), [`ErrStaleInputRequest`](#errors),
+[`ErrUnknownOption`](#errors), [`ErrNotMultiSelect`](#errors).
+
+`pendingInput` is the polling counterpart of `EventInputRequest`: the prompt currently
+awaiting a client answer (null when none) — how a caller that missed the event still
+detects "the harness stopped and is asking something" and reads the question.
 
 ### Observing
 
@@ -267,9 +274,13 @@ When the harness blocks on a prompt, chat resolves it through a ladder — **aut
 ### Input types
 
 ```ts
-interface InputRequest { id: string; kind: string; prompt: string; options?: InputOption[] }
-interface InputOption  { id: string; alias?: string; label: string }
-interface InputAnswer  { optionID?: string; text?: string }
+interface InputRequest {
+  id: string; kind: string; prompt: string; options?: InputOption[]
+  header?: string        // kind "question": the dialog's tab label
+  multiSelect?: boolean  // kind "question": answer with optionIDs
+}
+interface InputOption  { id: string; alias?: string; label: string; description?: string }
+interface InputAnswer  { optionID?: string; optionIDs?: string[]; text?: string }
 
 type Disposition = { kind: DispositionKind; optionID?: string; text?: string }
 type DispositionKind = "ask" | "answer" | "deny"          // DispositionAsk / DispositionAnswer / DispositionDeny
@@ -278,6 +289,17 @@ interface InputPolicy { default?: DispositionKind; byKind?: Record<string, Dispo
 
 `byKind[req.kind]` wins over `default`. See
 [Guides › Handling input](../guides/handling-input.md) for the full ladder and recipes.
+
+### Clarifying questions
+
+When the harness stops mid-turn to ask the user something (Claude Code's
+`AskUserQuestion` dialog), the turn does NOT complete — a request of kind `"question"`
+surfaces instead (then `"question_review"` for the Submit/Cancel confirmation after the
+last question of a multi-question or multi-select dialog). Answer options with
+`{ optionID }` / `{ optionIDs }`; a free-text answer is a two-step — answer the
+`"other"`-aliased option (declines the dialog; the turn completes) and `send` the text as
+the next message. Full recipes:
+[Guides › Handling input › Clarifying questions](../guides/handling-input.md#clarifying-questions-question--question_review).
 
 ---
 
@@ -335,6 +357,7 @@ All [sentinels](../concepts.md#sentinel-errors) — match by identity.
 | `ErrNoInputPending` | `answer` with no prompt pending. |
 | `ErrStaleInputRequest` | `answer` with a `requestID` that isn't the current prompt. |
 | `ErrUnknownOption` | `answer` with an option id/alias that matches none. |
+| `ErrNotMultiSelect` | `answer` with several `optionIDs` on a single-select prompt. |
 | `ErrQuitUnsupported` | `quit` on a harness with no quit sequence. |
 | `ErrResumeUnsupported` | `resume`/`Reopen` on a harness that can't resume. |
 | `ErrNoHarnessSession` | `Reopen` when the stored session never captured a harness id. |

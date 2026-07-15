@@ -53,19 +53,35 @@ export interface Session {
 /** Client-facing view of a blocking interactive prompt (omits keystrokes). */
 export interface InputRequest {
     id: string;
+    /**
+     * "trust_prompt" | "question" (the harness asked a clarifying question
+     * mid-turn) | "question_review" (the submit/cancel confirmation after the
+     * last question of a multi-question/multi-select dialog) | harness kinds.
+     */
     kind: string;
     prompt: string;
     options?: InputOption[];
+    /** For kind "question": the dialog's header/tab label, when rendered. */
+    header?: string;
+    /** True when the prompt accepts MULTIPLE selections; answer with optionIDs. */
+    multiSelect?: boolean;
 }
 /** One selectable choice in an InputRequest. */
 export interface InputOption {
     id: string;
     alias?: string;
     label: string;
+    /** Explanatory text rendered under the label, when the dialog shows one. */
+    description?: string;
 }
 /** How a caller answers an InputRequest. */
 export interface InputAnswer {
     optionID?: string;
+    /**
+     * For multiSelect requests: every option to toggle before the answer is
+     * committed. Takes precedence over optionID when non-empty.
+     */
+    optionIDs?: string[];
     text?: string;
 }
 /** How a policy disposes of a matched InputRequest. */

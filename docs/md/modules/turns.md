@@ -55,22 +55,35 @@ interface Event {
 ```ts
 interface InputRequest {
   id: string              // stable across redraws of the SAME prompt; changes for a new one
-  kind: string            // "trust_prompt" | "menu_select" | "confirm" | "text_input" | harness-specific
+  kind: string            // "trust_prompt" | "question" | "question_review" | "menu_select" | …
   prompt: string
   options?: InputOption[] // undefined for free-text prompts
+  header?: string         // kind "question": the dialog's tab label
+  multiSelect?: boolean   // kind "question": options TOGGLE; commit with submitKeys
+  submitKeys?: Uint8Array // bytes committing a multi-select answer after toggles
 }
 
 interface InputOption {
   id: string              // the answer references this (e.g. "1")
-  alias: string           // portable intent: "proceed" | "deny" | "yes" | "no" | ""
+  alias: string           // portable intent: "proceed" | "deny" | "yes" | "no" | "other" | ""
   label: string
   keys: Uint8Array        // bytes to write to the PTY to choose this option
+  description?: string    // explanatory text rendered under the label, when shown
 }
 ```
 
 The `id` is a content hash of the prompt — spoof-resistant and stable while the same
 prompt is shown. [`chat`](chat.md) re-surfaces these as its own `InputRequest` and uses
 `keys`/`alias` to answer.
+
+Two kinds carry the mid-turn **clarifying-question** dialog (Claude Code's
+`AskUserQuestion` tool, shapes verified live on 2.1.210): `"question"` — one question with
+its options (plus the UI's `"other"`-aliased free-text affordance and "Chat about this");
+and `"question_review"` — the Submit/Cancel confirmation after the last question of a
+multi-question or multi-select dialog (`proceed`/`deny` aliases). A multi-question dialog
+surfaces one `question` request per question: answering one emits `InputResolved` for it
+and `InputRequested` for the next. Without this detection the dialog is a silent hang —
+the screen is neither busy nor a ready composer, so no other signal ever fires.
 
 ### `Turn`
 
@@ -187,7 +200,8 @@ const a = claudecode.New()   // also: generic.New(), codex.New(), opencode.New()
   (`waiting_for_input → TurnComplete`, `blocked_by_cost`/`retry_later`/`api_error →
   Blocked`, `failed`/`interrupted`/`idle → Errored`). Every other adapter extends it.
 - **`claudecode`** — thinking-marker turn completion, interrupt detection, trust-prompt
-  detection; implements `MessageExtractor`, `BusyDetector`, `Quitter`, `SessionResumer`,
+  detection, AskUserQuestion detection (`question`/`question_review` requests); implements
+  `MessageExtractor`, `BusyDetector`, `Quitter`, `SessionResumer`,
   `RawSessionIDExtractor`, `TranscriptReader`.
 - **`codex`** — `/status`-box and resume-hint session id (`SessionIDExtractor`,
   `RawSessionIDExtractor`, `SessionIDPrimer`), `SessionResumer`, `SessionForkResumer`
