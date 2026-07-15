@@ -83,7 +83,7 @@ turns/index.ts
   TurnComplete: string="turn_complete"
   Watch: function
   Watcher: class{close,events,pumpDone,send}
-  claudecode: object{ClaudeCodeAdapter,DetectInput,New}
+  claudecode: object{ClaudeCodeAdapter,DetectInput,DetectQuestion,New}
   codex: object{AutoDismissKeys,CODEX_STATUS_MIN_COLS,CodexAdapter,DetectInput,KindModelMigration,KindNotice,KindUpdateNotice,New,PromptReady}
   generic: object{GenericAdapter,New}
   opencode: object{New,OpenCodeAdapter}
@@ -133,7 +133,7 @@ transcript/index.ts
 chat/index.ts
   Adapter: type
   Backend: type
-  Conversation: class{acquireControl,adapterBusy,adapterPromptNotAccepted,adapterQuitSequence,adapterRawSessionID,answer,assistantText,awaitComposerEcho,awaitPromptReady,awaitPromptReadyUntil,captureAndPersistSessionID,captureFromScreen,captureRawSessionID,captureTranscriptWatermark,close,consumeWatcher,echoBoundDur,emit,events,extractSessionID,getAdapter,handleInputRequested,handleInputResolved,handleTurnsEvent,history,historyWithSource,idleCompletionWatcher,idleGapDur,inputAwaitingClient,isClosed,markerGapDur,maybeExtractSessionID,maybeIdleComplete,policyOption,primeBoundDur,primeSessionID,quit,readTranscriptTurns,screenSnapshot,send,sessionID,signalInputState,startPumps,transcriptOverrideEligible,transcriptProofOfCurrentTurn,tryAutoDismissCodex,tryResolveInput,tryTranscriptProof,waitReadyForSend,wrapper,writeAnswer,writeKeys,writeMessageAndSubmit}
+  Conversation: class{acquireControl,adapterBusy,adapterPromptNotAccepted,adapterQuitSequence,adapterRawSessionID,answer,assistantText,awaitComposerEcho,awaitPromptReady,awaitPromptReadyUntil,captureAndPersistSessionID,captureFromScreen,captureRawSessionID,captureTranscriptWatermark,close,consumeWatcher,echoBoundDur,emit,events,extractSessionID,getAdapter,handleInputRequested,handleInputResolved,handleTurnsEvent,history,historyWithSource,idleCompletionWatcher,idleGapDur,inputAwaitingClient,isClosed,markerGapDur,maybeExtractSessionID,maybeIdleComplete,pendingInput,policyOption,primeBoundDur,primeSessionID,quit,readTranscriptTurns,screenSnapshot,send,sessionID,signalInputState,startPumps,transcriptOverrideEligible,transcriptProofOfCurrentTurn,tryAutoDismissCodex,tryResolveInput,tryTranscriptProof,waitReadyForSend,wrapper,writeAnswer,writeKeys,writeMessageAndSubmit}
   ConversationEvent: type
   Disposition: type
   DispositionAnswer: string="answer"
@@ -146,6 +146,7 @@ chat/index.ts
   ErrNoControl: object{code,name}
   ErrNoHarnessSession: object{code,name}
   ErrNoInputPending: object{code,name}
+  ErrNotMultiSelect: object{code,name}
   ErrQuitUnsupported: object{code,name}
   ErrResumeUnsupported: object{code,name}
   ErrStaleInputRequest: object{code,name}

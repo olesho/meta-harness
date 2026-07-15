@@ -22,6 +22,8 @@ export const ErrNoInputPending = defineSentinel("chat/no-input-pending", "chat: 
 export const ErrStaleInputRequest = defineSentinel("chat/stale-input-request", "chat: stale input request id");
 /** Returned by Answer when the supplied option id/alias matches none. */
 export const ErrUnknownOption = defineSentinel("chat/unknown-option", "chat: unknown input option");
+/** Returned by Answer when optionIDs names several options on a single-select prompt. */
+export const ErrNotMultiSelect = defineSentinel("chat/not-multi-select", "chat: prompt does not accept multiple selections");
 /** Returned by Quit when the harness adapter exposes no graceful-quit sequence. */
 export const ErrQuitUnsupported = defineSentinel("chat/quit-unsupported", "chat: harness has no graceful-quit sequence");
 /** Returned by Open/Reopen when the harness adapter cannot build resume args. */

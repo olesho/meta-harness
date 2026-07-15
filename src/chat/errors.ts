@@ -60,6 +60,12 @@ export const ErrUnknownOption: Sentinel = defineSentinel(
   "chat: unknown input option",
 )
 
+/** Returned by Answer when optionIDs names several options on a single-select prompt. */
+export const ErrNotMultiSelect: Sentinel = defineSentinel(
+  "chat/not-multi-select",
+  "chat: prompt does not accept multiple selections",
+)
+
 /** Returned by Quit when the harness adapter exposes no graceful-quit sequence. */
 export const ErrQuitUnsupported: Sentinel = defineSentinel(
   "chat/quit-unsupported",

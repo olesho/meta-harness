@@ -63,24 +63,46 @@ export interface Event {
 export interface InputRequest {
   /** Stable across redraws of the SAME prompt; changes for a new prompt. */
   id: string
-  /** "trust_prompt" | "menu_select" | "confirm" | "text_input" | harness kinds. */
+  /**
+   * "trust_prompt" | "menu_select" | "confirm" | "text_input" | "question"
+   * (the harness asked the user a clarifying question mid-turn) |
+   * "question_review" (the submit/cancel confirmation after the last
+   * question of a multi-question or multi-select dialog) | harness kinds.
+   */
   kind: string
   /** The question text shown to the user. */
   prompt: string
   /** Selectable choices for menu/confirm/trust prompts; undefined for text. */
   options?: InputOption[]
+  /** For kind "question": the dialog's header/tab label, when rendered. */
+  header?: string
+  /**
+   * For kind "question": true when the dialog accepts MULTIPLE selections
+   * (checkbox rows). Each option's keys then TOGGLE that choice; write
+   * submitKeys after toggling to commit (which surfaces a "question_review"
+   * request for the final confirmation).
+   */
+  multiSelect?: boolean
+  /** Bytes that commit a multi-select answer after toggles (server-side only). */
+  submitKeys?: Uint8Array
 }
 
 /** One selectable choice in an InputRequest. */
 export interface InputOption {
   /** Stable identifier the answer references (e.g. "1"). */
   id: string
-  /** Portable intent: "proceed" | "deny" | "yes" | "no" | "" (none). */
+  /**
+   * Portable intent: "proceed" | "deny" | "yes" | "no" | "other" (free-text
+   * escape hatch — selecting it declines the structured question and returns
+   * control to the composer) | "" (none).
+   */
   alias: string
   /** Human-readable choice text ("Yes, proceed"). */
   label: string
   /** Bytes to write to the PTY to select this option (server-side only). */
   keys: Uint8Array
+  /** Explanatory text rendered under the label, when the dialog shows one. */
+  description?: string
 }
 
 /**

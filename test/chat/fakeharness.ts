@@ -162,6 +162,11 @@ export class Builder {
     return this.waitInput(quoteMeta(SubmitCR), true, "submit-cr")
   }
 
+  /** Blocks until the wrapper writes a bare digit (question-option select). */
+  AwaitDigit(): this {
+    return this.waitInput("[0-9]", false, "digit")
+  }
+
   private ccScreen(...lines: string[]): string {
     return lines.join("\n") + "\n"
   }
@@ -245,6 +250,53 @@ export class Builder {
       this.ccScreen(ccHeader, "", "⏺ " + body, "", ccPrompt, this.resumeHint()),
       true,
     )
+  }
+
+  // --- claude-code AskUserQuestion vocabulary (shapes verified on 2.1.210) ---
+
+  private static readonly qRule = "─".repeat(120)
+
+  /**
+   * Paints an AskUserQuestion QUESTION pane: tab strip, question text, numbered
+   * options (+ the UI's "Type something." / "Chat about this" affordances), and
+   * the select footer. Idle-but-not-ready: no busy footer, no marker, no empty
+   * composer — the exact silent-hang shape the question detection must catch.
+   * `options` entries are [label, description?].
+   */
+  Question(delayMs: number, tabStrip: string, question: string, options: string[][]): this {
+    const lines = [ccHeader, "", "⏺ I'll ask you the question now.", Builder.qRule, tabStrip, "", question, ""]
+    options.forEach(([label, desc], i) => {
+      lines.push(`${i === 0 ? "❯" : " "} ${i + 1}. ${label}`)
+      if (desc) lines.push(`     ${desc}`)
+    })
+    const n = options.length
+    lines.push(`  ${n + 1}. Type something.`)
+    lines.push(Builder.qRule)
+    lines.push(`  ${n + 2}. Chat about this`)
+    lines.push("")
+    lines.push("Enter to select · ↑/↓ to navigate · Esc to cancel")
+    return this.frame(delayMs, this.ccScreen(...lines), false)
+  }
+
+  /** Paints the REVIEW pane shown after the last question of a multi-question dialog. */
+  QuestionReview(delayMs: number, tabStrip: string, answers: Array<[string, string]>): this {
+    const lines = [ccHeader, "", Builder.qRule, tabStrip, "", "Review your answers", ""]
+    for (const [q, a] of answers) {
+      lines.push(` ● ${q}`)
+      lines.push(`   → ${a}`)
+    }
+    lines.push("", "Ready to submit your answers?", "", "❯ 1. Submit answers", "  2. Cancel")
+    return this.frame(delayMs, this.ccScreen(...lines), false)
+  }
+
+  /** Paints the answered-questions tool block with the turn back in flight. */
+  QuestionAnswered(delayMs: number, answers: Array<[string, string]>): this {
+    const lines = [ccHeader, "", "⏺ User answered Claude's questions:"]
+    answers.forEach(([q, a], i) => {
+      lines.push(`${i === 0 ? "  ⎿ " : "    "} · ${q} → ${a}`)
+    })
+    lines.push("", ccSpinner, "", ccPrompt, ccBusy)
+    return this.frame(delayMs, this.ccScreen(...lines), false)
   }
 
   // --- codex vocabulary ---

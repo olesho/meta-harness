@@ -18,7 +18,7 @@ import { Context, isSentinel, wrap } from "../internal/async/index.js";
 import { ErrEmptySessionID, ErrSessionNotFound } from "../transcript/errors.js";
 import { stripIDEContextTags } from "../transcript/stripTags.js";
 import { RoleUser, RoleAssistant, TurnStatePending, TurnStateComplete, TurnStateErrored, EventTurn, EventInputRequest, EventInputResolved, DispositionAnswer, DispositionDeny, HistorySourceTranscript, HistorySourceStore, newID, } from "./types.js";
-import { ErrInvalidOptions, ErrUnknownHarness, ErrNoControl, ErrTurnInFlight, ErrClosed, ErrInputPending, ErrNoInputPending, ErrStaleInputRequest, ErrUnknownOption, ErrQuitUnsupported, ErrResumeUnsupported, ErrNoHarnessSession, } from "./errors.js";
+import { ErrInvalidOptions, ErrUnknownHarness, ErrNoControl, ErrTurnInFlight, ErrClosed, ErrInputPending, ErrNoInputPending, ErrStaleInputRequest, ErrUnknownOption, ErrNotMultiSelect, ErrQuitUnsupported, ErrResumeUnsupported, ErrNoHarnessSession, } from "./errors.js";
 import { newControlQueue } from "./control.js";
 import { submitKeyForHarness, requiresPromptReadiness, readyForInput } from "./ready.js";
 import { cleanHarnessEnv } from "./env.js";
@@ -377,6 +377,17 @@ export class Conversation {
     inputAwaitingClient() {
         return this.currentInput !== null && this.inputSurfaced;
     }
+    /**
+     * The interactive prompt currently awaiting a client answer, or null. The
+     * polling counterpart of the EventInputRequest event: a caller that missed
+     * the event (attached late, single events() consumer elsewhere) can still
+     * read the pending question and resolve it via answer().
+     */
+    pendingInput() {
+        if (!this.inputAwaitingClient())
+            return null;
+        return toClientInputRequest(this.currentInput);
+    }
     writeKeys(p) {
         if (this.writeStdin) {
             this.writeStdin(p);
@@ -527,7 +538,27 @@ export class Conversation {
             const submit = submitKeyForHarness(this.opts.harness, preWriteScreen);
             return this.writeMessageAndSubmit(ans.text ?? "", preWriteScreen, submit);
         }
-        const opt = findOption(req, ans.optionID ?? "");
+        // Multi-select prompts: toggle every named option, then commit with the
+        // request's submit keys (a single optionID answer is normalized into the
+        // same toggle-and-commit path — a bare toggle would never resolve the
+        // prompt). Validation precedes any write so a bad id surfaces cleanly.
+        const ids = ans.optionIDs && ans.optionIDs.length > 0
+            ? ans.optionIDs
+            : ans.optionID
+                ? [ans.optionID]
+                : [];
+        if (req.multiSelect && req.submitKeys) {
+            const chosen = ids.map((s) => findOption(req, s));
+            if (ids.length === 0 || chosen.some((o) => o === null))
+                throw ErrUnknownOption;
+            for (const o of chosen)
+                this.writeKeys(o.keys);
+            this.writeKeys(req.submitKeys);
+            return Promise.resolve();
+        }
+        if (ids.length > 1)
+            throw ErrNotMultiSelect;
+        const opt = findOption(req, ids[0] ?? "");
         if (!opt)
             throw ErrUnknownOption;
         this.writeKeys(opt.keys);
@@ -1263,8 +1294,17 @@ function resolvePolicy(p, kind) {
 function toClientInputRequest(req) {
     const out = { id: req.id, kind: req.kind, prompt: req.prompt };
     if (req.options && req.options.length > 0) {
-        out.options = req.options.map((o) => ({ id: o.id, alias: o.alias, label: o.label }));
+        out.options = req.options.map((o) => ({
+            id: o.id,
+            alias: o.alias,
+            label: o.label,
+            ...(o.description !== undefined ? { description: o.description } : {}),
+        }));
     }
+    if (req.header !== undefined)
+        out.header = req.header;
+    if (req.multiSelect)
+        out.multiSelect = true;
     return out;
 }
 function findOption(req, s) {

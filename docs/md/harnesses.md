@@ -77,7 +77,13 @@ The most fully-supported harness. Name `claude-code`, binary `claude`.
   `~/.claude/projects/<encoded-cwd>/<uuid>.jsonl` (tool-aware, returns `Event[]`).
 - **Interactive prompts.** Folder-trust / "bypass permissions" dialogs are detected as
   `trust_prompt` input requests — the [one-shot loop](modules/oneshot.md) auto-accepts
-  them via `AutoAcceptTrust`.
+  them via `AutoAcceptTrust`. The mid-turn `AskUserQuestion` dialog (shapes verified
+  live on 2.1.210) is detected as `question` / `question_review` requests — single- and
+  multi-question, multi-select, with the UI's free-text ("Type something.", alias
+  `other`) and "Chat about this" affordances parsed as options. Selection mechanics are
+  encoded in the option `keys`: a bare digit selects (or toggles, for multi-select;
+  `submitKeys` = Tab commits), while the two UI affordances need digit+CR. See
+  [Guides › Handling input](guides/handling-input.md#clarifying-questions-question--question_review).
 - **Wrapper patterns.** Rich: API-error lines (with tree-glyph prefixes), session-limit
   banners (`… resets HH:MM (TZ)` → a `resumeAt` instant), plus cost/retry/prompt
   fingerprints.

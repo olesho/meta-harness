@@ -41,6 +41,32 @@ The stored `Session` persists only `harness`, `workingDir`, and
 never captured a harness session id, and surfaces `ErrResumeUnsupported` when its
 harness cannot resume.
 
+## Clarifying questions (harness asks the user something)
+
+When Claude Code stops mid-turn to ask a clarifying question (its
+`AskUserQuestion` dialog), the turn does not complete — the question surfaces
+as an `EventInputRequest` of kind `question` (then `question_review` for the
+Submit/Cancel confirmation of multi-question / multi-select dialogs), and the
+turn resumes once it is answered:
+
+```ts
+for await (const ev of conv.events()) {
+  if (ev.type === EventInputRequest && ev.input?.kind === "question") {
+    // ev.input.prompt = "Which color should I use?", ev.input.options = Red/Blue/…
+    const release = await conv.acquireControl(ctx)
+    try { await conv.answer(ctx, ev.input.id, { optionID: "Blue" }) } finally { release() }
+  }
+  if (ev.type === EventTurn && ev.turn?.state === TurnStateComplete) break
+}
+```
+
+`Conversation.pendingInput()` is the polling counterpart (the pending question,
+or null). Free-text answers are a two-step: answer the `"other"`-aliased option
+(the dialog closes and the turn completes as "declined"), then `send` the text
+as the next message. Recipes:
+[Guides › Handling input](docs/md/guides/handling-input.md#clarifying-questions-question--question_review).
+Live round-trip test: `LIVE_CLAUDE=1 npx vitest run test/chat/live_question.test.ts`.
+
 ## Autonomous pipeline
 
 This project is wired to the `META-HARNESS` fleet-db workspace via the

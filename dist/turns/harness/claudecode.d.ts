@@ -42,6 +42,25 @@ export declare function New(): ClaudeCodeAdapter;
 /**
  * DetectInput recognizes a blocking interactive dialog in the rendered screen
  * text and returns the structured request, or null when none is present.
+ * Startup dialogs (trust/bypass) win over question dialogs; the two cannot
+ * render simultaneously.
  */
 export declare function DetectInput(text: string): InputRequest | null;
+/**
+ * DetectQuestion recognizes the AskUserQuestion dialog Claude Code renders
+ * when the model asks the user a clarifying question mid-turn (verified live
+ * against 2.1.210). Two panes exist:
+ *
+ *   - a QUESTION pane (kind "question"): tab-strip line, question text,
+ *     numbered options, "Enter to select ·…" footer. Digit keys select an
+ *     option directly (single-select) or toggle its checkbox (multi-select).
+ *   - a REVIEW pane (kind "question_review"): after the last question of a
+ *     multi-question or multi-select dialog — an answers summary plus a
+ *     "Ready to submit your answers?" Submit/Cancel menu, no select footer.
+ *
+ * Returns null when neither pane is fully rendered. While either pane is up
+ * the harness is idle-but-not-ready: no busy marker, no end-of-turn marker,
+ * no empty composer — without this detection the turn would hang silently.
+ */
+export declare function DetectQuestion(text: string): InputRequest | null;
 //# sourceMappingURL=claudecode.d.ts.map

@@ -116,8 +116,8 @@ Key points:
 - **`send` returns the assistant turn id**, not the reply. The reply arrives through
   `events()` (or later via `history()`), because a turn can take many screen updates,
   tool calls, and possibly an interactive prompt before it completes.
-- **Interactive prompts** (trust dialogs, y/n) surface as `EventInputRequest`; resolve
-  them with `conv.answer(...)` or pre-configure an
+- **Interactive prompts** (trust dialogs, y/n, mid-turn clarifying questions) surface as
+  `EventInputRequest`; resolve them with `conv.answer(...)` or pre-configure an
   [`inputPolicy`](guides/handling-input.md).
 
 Full walkthrough: [Guides › Building a conversation](guides/conversation.md).
