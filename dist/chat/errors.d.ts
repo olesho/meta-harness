@@ -17,6 +17,8 @@ export declare const ErrNoInputPending: Sentinel;
 export declare const ErrStaleInputRequest: Sentinel;
 /** Returned by Answer when the supplied option id/alias matches none. */
 export declare const ErrUnknownOption: Sentinel;
+/** Returned by Answer when optionIDs names several options on a single-select prompt. */
+export declare const ErrNotMultiSelect: Sentinel;
 /** Returned by Quit when the harness adapter exposes no graceful-quit sequence. */
 export declare const ErrQuitUnsupported: Sentinel;
 /** Returned by Open/Reopen when the harness adapter cannot build resume args. */

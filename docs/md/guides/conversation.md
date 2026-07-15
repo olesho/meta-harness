@@ -126,9 +126,11 @@ try {
 }
 ```
 
-Interactive prompts (trust dialogs, y/n) surface as `EventInputRequest` rather than
-completing the turn — resolve them per [Handling input](handling-input.md), or pre-arm an
-[`inputPolicy`](../modules/chat.md#interactive-input) at `Open`.
+Interactive prompts (trust dialogs, y/n, and the harness asking a mid-turn clarifying
+question) surface as `EventInputRequest` rather than completing the turn — resolve them
+per [Handling input](handling-input.md), or pre-arm an
+[`inputPolicy`](../modules/chat.md#interactive-input) at `Open`. A turn that seems stuck
+may simply be waiting on one: check `conv.pendingInput()`.
 
 ---
 

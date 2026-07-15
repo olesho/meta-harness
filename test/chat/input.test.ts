@@ -4,6 +4,7 @@ import { Context } from "../../src/internal/async/index.ts"
 import {
   ErrNoControl,
   ErrNoInputPending,
+  ErrNotMultiSelect,
   ErrStaleInputRequest,
   ErrUnknownOption,
   isSentinel,
@@ -14,7 +15,13 @@ import {
   DispositionAnswer,
   DispositionDeny,
 } from "../../src/chat/types.ts"
-import { KeyRecorder, trustRequest, newTestConv } from "./helpers.ts"
+import {
+  KeyRecorder,
+  multiSelectQuestionRequest,
+  newTestConv,
+  questionRequest,
+  trustRequest,
+} from "./helpers.ts"
 
 async function caught(p: Promise<unknown>): Promise<unknown> {
   try {
@@ -102,6 +109,128 @@ describe("Answer", () => {
     } finally {
       release()
     }
+  })
+})
+
+describe("Answer: question prompts", () => {
+  test("single-select question answers with the bare digit", async () => {
+    const rec = new KeyRecorder()
+    const c = newTestConv({ harness: "claude-code" }, rec)
+    const release = await c.queue.acquire(Context.background())
+    try {
+      c.handleInputRequested(questionRequest())
+      const { value, ok } = c.eventCh.tryReceive()
+      expect(ok).toBe(true)
+      expect(value!.type).toBe(EventInputRequest)
+      expect(value!.input!.kind).toBe("question")
+      expect(value!.input!.header).toBe("Color")
+      expect(value!.input!.options![0]!.description).toBe("Use red.")
+
+      // Label matching works alongside ids; the answer is the digit alone —
+      // in a multi-question dialog a trailing CR would leak into the NEXT
+      // question pane and select its highlighted option.
+      await c.answer(Context.background(), "q-1", { optionID: "Blue" })
+      expect(rec.text()).toBe("2")
+    } finally {
+      release()
+    }
+  })
+
+  test("multi-select toggles every named option then commits", async () => {
+    const rec = new KeyRecorder()
+    const c = newTestConv({ harness: "claude-code" }, rec)
+    const release = await c.queue.acquire(Context.background())
+    try {
+      c.handleInputRequested(multiSelectQuestionRequest())
+      await c.answer(Context.background(), "q-ms-1", { optionIDs: ["1", "Olives"] })
+      expect(rec.text()).toBe("13\t")
+    } finally {
+      release()
+    }
+  })
+
+  test("multi-select normalizes a single optionID into toggle-and-commit", async () => {
+    const rec = new KeyRecorder()
+    const c = newTestConv({ harness: "claude-code" }, rec)
+    const release = await c.queue.acquire(Context.background())
+    try {
+      c.handleInputRequested(multiSelectQuestionRequest())
+      await c.answer(Context.background(), "q-ms-1", { optionID: "2" })
+      expect(rec.text()).toBe("2\t")
+    } finally {
+      release()
+    }
+  })
+
+  test("multiple optionIDs on a single-select prompt is rejected", async () => {
+    const rec = new KeyRecorder()
+    const c = newTestConv({ harness: "claude-code" }, rec)
+    const release = await c.queue.acquire(Context.background())
+    try {
+      c.handleInputRequested(questionRequest())
+      const err = await caught(
+        c.answer(Context.background(), "q-1", { optionIDs: ["1", "2"] }),
+      )
+      expect(isSentinel(err, ErrNotMultiSelect)).toBe(true)
+      expect(rec.data.length).toBe(0)
+    } finally {
+      release()
+    }
+  })
+
+  test("unknown id among optionIDs writes nothing", async () => {
+    const rec = new KeyRecorder()
+    const c = newTestConv({ harness: "claude-code" }, rec)
+    const release = await c.queue.acquire(Context.background())
+    try {
+      c.handleInputRequested(multiSelectQuestionRequest())
+      const err = await caught(
+        c.answer(Context.background(), "q-ms-1", { optionIDs: ["1", "nope"] }),
+      )
+      expect(isSentinel(err, ErrUnknownOption)).toBe(true)
+      expect(rec.data.length).toBe(0)
+    } finally {
+      release()
+    }
+  })
+})
+
+describe("pendingInput", () => {
+  test("mirrors the surfaced request and clears on resolve", () => {
+    const rec = new KeyRecorder()
+    const c = newTestConv({ harness: "claude-code" }, rec)
+    expect(c.pendingInput()).toBeNull()
+
+    c.handleInputRequested(questionRequest())
+    const pending = c.pendingInput()
+    expect(pending).not.toBeNull()
+    expect(pending!.kind).toBe("question")
+    expect(pending!.prompt).toBe("Which color should I use?")
+    expect(pending!.options!.map((o) => o.label)).toEqual([
+      "Red",
+      "Blue",
+      "Type something.",
+      "Chat about this",
+    ])
+    // The client view never exposes keystrokes.
+    expect("keys" in pending!.options![0]!).toBe(false)
+
+    c.handleInputResolved({ id: "q-1", kind: "", prompt: "" })
+    expect(c.pendingInput()).toBeNull()
+  })
+
+  test("policy-resolved requests are not pending for the client", () => {
+    const rec = new KeyRecorder()
+    const c = newTestConv(
+      {
+        harness: "claude-code",
+        inputPolicy: { byKind: { question: { kind: DispositionAnswer, optionID: "1" } } },
+      },
+      rec,
+    )
+    c.handleInputRequested(questionRequest())
+    expect(rec.text()).toBe("1")
+    expect(c.pendingInput()).toBeNull()
   })
 })
 

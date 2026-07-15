@@ -29,6 +29,32 @@ const interruptMarker = "⎿  Interrupted · What should Claude do instead?";
 const trustAnchor = "Do you trust the files in this folder?";
 const trustAnchorAlt = "Is this a project you created or one you trust?";
 const bypassAnchor = "Bypass Permissions mode";
+// AskUserQuestion dialog anchors (verified live against 2.1.210). The dialog
+// renders a tab-strip line ("☐ Color", or "←  ☒ Color  ☐ Size  ✔ Submit  →"
+// for multi-question/multi-select), the question text, a numbered option menu,
+// and a footer. The footer is the question pane's required anchor; the review
+// pane (after the last question) has no such footer and anchors on its own
+// confirmation line instead.
+const questionFooterAnchor = "Enter to select ·";
+const questionReviewAnchor = "Ready to submit your answers?";
+const questionSubmitTab = "✔ Submit";
+// The UI-injected free-text escape hatch ("Type something." single-select,
+// "Type something" checkbox row in multi-select). Selecting it declines the
+// structured question and returns control to the composer.
+const questionOtherLabel = "Type something";
+// The UI-injected "Chat about this" affordance below the option rule.
+const questionChatLabel = "Chat about this";
+// questionTabRE matches the dialog's tab-strip line: optional "←", then a
+// ☐/☒ checkbox glyph starting the first tab entry. Checkbox glyphs also occur
+// in rendered to-do lists inside replies, so the tab line alone is never
+// treated as a dialog — DetectQuestion additionally requires the footer (or
+// the review anchor) below it.
+const questionTabRE = /^[^\S\r\n]*(?:←[^\S\r\n]+)?[☐☒][^\S\r\n]/u;
+// questionOptionRE matches one option row: optional "❯" highlight, a number,
+// then the label ("❯ 1. Red", "  2. [ ] Mushrooms").
+const questionOptionRE = /^[^\S\r\n]*(?:❯[^\S\r\n]+)?(\d+)\.[^\S\n]+(\S[^\n]*)$/u;
+// questionCheckboxRE strips the multi-select checkbox marker off a label.
+const questionCheckboxRE = /^\[[^\]]*\][^\S\n]+/u;
 // menuRE matches a numbered menu item line, e.g. "❯ 1. Yes, proceed".
 const menuRE = /^[^\dA-Za-z\n]*(\d)\.[^\S\n]+(\S[^\n]*)$/gm;
 // bulletRE matches the start of a rendered assistant/tool message ("⏺ <text>").
@@ -73,10 +99,19 @@ export class ClaudeCodeAdapter extends GenericAdapter {
                 out.push({ kind: TurnComplete, reason: "claude-code: " + latest });
             }
         }
-        // Blocking interactive prompt — transition on the request ID.
+        // Blocking interactive prompt — transition on the request ID. A DIFFERENT
+        // request replacing the current one (the next question of a multi-question
+        // dialog, or its review pane) resolves the old before surfacing the new.
         const req = DetectInput(snap.text);
         if (req) {
             if (req.id !== this.lastInputID) {
+                if (this.lastInputID !== "" && this.lastInput) {
+                    out.push({
+                        kind: InputResolved,
+                        reason: "claude-code: input superseded",
+                        input: this.lastInput,
+                    });
+                }
                 this.lastInputID = req.id;
                 this.lastInput = req;
                 out.push({
@@ -224,6 +259,8 @@ export function New() {
 /**
  * DetectInput recognizes a blocking interactive dialog in the rendered screen
  * text and returns the structured request, or null when none is present.
+ * Startup dialogs (trust/bypass) win over question dialogs; the two cannot
+ * render simultaneously.
  */
 export function DetectInput(text) {
     let prompt;
@@ -234,7 +271,7 @@ export function DetectInput(text) {
     else if (text.includes(bypassAnchor))
         prompt = bypassAnchor;
     else
-        return null;
+        return DetectQuestion(text);
     const opts = parseMenuOptions(text);
     if (opts.length === 0)
         return null; // anchor visible but menu not rendered yet
@@ -246,6 +283,186 @@ export function DetectInput(text) {
     };
     req.id = inputID(req);
     return req;
+}
+/**
+ * DetectQuestion recognizes the AskUserQuestion dialog Claude Code renders
+ * when the model asks the user a clarifying question mid-turn (verified live
+ * against 2.1.210). Two panes exist:
+ *
+ *   - a QUESTION pane (kind "question"): tab-strip line, question text,
+ *     numbered options, "Enter to select ·…" footer. Digit keys select an
+ *     option directly (single-select) or toggle its checkbox (multi-select).
+ *   - a REVIEW pane (kind "question_review"): after the last question of a
+ *     multi-question or multi-select dialog — an answers summary plus a
+ *     "Ready to submit your answers?" Submit/Cancel menu, no select footer.
+ *
+ * Returns null when neither pane is fully rendered. While either pane is up
+ * the harness is idle-but-not-ready: no busy marker, no end-of-turn marker,
+ * no empty composer — without this detection the turn would hang silently.
+ */
+export function DetectQuestion(text) {
+    const lines = text.split("\n");
+    // The tab-strip line is the dialog's top edge; the dialog sits below any
+    // reply content, so the LAST match wins. Checkbox glyphs also appear in
+    // rendered to-do lists, so the tab line alone is never sufficient.
+    let tabIdx = -1;
+    for (let i = 0; i < lines.length; i++) {
+        if (questionTabRE.test(lines[i]))
+            tabIdx = i;
+    }
+    if (tabIdx < 0)
+        return null;
+    const tabLine = lines[tabIdx];
+    // Review pane: Submit tab + confirmation anchor below the tab line.
+    if (tabLine.includes(questionSubmitTab)) {
+        let anchorIdx = -1;
+        for (let i = tabIdx + 1; i < lines.length; i++) {
+            if (lines[i].includes(questionReviewAnchor))
+                anchorIdx = i;
+        }
+        if (anchorIdx >= 0) {
+            const parsed = parseQuestionRegion(lines, anchorIdx + 1, lines.length);
+            if (parsed.options.length === 0)
+                return null; // menu not rendered yet
+            const body = lines
+                .slice(tabIdx + 1, anchorIdx + 1)
+                .map((ln) => ln.trim())
+                .filter((ln) => ln !== "" && !boxOrRuleRE.test(ln))
+                .join("\n");
+            const req = {
+                id: "",
+                kind: "question_review",
+                prompt: body,
+                options: parsed.options.map((o) => ({
+                    id: o.id,
+                    alias: reviewAlias(o.label),
+                    label: o.label,
+                    // Digit selects on this widget; the trailing CR is a no-op backstop
+                    // for a build where the digit only moves the highlight. After the
+                    // review pane the dialog is gone, so a stray CR cannot mis-select.
+                    keys: enc.encode(o.id + "\r"),
+                    ...(o.description !== "" ? { description: o.description } : {}),
+                })),
+            };
+            req.id = inputID(req);
+            return req;
+        }
+        // No review anchor: an unanswered question pane also carries the Submit
+        // tab (multi-question / multi-select) — fall through to the question path.
+    }
+    // Question pane: footer required below the tab line.
+    let footerIdx = -1;
+    for (let i = tabIdx + 1; i < lines.length; i++) {
+        if (lines[i].trim().startsWith(questionFooterAnchor))
+            footerIdx = i;
+    }
+    if (footerIdx < 0)
+        return null;
+    const parsed = parseQuestionRegion(lines, tabIdx + 1, footerIdx);
+    if (parsed.options.length === 0 || parsed.preamble === "")
+        return null;
+    const multiSelect = parsed.multiSelect;
+    const req = {
+        id: "",
+        kind: "question",
+        prompt: parsed.preamble,
+        options: parsed.options.map((o) => {
+            const other = o.label === questionOtherLabel || o.label === questionOtherLabel + ".";
+            const chat = o.label === questionChatLabel;
+            let keys;
+            if (multiSelect) {
+                keys = o.id; // digit toggles the checkbox row
+            }
+            else if (other || chat) {
+                // UI affordances: the digit only moves the highlight onto them, so a
+                // CR is required to select. Both close the whole dialog, so the CR
+                // can never leak into a subsequent question pane.
+                keys = o.id + "\r";
+            }
+            else {
+                // Digit selects directly. NO trailing CR: in a multi-question dialog
+                // selection advances to the next question, where a stray CR would
+                // select that question's highlighted option.
+                keys = o.id;
+            }
+            return {
+                id: o.id,
+                alias: other ? "other" : chat ? "" : aliasForLabel(o.label),
+                label: o.label,
+                keys: enc.encode(keys),
+                ...(o.description !== "" ? { description: o.description } : {}),
+            };
+        }),
+    };
+    const header = questionHeader(tabLine);
+    if (header !== "")
+        req.header = header;
+    if (multiSelect) {
+        req.multiSelect = true;
+        req.submitKeys = enc.encode("\t"); // Tab jumps to the review pane
+    }
+    req.id = inputID(req);
+    return req;
+}
+/** Parses the dialog region [from, to): question text, options, descriptions. */
+function parseQuestionRegion(lines, from, to) {
+    const preamble = [];
+    const options = [];
+    let multiSelect = false;
+    const seen = new Set();
+    for (let i = from; i < to && i < lines.length; i++) {
+        const ln = lines[i];
+        const trimmed = ln.trim();
+        if (trimmed === "" || boxOrRuleRE.test(ln))
+            continue;
+        // The multi-select widget renders its commit row as a bare "Submit" line
+        // below the last option — widget chrome, not an option description.
+        if (trimmed === "Submit")
+            continue;
+        const m = questionOptionRE.exec(ln);
+        if (m) {
+            const num = m[1];
+            let label = cleanLabel(m[2]);
+            if (questionCheckboxRE.test(label)) {
+                multiSelect = true;
+                label = label.replace(questionCheckboxRE, "").trim();
+            }
+            if (num === "0" || seen.has(num) || label === "")
+                continue;
+            seen.add(num);
+            options.push({ id: num, label, description: "" });
+            continue;
+        }
+        if (options.length === 0) {
+            preamble.push(trimmed);
+        }
+        else {
+            const cur = options[options.length - 1];
+            cur.description = cur.description === "" ? trimmed : cur.description + " " + trimmed;
+        }
+    }
+    return { preamble: preamble.join("\n"), options, multiSelect };
+}
+// questionTabEntryRE captures one "☐ <label>" tab entry; labels end at the
+// next glyph or a multi-space gap.
+const questionTabEntryRE = /([☐☒])[^\S\r\n]+([^☐☒✔←→\s](?:[^☐☒✔←→]*[^☐☒✔←→\s])?)/gu;
+/** The active question's tab label: the first unanswered (☐) entry. */
+function questionHeader(tabLine) {
+    let first = "";
+    for (const m of tabLine.matchAll(questionTabEntryRE)) {
+        const label = m[2].trim();
+        if (first === "")
+            first = label;
+        if (m[1] === "☐")
+            return label;
+    }
+    return first;
+}
+function reviewAlias(label) {
+    const l = label.toLowerCase();
+    if (l.includes("submit"))
+        return "proceed";
+    return aliasForLabel(label);
 }
 function parseMenuOptions(text) {
     const opts = [];

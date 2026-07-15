@@ -70,6 +70,7 @@ import {
   ErrNoInputPending,
   ErrStaleInputRequest,
   ErrUnknownOption,
+  ErrNotMultiSelect,
   ErrQuitUnsupported,
   ErrResumeUnsupported,
   ErrNoHarnessSession,
@@ -510,6 +511,17 @@ export class Conversation {
     return this.currentInput !== null && this.inputSurfaced
   }
 
+  /**
+   * The interactive prompt currently awaiting a client answer, or null. The
+   * polling counterpart of the EventInputRequest event: a caller that missed
+   * the event (attached late, single events() consumer elsewhere) can still
+   * read the pending question and resolve it via answer().
+   */
+  pendingInput(): InputRequest | null {
+    if (!this.inputAwaitingClient()) return null
+    return toClientInputRequest(this.currentInput!)
+  }
+
   private writeKeys(p: Uint8Array): void {
     if (this.writeStdin) {
       this.writeStdin(p)
@@ -668,7 +680,24 @@ export class Conversation {
       const submit = submitKeyForHarness(this.opts.harness, preWriteScreen)
       return this.writeMessageAndSubmit(ans.text ?? "", preWriteScreen, submit)
     }
-    const opt = findOption(req, ans.optionID ?? "")
+    // Multi-select prompts: toggle every named option, then commit with the
+    // request's submit keys (a single optionID answer is normalized into the
+    // same toggle-and-commit path — a bare toggle would never resolve the
+    // prompt). Validation precedes any write so a bad id surfaces cleanly.
+    const ids = ans.optionIDs && ans.optionIDs.length > 0
+      ? ans.optionIDs
+      : ans.optionID
+        ? [ans.optionID]
+        : []
+    if (req.multiSelect && req.submitKeys) {
+      const chosen = ids.map((s) => findOption(req, s))
+      if (ids.length === 0 || chosen.some((o) => o === null)) throw ErrUnknownOption
+      for (const o of chosen) this.writeKeys(o!.keys)
+      this.writeKeys(req.submitKeys)
+      return Promise.resolve()
+    }
+    if (ids.length > 1) throw ErrNotMultiSelect
+    const opt = findOption(req, ids[0] ?? "")
     if (!opt) throw ErrUnknownOption
     this.writeKeys(opt.keys)
     return Promise.resolve()
@@ -1388,8 +1417,15 @@ function resolvePolicy(p: InputPolicy | undefined, kind: string): Disposition | 
 function toClientInputRequest(req: TurnsInputRequest): InputRequest {
   const out: InputRequest = { id: req.id, kind: req.kind, prompt: req.prompt }
   if (req.options && req.options.length > 0) {
-    out.options = req.options.map((o) => ({ id: o.id, alias: o.alias, label: o.label }))
+    out.options = req.options.map((o) => ({
+      id: o.id,
+      alias: o.alias,
+      label: o.label,
+      ...(o.description !== undefined ? { description: o.description } : {}),
+    }))
   }
+  if (req.header !== undefined) out.header = req.header
+  if (req.multiSelect) out.multiSelect = true
   return out
 }
 

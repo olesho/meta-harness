@@ -122,6 +122,79 @@ Return `[answer, true]` to resolve, or `[…, false]` to decline and let the pro
 
 ---
 
+## Clarifying questions (`question` / `question_review`)
+
+Claude Code's `AskUserQuestion` tool halts the turn mid-flight and asks the user a
+question. Without detection this is a **silent hang** — the dialog is neither busy nor a
+ready composer, so the turn would never finalize. The claude-code adapter recognizes the
+dialog and surfaces it through the same ladder as every other prompt:
+
+- **kind `"question"`** — one question: `prompt` is the question text, `header` the
+  dialog's tab label, `options` the model's choices (with `description`s) plus the UI's
+  two affordances: *"Type something."* (alias `"other"`) and *"Chat about this"*.
+- **kind `"question_review"`** — after the last question of a multi-question or
+  multi-select dialog: a Submit/Cancel confirmation (`proceed`/`deny` aliases). Answer
+  `{ optionID: "proceed" }` to commit the answers.
+
+A multi-question dialog surfaces each question in sequence — answering one resolves it and
+surfaces the next; the review pane comes last. Detect "the harness stopped to ask
+something" either from `EventInputRequest` on the event stream or by polling
+[`pendingInput()`](../modules/chat.md#answering-prompts).
+
+```ts
+for await (const ev of conv.events()) {
+  if (ev.type === EventInputRequest && ev.input?.kind === "question") {
+    const req = ev.input
+    // req.prompt: "Which color should I use?"; req.options: Red / Blue / …
+    const release = await conv.acquireControl(ctx)
+    try {
+      await conv.answer(ctx, req.id, { optionID: "Blue" })  // id, alias, or label
+    } finally {
+      release()
+    }
+  }
+  if (ev.type === EventInputRequest && ev.input?.kind === "question_review") {
+    /* acquire control and */ await conv.answer(ctx, ev.input.id, { optionID: "proceed" })
+  }
+  if (ev.type === EventTurn && ev.turn?.state === TurnStateComplete) break
+}
+```
+
+**Multi-select questions** (`multiSelect: true`) accept several choices — answer with
+`optionIDs`; chat toggles each and commits (which then surfaces the `question_review`
+confirmation):
+
+```ts
+await conv.answer(ctx, req.id, { optionIDs: ["Cheese", "Olives"] })
+```
+
+Passing several `optionIDs` to a single-select question throws
+[`ErrNotMultiSelect`](../modules/chat.md#errors).
+
+**Free-text answers are a two-step.** Answering with the `"other"`-aliased option declines
+the structured question: the dialog closes, the tool reports "user declined", and the
+**turn completes**. Send your free-text answer as the next ordinary message:
+
+```ts
+await conv.answer(ctx, req.id, { optionID: "other" })  // turn completes ("declined")
+// … wait for TurnStateComplete, then:
+await conv.send(ctx, "Turquoise")                       // the actual answer, as a new turn
+```
+
+To auto-answer unattended runs, pre-arm a policy — e.g. always pick the first option and
+submit reviews:
+
+```ts
+inputPolicy: {
+  byKind: {
+    question:        { kind: DispositionAnswer, optionID: "1" },
+    question_review: { kind: DispositionAnswer, optionID: "proceed" },
+  },
+}
+```
+
+---
+
 ## Errors
 
 | Sentinel | Raised when |

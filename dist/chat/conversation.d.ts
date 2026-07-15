@@ -173,6 +173,13 @@ export declare class Conversation {
     private signalInputState;
     /** A prompt is pending that no policy/handler is resolving. */
     inputAwaitingClient(): boolean;
+    /**
+     * The interactive prompt currently awaiting a client answer, or null. The
+     * polling counterpart of the EventInputRequest event: a caller that missed
+     * the event (attached late, single events() consumer elsewhere) can still
+     * read the pending question and resolve it via answer().
+     */
+    pendingInput(): InputRequest | null;
     private writeKeys;
     /**
      * Delivers a user message to the harness. For prompt-readiness harnesses the
