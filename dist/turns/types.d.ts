@@ -59,6 +59,15 @@ export interface InputOption {
     label: string;
     /** Bytes to write to the PTY to select this option (server-side only). */
     keys: Uint8Array;
+    /**
+     * True when the menu rendered this row as the currently-selected choice (the
+     * codex "›" highlight marker). Server-side only — stripped by
+     * toClientInputRequest and excluded from the InputRequest id hash. Used by the
+     * codex approval-prompt gate to require a live selector on a parsed row, so a
+     * quoted-prose spoof (no live highlight) cannot false-positive. Absent on
+     * harnesses/menus that do not render a selector.
+     */
+    highlighted?: boolean;
 }
 /**
  * The per-harness contract that translates raw signals (screen state + wrapper
