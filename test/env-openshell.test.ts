@@ -203,6 +203,72 @@ describe("generatePolicy", () => {
     expect(yaml).toContain("/opt/meta-harness/run")
   })
 
+  it("emits NO scrape lane when scrapeEndpoints is absent (additive)", () => {
+    const yaml = generatePolicy({
+      tier: "untrusted",
+      modelHost: "api.anthropic.com",
+      fleetHost: "localhost",
+      fleetPort: 53343,
+      harnessPath: "/usr/local/bin/harness-wrapper",
+    })
+    expect(yaml).not.toContain("scrape")
+  })
+
+  it("emits a bare scrape lane bound to its binaries", () => {
+    const yaml = generatePolicy({
+      tier: "untrusted",
+      modelHost: "api.anthropic.com",
+      fleetHost: "localhost",
+      fleetPort: 53343,
+      harnessPath: "/usr/local/bin/harness-wrapper",
+      scrapeEndpoints: [
+        { host: "news.ycombinator.com", binaries: ["/sandbox/.cache/camoufox/camoufox-bin"] },
+      ],
+    })
+    expect(yaml).toContain("  scrape_0:")
+    expect(yaml).toContain("endpoints: [{ host: news.ycombinator.com, port: 443 }]")
+    expect(yaml).toContain("binaries: [{ path: /sandbox/.cache/camoufox/camoufox-bin }]")
+    // Bare endpoint — a `tls: terminate` shape 403s the CONNECT (field-tested).
+    expect(yaml).not.toContain("tls: terminate")
+  })
+
+  it("gives each scrape endpoint its own lane and honors custom ports", () => {
+    const yaml = generatePolicy({
+      tier: "untrusted",
+      modelHost: "api.anthropic.com",
+      fleetHost: "localhost",
+      fleetPort: 53343,
+      harnessPath: "/usr/local/bin/harness-wrapper",
+      scrapeEndpoints: [
+        { host: "a.example", port: 8443, binaries: ["/bin/curl"] },
+        { host: "b.example", binaries: ["/bin/wget", "/bin/curl"] },
+      ],
+    })
+    expect(yaml).toContain("  scrape_0:")
+    expect(yaml).toContain("{ host: a.example, port: 8443 }")
+    expect(yaml).toContain("  scrape_1:")
+    expect(yaml).toContain("{ host: b.example, port: 443 }")
+    expect(yaml).toContain("binaries: [{ path: /bin/wget }, { path: /bin/curl }]")
+  })
+
+  it("generates scrape-lane golden YAML", () => {
+    const yaml = generatePolicy({
+      tier: "untrusted",
+      modelHost: "api.anthropic.com",
+      modelPort: 443,
+      fleetHost: "localhost",
+      fleetPort: 53343,
+      harnessPath: "/usr/local/bin/harness-wrapper",
+      scrapeEndpoints: [
+        {
+          host: "news.ycombinator.com",
+          binaries: ["/sandbox/.cache/camoufox/camoufox-bin", "/sandbox/.venv/bin/python3.14"],
+        },
+      ],
+    })
+    expect(yaml).toMatchSnapshot()
+  })
+
   it("throws on unknown tier", () => {
     expect(() =>
       generatePolicy({
