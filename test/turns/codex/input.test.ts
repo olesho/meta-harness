@@ -1,11 +1,22 @@
 // Port of pkg/turns/harness/codex/input_test.go.
 
 import { describe, expect, test } from "vitest"
+import { newScreen } from "../../../src/screen/index.ts"
 import * as codex from "../../../src/turns/harness/codex.ts"
 import type { InputRequest } from "../../../src/turns/types.ts"
+import { corpusBytes } from "../corpus.ts"
 
 const dec = new TextDecoder()
 const enc = new TextEncoder()
+
+/** Replays a corpus recording through the screen emulator to its final text. */
+async function corpusScreen(scenario: string): Promise<string> {
+  const bytes = corpusBytes("codex", scenario)
+  expect(bytes, `corpus recording codex/${scenario} is missing`).not.toBeNull()
+  const scr = newScreen(120, 40)
+  await scr.write(bytes!)
+  return scr.snapshot().text
+}
 
 const updateNoticeScreen = `
   ✨  Update available! 0.140.0 -> 0.141.0
@@ -178,5 +189,222 @@ Steps to upgrade later:
   test("PromptReady during interstitial still matches glyph", () => {
     if (!codex.PromptReady(updateNoticeScreen)) return // skip: no leading '›' line
     expect(codex.DetectInput(updateNoticeScreen)).not.toBeNull()
+  })
+})
+
+// ── Genuine approval prompts (META-HARNESS-46) ───────────────────────────────
+
+// A hand-written approval screen in the live corpus shape (anchor, body, a
+// "›"-highlighted menu, footer). Used for the gate/ordering pins that need to
+// vary one element at a time; the corpus recordings pin the real thing.
+function approvalScreen(opts: { body?: string; menu?: string[] } = {}): string {
+  return [
+    "• Running touch /tmp/probe",
+    "",
+    "  Would you like to run the following command?",
+    "",
+    ...(opts.body ? ["  " + opts.body, ""] : []),
+    "  $ touch /tmp/probe",
+    "",
+    ...(opts.menu ?? [
+      "› 1. Yes, proceed (y)",
+      "  2. Yes, and don't ask again (p)",
+      "  3. No, and tell Codex what to do differently (esc)",
+    ]),
+    "",
+    "  Press enter to confirm or esc to cancel",
+  ].join("\n")
+}
+
+describe("codex approval prompts", () => {
+  test("corpus: shell-command approval dialog", async () => {
+    const req = codex.DetectInput(await corpusScreen("approval-command"))
+    expect(req).not.toBeNull()
+    expect(req!.kind).toBe(codex.KindApproval)
+    expect(req!.kind).toBe("approval_prompt") // pinned by orche's handler contract
+    expect(req!.prompt).toBe("Would you like to run the following command?")
+    expect(req!.id).not.toBe("")
+
+    const opts = req!.options!
+    expect(opts.map((o) => o.id)).toEqual(["1", "2", "3"])
+    expect(opts.map((o) => o.alias)).toEqual(["proceed", "proceed", "deny"])
+    expect(opts[0]!.label).toBe("Yes, proceed (y)")
+    expect(opts[2]!.label).toBe("No, and tell Codex what to do differently (esc)")
+    // Menu rows select by digit; the trailing CR is inert under codex's kitty
+    // keyboard protocol.
+    expect(opts.map((o) => dec.decode(o.keys))).toEqual(["1\r", "2\r", "3\r"])
+    // Only the live selector row carries the "›" highlight.
+    expect(opts.map((o) => o.highlighted === true)).toEqual([true, false, false])
+  })
+
+  test("corpus: apply-patch approval dialog", async () => {
+    const req = codex.DetectInput(await corpusScreen("approval-patch"))
+    expect(req).not.toBeNull()
+    expect(req!.kind).toBe(codex.KindApproval)
+    expect(req!.prompt).toBe("Would you like to make the following edits?")
+    expect(req!.options!.map((o) => o.alias)).toEqual(["proceed", "proceed", "deny"])
+    expect(req!.options!.some((o) => o.highlighted)).toBe(true)
+    expect(req!.id).not.toBe("")
+  })
+
+  test("corpus: the two dialogs get distinct stable ids", async () => {
+    const cmd = codex.DetectInput(await corpusScreen("approval-command"))!
+    const patch = codex.DetectInput(await corpusScreen("approval-patch"))!
+    expect(cmd.id).not.toBe(patch.id)
+    // Stable across a redraw of the same screen (drives InputRequested/-Resolved
+    // diffing in CodexAdapter.onScreen).
+    expect(codex.DetectInput(await corpusScreen("approval-command"))!.id).toBe(cmd.id)
+  })
+
+  test("is never auto-dismissed", async () => {
+    // The chat-level half is pinned by test/chat/codex_dismiss.test.ts; this pins
+    // the turns-level switch so a refactor of it cannot regress to auto-approval.
+    const req = codex.DetectInput(await corpusScreen("approval-command"))
+    const [keys, ok] = codex.AutoDismissKeys(req)
+    expect(ok).toBe(false)
+    expect(keys).toBeNull()
+  })
+
+  test("synthetic approval screen matches the corpus shape", () => {
+    const req = codex.DetectInput(approvalScreen())
+    expect(req).not.toBeNull()
+    expect(req!.kind).toBe(codex.KindApproval)
+  })
+
+  // ── Ordering pins: KindApproval is checked before every interstitial ───────
+
+  test("approval body quoting 'Press enter to continue' stays KindApproval", () => {
+    // continueAnchor → KindNotice auto-dismisses with a bare "\r", which on an
+    // approval dialog would press Enter on the highlighted "Yes" — auto-approve.
+    const req = codex.DetectInput(approvalScreen({ body: "Press enter to continue" }))
+    expect(req).not.toBeNull()
+    expect(req!.kind).toBe(codex.KindApproval)
+    expect(codex.AutoDismissKeys(req)[1]).toBe(false)
+  })
+
+  test("approval body quoting 'Update available!' stays KindApproval", () => {
+    // The updateAnchor branch return-nulls the whole function when its skip gate
+    // fails, which would swallow this dialog and revive the false-TurnComplete.
+    const req = codex.DetectInput(approvalScreen({ body: "Update available! 1.0 -> 2.0" }))
+    expect(req).not.toBeNull()
+    expect(req!.kind).toBe(codex.KindApproval)
+    expect(codex.AutoDismissKeys(req)[1]).toBe(false)
+  })
+
+  test("approval body quoting the migration anchor stays KindApproval", () => {
+    const req = codex.DetectInput(
+      approvalScreen({ body: "Choose how you'd like Codex to proceed" }),
+    )
+    expect(req).not.toBeNull()
+    expect(req!.kind).toBe(codex.KindApproval)
+  })
+
+  // ── The mandatory-strict gate ─────────────────────────────────────────────
+
+  test("requires a '›' highlight on a parsed menu row", () => {
+    expect(
+      codex.DetectInput(
+        approvalScreen({
+          menu: ["  1. Yes, proceed (y)", "  2. No, and tell Codex what to do (esc)"],
+        }),
+      ),
+    ).toBeNull()
+  })
+
+  test("requires a proceed-aliased row", () => {
+    expect(
+      codex.DetectInput(
+        approvalScreen({ menu: ["› 1. Maybe later", "  2. No, cancel that"] }),
+      ),
+    ).toBeNull()
+  })
+
+  test("requires a deny-aliased row", () => {
+    expect(
+      codex.DetectInput(
+        approvalScreen({ menu: ["› 1. Yes, proceed (y)", "  2. Tell me more"] }),
+      ),
+    ).toBeNull()
+  })
+
+  test("requires the anchor", () => {
+    expect(codex.DetectInput(approvalScreen().replace("Would you like to run", "Maybe run"))).toBeNull()
+  })
+
+  // ── Adversarial: assistant prose that quotes the anchor ────────────────────
+
+  // An assistant reply that quotes the approval anchor AND enumerates
+  // proceed/deny-shaped rows, with NO "›" highlight on those rows — plus, higher
+  // up the screen, a scrollback echo of a past prompt that itself began with a
+  // number ("› N. …", codex renders past prompts as "›"-prefixed rows).
+  //
+  // This shape is the reason the gate must key on the highlight of a PARSED MENU
+  // row taken from the anchor tail. A screen-wide highlight regex matches the
+  // echo and false-positives; so does a whole-screen row parse when the echo's
+  // digit does not collide with the enumerated ones. A false positive here is
+  // worse than the false-complete this feature replaces: onWrapperStatus would
+  // suppress TurnComplete and ready.ts would block sends — a silent deadlock.
+  function proseSpoof(echo: string): string {
+    return [
+      echo,
+      "",
+      "• Codex asks for approval before running a command. It prints:",
+      '    "Would you like to run the following command?"',
+      "  and then offers you:",
+      "    1. Yes, run it",
+      "    2. No, cancel that",
+      "",
+      "› ",
+    ].join("\n")
+  }
+
+  test("prose quoting the anchor with no highlighted menu row is not an approval", () => {
+    expect(codex.DetectInput(proseSpoof("› Explain the approval flow"))).toBeNull()
+  })
+
+  test("… even with a '› 1. …' scrollback echo colliding with the enumeration", () => {
+    expect(codex.DetectInput(proseSpoof("› 1. Explain the approval flow"))).toBeNull()
+  })
+
+  test("… even with a '› 4. …' scrollback echo NOT colliding with the enumeration", () => {
+    // Regression: digit dedup does not cover this one — the echo is a parsed row
+    // and lent its highlight to the gate until detectApproval was scoped to the
+    // anchor tail.
+    expect(codex.DetectInput(proseSpoof("› 4. Explain the approval flow"))).toBeNull()
+  })
+})
+
+describe("codex approval option aliases", () => {
+  // aliasForLabel is module-private; drive it through DetectInput's parsed rows.
+  function aliasesFor(menu: string[]): Array<string> {
+    const req = codex.DetectInput(approvalScreen({ menu }))
+    expect(req, "menu did not classify as an approval: " + menu.join(" | ")).not.toBeNull()
+    return req!.options!.map((o) => o.alias)
+  }
+
+  test("bare 'Yes' / 'No' labels alias proceed / deny", () => {
+    // The pinned chat contract fixture (test/chat/codex_dismiss.test.ts) carries
+    // exactly these labels. Bare "No" lowercases to "no", which the claude deny
+    // vocabulary deliberately misses (its tokens are "no," / "no " so they cannot
+    // match "now"/"notice") — codex adds an exact-match case. Without it the
+    // deny-row gate would reject a real dialog rendering "2. No".
+    expect(aliasesFor(["› 1. Yes", "  2. No"])).toEqual(["proceed", "deny"])
+  })
+
+  test("longer yes/no phrasings alias proceed / deny", () => {
+    expect(aliasesFor(["› 1. Yes, proceed (y)", "  2. No, and tell Codex what to do (esc)"]))
+      .toEqual(["proceed", "deny"])
+    expect(aliasesFor(["› 1. Accept the change", "  2. Reject it"]))
+      .toEqual(["proceed", "deny"])
+    expect(aliasesFor(["› 1. Continue", "  2. Cancel"]))
+      .toEqual(["proceed", "deny"])
+  })
+
+  test("interstitial tokens still win over the yes/no vocabulary", () => {
+    // "Skip"/"Update" are matched first so update-notice classification and its
+    // Skip-row auto-dismiss are unchanged by the approval vocabulary.
+    const req = codex.DetectInput(updateNoticeScreen)!
+    expect(req.kind).toBe(codex.KindUpdateNotice)
+    expect(req.options!.map((o) => o.alias)).toEqual(["update", "skip", "skip"])
   })
 })

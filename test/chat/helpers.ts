@@ -2,7 +2,16 @@
 import { appendFileSync, mkdirSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 
-import { Conversation, EventBus, type Options } from "../../src/chat/conversation.ts"
+import {
+  Conversation,
+  EventBus,
+  resolveAdapter,
+  type ConversationInit,
+  type Options,
+} from "../../src/chat/conversation.ts"
+import { newMemStore } from "../../src/chat/memstore.ts"
+import type { Session } from "../../src/chat/types.ts"
+import type { Screen } from "../../src/screen/index.ts"
 import type { InputRequest as TurnsInputRequest } from "../../src/turns/index.ts"
 
 const enc = new TextEncoder()
@@ -70,11 +79,42 @@ export function multiSelectQuestionRequest(): TurnsInputRequest {
 }
 
 /** Builds a Conversation with an injected key recorder, mirroring newTestConv. */
-export function newTestConv(opts: Partial<Options>, rec: KeyRecorder): Conversation {
+export function newTestConv(
+  opts: Partial<Options>,
+  rec: KeyRecorder,
+  extra: Partial<ConversationInit> = {},
+): Conversation {
   return new Conversation({
     opts,
     eventCh: new EventBus(8),
     writeStdin: rec.write,
+    ...extra,
+  })
+}
+
+/**
+ * Builds a Conversation wired up far enough to drive maybeIdleComplete: a real
+ * screen, the harness adapter, an in-memory store and a session to append to.
+ */
+export function newIdleTestConv(
+  opts: Partial<Options> & { harness: string },
+  rec: KeyRecorder,
+  screen: Screen,
+): Conversation {
+  const store = newMemStore()
+  const session: Session = {
+    id: "sess-1",
+    harness: opts.harness,
+    workingDir: "",
+    createdAt: new Date(),
+    harnessSessionID: "",
+  }
+  void store.createSession(session)
+  return newTestConv(opts, rec, {
+    screen,
+    store,
+    adapter: resolveAdapter(opts.harness),
+    session,
   })
 }
 

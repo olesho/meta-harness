@@ -2,6 +2,7 @@ import type { TranscriptTurn } from "../../chat/deps.ts";
 import type { Snapshot } from "../../screen/index.ts";
 import { GenericAdapter } from "../generic.ts";
 import type { Adapter, Event, InputRequest } from "../types.ts";
+import type { Status } from "../wrapper.ts";
 /**
  * CODEX_STATUS_MIN_COLS is the minimum terminal width at which the `/status` box
  * renders the `│ Session: <uuid> │` row unwrapped on a single line. The UUID (36
@@ -21,6 +22,24 @@ export declare class CodexAdapter extends GenericAdapter implements Adapter {
     private lastInputID;
     private lastInput;
     name(): string;
+    /**
+     * Suppresses the generic `waiting_for_input → TurnComplete` mapping while a
+     * structured input request is on screen (lastInputID !== ""). The
+     * InputRequested event already represents that state; letting the generic
+     * mapping complete the turn mid-dialog is the false-TurnComplete bug this task
+     * fixes — the consumer would find no task_complete in the rollout and treat
+     * the reply as errored while the approval dialog is still up. The turn resumes
+     * (InputResolved, then the real completion) once the dialog clears.
+     *
+     * Scope: lastInputID is also set while an auto-dismissed interstitial is still
+     * clearing (the chat layer wrote the dismiss keys but the next dialog-free
+     * onScreen has not yet fired). Suppressing TurnComplete there too is intended —
+     * a turn must not complete while ANY structured dialog is on screen.
+     *
+     * All other statuses (Blocked / Errored / Idle / …) delegate to super even
+     * mid-dialog: a crash during a dialog must still error the turn.
+     */
+    onWrapperStatus(status: Status, reason: string): Event[];
     onScreen(snap: Snapshot): Event[];
     /**
      * Implements turns.SessionIDExtractor — an own-output screen scrape.
@@ -73,6 +92,7 @@ export declare function New(): CodexAdapter;
 export declare const KindUpdateNotice = "codex_update_notice";
 export declare const KindModelMigration = "codex_model_migration";
 export declare const KindNotice = "codex_notice";
+export declare const KindApproval = "approval_prompt";
 /**
  * DetectInput recognizes a blocking startup interstitial in the rendered screen
  * text and returns the structured request, or null when none is present.
