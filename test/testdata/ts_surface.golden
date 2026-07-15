@@ -84,7 +84,7 @@ turns/index.ts
   Watch: function
   Watcher: class{close,events,pumpDone,send}
   claudecode: object{ClaudeCodeAdapter,DetectInput,New}
-  codex: object{AutoDismissKeys,CODEX_STATUS_MIN_COLS,CodexAdapter,DetectInput,KindModelMigration,KindNotice,KindUpdateNotice,New,PromptReady}
+  codex: object{AutoDismissKeys,CODEX_STATUS_MIN_COLS,CodexAdapter,DetectInput,KindApproval,KindModelMigration,KindNotice,KindUpdateNotice,New,PromptReady}
   generic: object{GenericAdapter,New}
   opencode: object{New,OpenCodeAdapter}
   pi: object{New,PiAdapter,PromptReady}

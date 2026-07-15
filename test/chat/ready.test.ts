@@ -135,6 +135,97 @@ describe("readyForInput(claude-code)", () => {
     expect(readyForInput("claude-code", busyTurn)).toBe(false))
 })
 
+describe("readyForInput(codex)", () => {
+  test("codex requires prompt readiness", () => {
+    expect(requiresPromptReadiness("codex")).toBe(true)
+  })
+
+  // The live 0.144.4 shell-command approval dialog (test/corpus/codex/
+  // approval-command), trimmed to the rows the predicate keys on.
+  const approvalDialog = [
+    "• Running touch /tmp/codex-approval-probe-marker",
+    "",
+    "  Would you like to run the following command?",
+    "",
+    "  Environment: local",
+    "",
+    "  $ touch /tmp/codex-approval-probe-marker",
+    "",
+    "› 1. Yes, proceed (y)",
+    "  2. Yes, and don't ask again (p)",
+    "  3. No, and tell Codex what to do differently (esc)",
+    "",
+    "  Press enter to confirm or esc to cancel",
+  ].join("\n")
+
+  const applyPatchDialog = [
+    "• Added hello.txt (+1 -0)",
+    "    1 +hello",
+    "",
+    "  Would you like to make the following edits?",
+    "",
+    "› 1. Yes, proceed (y)",
+    "  2. Yes, and don't ask again for these files (a)",
+    "  3. No, and tell Codex what to do differently (esc)",
+    "",
+    "  Press enter to confirm or esc to cancel",
+  ].join("\n")
+
+  const readyComposer = [
+    "• Ran touch /tmp/codex-approval-probe-marker",
+    "",
+    "› ",
+    "",
+    "  gpt-5.6-sol default · /private/tmp",
+  ].join("\n")
+
+  const updateInterstitial = [
+    "  ✨  Update available! 0.140.0 -> 0.141.0",
+    "",
+    "› 1. Update now",
+    "  2. Skip",
+    "",
+    "  Press enter to continue",
+  ].join("\n")
+
+  test("idle composer ready", () =>
+    expect(readyForInput("codex", readyComposer)).toBe(true))
+  test("update interstitial not ready", () =>
+    expect(readyForInput("codex", updateInterstitial)).toBe(false))
+
+  // Without the approval gate these would read as ready: the dialog's
+  // "›"-highlighted menu row satisfies the codex composer regex.
+  test("command approval dialog not ready", () =>
+    expect(readyForInput("codex", approvalDialog)).toBe(false))
+  test("apply-patch approval dialog not ready", () =>
+    expect(readyForInput("codex", applyPatchDialog)).toBe(false))
+  test("ready again once the dialog is answered", () =>
+    expect(readyForInput("codex", readyComposer)).toBe(true))
+
+  // Ready-side adversarial, mirroring the DetectInput one. A bare includes() on
+  // the approval anchors would pin this screen not-ready forever: awaitPromptReady
+  // would block sends and maybeIdleComplete would never complete the turn — a
+  // silent hang on an ordinary reply. The structural "anchor AND highlighted
+  // numbered menu row" predicate keeps it ready.
+  test("idle reply quoting the anchor without a highlighted menu row stays ready", () => {
+    const prose = [
+      "• Codex asks for approval before running a command. It prints:",
+      '    "Would you like to run the following command?"',
+      "  and then offers you:",
+      "    1. Yes, run it",
+      "    2. No, cancel that",
+      "",
+      "› ",
+    ].join("\n")
+    expect(readyForInput("codex", prose)).toBe(true)
+  })
+
+  test("plain prose asking a yes/no question stays ready", () => {
+    const prose = ["• All done. Would you like to run the tests?", "", "› "].join("\n")
+    expect(readyForInput("codex", prose)).toBe(true)
+  })
+})
+
 describe("readyForInput(pi)", () => {
   test("pi requires prompt readiness", () => {
     expect(requiresPromptReadiness("pi")).toBe(true)
