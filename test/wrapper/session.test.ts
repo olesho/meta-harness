@@ -150,18 +150,10 @@ describe("Session", () => {
 
   test("waiting_for_input emitted mid-run", async () => {
     const { sink } = captureStdout()
-    const { PassThrough } = await import("node:stream")
-    const stdin = new PassThrough()
-    setTimeout(() => {
-      stdin.write("y\n")
-      stdin.end()
-    }, 400)
-
-    const { ctx, cancel } = Context.withDeadline(Context.background(), 3000)
+    const { ctx, cancel } = Context.withDeadline(Context.background(), 5000)
     const sess = await start(ctx, {
       binaryPath: mockHarnessBin,
       args: ["--mode", "needs-input", "--prompt", "Continue? ", "--expected-input", "y"],
-      stdin,
       stdout: sink,
       harness: "claude",
       idleQuiet: 50,
@@ -170,7 +162,10 @@ describe("Session", () => {
 
     let sawWaiting = false
     for await (const ev of sess.events()) {
-      if (ev.status === StatusWaitingForInput && !ev.terminated) sawWaiting = true
+      if (ev.status === StatusWaitingForInput && !ev.terminated && !sawWaiting) {
+        sawWaiting = true
+        sess.writeStdin(new TextEncoder().encode("y\n"))
+      }
     }
     expect(sawWaiting).toBe(true)
     const { result } = await sess.wait()
