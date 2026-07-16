@@ -221,7 +221,7 @@
 
   <div class="stats">
     <div class="stat"><div class="n">5<span class="u">harnesses</span></div><div class="l">supervised</div></div>
-    <div class="stat"><div class="n">10<span class="u">modules</span></div><div class="l">import subpaths</div></div>
+    <div class="stat"><div class="n">13<span class="u">modules</span></div><div class="l">package exports</div></div>
     <div class="stat"><div class="n">10<span class="u">status</span></div><div class="l">classifications</div></div>
     <div class="stat"><div class="n">2<span class="u">runtimes</span></div><div class="l">Node dist · Bun src</div></div>
   </div>
@@ -266,6 +266,7 @@
         <text class="chan-l" x="60" y="368" text-anchor="end">SCREEN</text>
         <text class="chan-l" x="60" y="457" text-anchor="end">ASYNC</text>
         <text class="chan-l" x="928" y="120" text-anchor="end">HARNESS OPS</text>
+        <text class="chan-l" x="928" y="316" text-anchor="end">ENVIRONMENTS</text>
 
         <!-- traces (drawn under boxes) -->
         <path class="trace" d="M360,77 H372" marker-end="url(#ah)"></path>
@@ -348,6 +349,12 @@
           <text class="n-title" x="776" y="265" font-size="15">versions</text>
           <text class="n-sub" x="776" y="283">pinned catalog</text>
         </g>
+        <g>
+          <rect class="n-box" x="760" y="336" width="168" height="80" rx="7"></rect>
+          <text class="n-title" x="776" y="363" font-size="15">env</text>
+          <text class="n-sub" x="776" y="381">provision × contain</text>
+          <text class="n-sub" x="776" y="397">+ openshell · daytona</text>
+        </g>
 
         <!-- legend -->
         <path class="trace" d="M74,522 H104" marker-end="url(#ah)"></path>
@@ -377,10 +384,13 @@
       <span class="title">signal&nbsp;path</span><span class="spacer"></span><span>live&nbsp;capture</span>
     </div>
     <div class="panel-scroll">
-      <svg class="diagram" viewBox="0 0 960 210" role="img" aria-label="Signal flow of a single turn">
+      <svg class="diagram" viewBox="0 0 960 265" role="img" aria-label="Signal flow of a single turn, including the input-request branch">
         <defs>
           <marker id="fh" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
             <path d="M0,0 L6,3 L0,6 Z" fill="#3c5566"></path>
+          </marker>
+          <marker id="fha" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+            <path d="M0,0 L6,3 L0,6 Z" fill="var(--amber-soft)"></path>
           </marker>
         </defs>
         <!-- spine -->
@@ -427,6 +437,16 @@
             <text x="890" y="150" text-anchor="middle" fill="var(--term-mute)" font-size="10.5">complete</text>
           </g>
         </g>
+        <!-- input-request branch: a blocking prompt detours the turn until answered -->
+        <path class="trace-a" d="M700,100 V168" marker-end="url(#fha)"></path>
+        <path class="trace-a" d="M810,168 V104" marker-end="url(#fha)"></path>
+        <g font-family="var(--font-mono)">
+          <rect class="n-box" x="555" y="172" width="365" height="72" rx="7"></rect>
+          <text x="571" y="194" fill="var(--term-ink)" font-size="12.5">input_requested — blocking prompt</text>
+          <text x="571" y="212" fill="var(--term-mute)" font-size="10.5">trust_prompt · question · question_review · approval_prompt</text>
+          <text x="571" y="230" fill="#7f96a4" font-size="10.5">answer() → input_resolved → the turn resumes</text>
+        </g>
+
         <!-- animated packet -->
         <circle class="packet" r="5" fill="var(--signal-lite)">
           <animateMotion path="M70,96 L890,96" dur="3.6s" repeatCount="indefinite"></animateMotion>
@@ -459,14 +479,14 @@
       <tbody>
         <tr>
           <td><div class="hname">Claude Code</div><div class="hpkg">@anthropic-ai/claude-code</div></td>
-          <td class="pin">claude-code</td><td class="pin">2.1.193</td>
+          <td class="pin">claude-code</td><td class="pin">2.1.201</td>
           <td><span class="chip full">full</span></td>
           <td><span class="chip full">yes / yes</span></td>
           <td><span class="chip full">ClaudeCodeReader</span></td>
         </tr>
         <tr>
           <td><div class="hname">Codex</div><div class="hpkg">@openai/codex</div></td>
-          <td class="pin">codex</td><td class="pin">0.142.2</td>
+          <td class="pin">codex</td><td class="pin">0.142.5</td>
           <td><span class="chip full">full</span></td>
           <td><span class="chip full">yes / yes</span></td>
           <td><span class="chip full">CodexReader</span></td>
@@ -502,13 +522,19 @@
       </tbody>
     </table>
   </div>
+  <p style="margin-top:14px;font-size:13.5px;color:var(--ink-soft);max-width:80ch">
+    Input requests: Claude Code surfaces <code>trust_prompt</code> and the mid-turn
+    AskUserQuestion dialog (<code>question</code> / <code>question_review</code>); Codex
+    surfaces command / apply-patch approvals as <code>approval_prompt</code> (its startup
+    interstitials are auto-dismissed, never surfaced). Others: none.
+  </p>
 </section>
 
 <!-- ============ MODULES ============ -->
 <section id="modules" class="wrap">
   <div class="sec-head">
     <span class="eyebrow">Module reference</span>
-    <h2>Ten import subpaths, bottom-up</h2>
+    <h2>Thirteen modules, bottom-up</h2>
     <p>Every public symbol is frozen by a golden-file contract test, so the API you read is the API that ships.</p>
   </div>
 
@@ -523,6 +549,9 @@
     <div class="mcard"><span class="mlayer">entry</span><div class="mp">meta-harness-run</div><div class="mn">cli</div><div class="md">The one-shot loop as a disposable process: stdin → stdout, with orchestrator-friendly exit codes.</div></div>
     <div class="mcard"><span class="mlayer">ops</span><div class="mp">meta-harness/discovery</div><div class="mn">discovery</div><div class="md">Probe which harness CLIs are installed and at what version; flag drift against the pinned catalog.</div></div>
     <div class="mcard"><span class="mlayer">ops</span><div class="mp">meta-harness/versions</div><div class="mn">versions</div><div class="md">The pinned harness-version catalog binding each adapter's code to a verified upstream release.</div></div>
+    <div class="mcard"><span class="mlayer">env</span><div class="mp">meta-harness/env</div><div class="mn">env</div><div class="md">Pluggable sandboxed environments: Provisioner × Containment composition, credential injectors, structured turns.</div></div>
+    <div class="mcard"><span class="mlayer">env</span><div class="mp">meta-harness/env-openshell</div><div class="mn">env-openshell</div><div class="md">OpenShell containment backend: kernel-level isolation with a generated egress policy (model, fleet, optional scrape lanes).</div></div>
+    <div class="mcard"><span class="mlayer">env</span><div class="mp">meta-harness/env-daytona</div><div class="mn">env-daytona</div><div class="md">Daytona cloud provisioner backend, plus the <code>sweep()</code> reaper for orphaned sandboxes.</div></div>
   </div>
 </section>
 
