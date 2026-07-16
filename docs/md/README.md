@@ -92,6 +92,7 @@ meta-harness is built in layers, each a separately importable subpath under the
 | **screen** | [`meta-harness/screen`](modules/screen.md) | A headless VT100 emulator: raw PTY bytes → coherent `Snapshot`s + change notifications. |
 | **discovery** | [`meta-harness/discovery`](modules/discovery.md) | Probes which harness CLIs are installed and at what version. |
 | **versions** | [`meta-harness/versions`](modules/versions.md) | The pinned/known-good harness version catalog (`versions.json`). |
+| **env** | [`meta-harness/env`](../env/README.md) (+ `./env-openshell`, `./env-daytona`) | Pluggable sandboxed environments — Provisioner × Containment — for running turns in isolated workspaces. |
 | **async** | [`meta-harness/async`](modules/async.md) | The one sanctioned bridge that exposes the internal `Context` cancellation primitive. |
 
 ---
@@ -152,6 +153,9 @@ src/
   cli/                the `run` binary
   discovery/          harness version probing
   versions/           pinned version catalog
+  env/                pluggable environments (Provisioner × Containment)
+  env-openshell/      OpenShell containment backend
+  env-daytona/        Daytona provisioner backend
 test/                 vitest suites + a recorded PTY corpus
 dist/                 committed Node build (see Packaging)
 ```
