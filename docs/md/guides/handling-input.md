@@ -8,6 +8,25 @@ interactive.
 
 ---
 
+## The prompt kinds
+
+The client-surfaced `kind` values, and which harness produces each:
+
+| `kind` | Prompt | Surfaced by |
+| --- | --- | --- |
+| `trust_prompt` | Folder-trust / "bypass permissions" startup dialog. | Claude Code |
+| `menu_select` | A numbered menu. | any |
+| `confirm` | A y/n confirmation. | any |
+| `text_input` | A free-text prompt (no `options`). | any |
+| `question` | A mid-turn [clarifying question](#clarifying-questions-question--question_review) (`AskUserQuestion`). | Claude Code |
+| `question_review` | The Submit/Cancel confirmation ending a multi-question / multi-select dialog. | Claude Code |
+| `approval_prompt` | A mid-turn [command / apply-patch approval](#approval-prompts-approval_prompt). | Codex |
+
+Codex's startup interstitials ("Update available!", model migration, "Press enter to
+continue") are auto-dismissed on the ladder's first rung and never surface as kinds.
+
+---
+
 ## The resolution ladder
 
 When the harness blocks, chat tries, in order:
@@ -192,6 +211,39 @@ inputPolicy: {
   },
 }
 ```
+
+---
+
+## Approval prompts (`approval_prompt`)
+
+Codex stops mid-turn to ask before running a command or applying a patch — "Would you
+like to run the following command?" / "Would you like to make the following edits?".
+The codex adapter detects the dialog and surfaces it as kind `"approval_prompt"`: the
+`prompt` is the approval question, and `options` are the dialog's numbered menu rows
+with `proceed`/`deny` aliases. Answer it like any other prompt:
+
+```ts
+if (ev.type === EventInputRequest && ev.input?.kind === "approval_prompt") {
+  /* acquire control and */ await conv.answer(ctx, ev.input.id, { optionID: "proceed" })
+  // or { optionID: "deny" } to reject the command / edits
+}
+```
+
+Or pre-arm a policy so unattended runs approve (or reject) automatically:
+
+```ts
+inputPolicy: {
+  byKind: {
+    approval_prompt: { kind: DispositionAnswer, optionID: "proceed" },
+  },
+}
+```
+
+Approval detection runs *before* the interstitial auto-dismiss anchors, so an approval
+dialog whose body happens to quote an interstitial phrase can never be auto-approved by
+the dismiss keystrokes. Note the [one-shot loop](one-shot-turns.md) ships **no** policy
+for `approval_prompt` — an unanswered approval waits out the deadline (see the
+[one-shot caveat](../modules/oneshot.md#environment-helpers)).
 
 ---
 

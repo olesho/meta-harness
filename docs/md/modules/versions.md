@@ -19,8 +19,8 @@ import {
 
 ```jsonc
 {
-  "codex":       { "package": "@openai/codex",                 "binary": "codex",    "pinned": "0.142.2", "verified_at": "2026-06-26" },
-  "claude-code": { "package": "@anthropic-ai/claude-code",     "binary": "claude",   "pinned": "2.1.193", "verified_at": "2026-06-26" },
+  "codex":       { "package": "@openai/codex",                 "binary": "codex",    "pinned": "0.142.5", "verified_at": "2026-07-05" },
+  "claude-code": { "package": "@anthropic-ai/claude-code",     "binary": "claude",   "pinned": "2.1.201", "verified_at": "2026-07-05" },
   "opencode":    { "package": "opencode-ai",                   "binary": "opencode", "pinned": "",        "verified_at": "" },
   "pi":          { "package": "@earendil-works/pi-coding-agent","binary": "pi",       "pinned": "0.76.0",  "verified_at": "2026-06-27" }
 }
@@ -65,7 +65,7 @@ wrapped [sentinels](#validation--errors) on problems.
 
 ```ts
 import { pinned } from "meta-harness/versions"
-const [v, ok] = pinned("codex")   // ["0.142.2", true]
+const [v, ok] = pinned("codex")   // ["0.142.5", true]
 ```
 
 ---

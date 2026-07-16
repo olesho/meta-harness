@@ -19,6 +19,12 @@ by [`test/contract.test.ts`](../../../test/contract.test.ts), so it matches what
 | [cli](cli.md) | `meta-harness-run` | The one-shot loop as a disposable process. |
 | [discovery](discovery.md) | `meta-harness/discovery` | Probe installed harness CLIs and their versions. |
 | [versions](versions.md) | `meta-harness/versions` | The pinned harness-version catalog. |
+| [env](../../env/README.md) | `meta-harness/env` | Pluggable sandboxed environments: Provisioner × Containment, credential injectors, `runStructuredTurn`. |
+| [env-openshell](../../env/README.md) | `meta-harness/env-openshell` | OpenShell containment backend: kernel-level isolation + `generatePolicy` egress policy. |
+| [env-daytona](../../env/README.md) | `meta-harness/env-daytona` | Daytona cloud provisioner backend + the `sweep()` orphan reaper. |
+
+The three `env*` modules share one canonical doc: [Pluggable
+environments](../../env/README.md) (`docs/env/README.md`).
 
 The package root `meta-harness` (`src/index.ts`) exports only `VERSION` — everything real
 lives under a subpath.

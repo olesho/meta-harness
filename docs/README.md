@@ -9,6 +9,11 @@ meta-harness documentation comes in two forms:
   layered architecture and the turn-signal flow, plus the harness support matrix. Best
   viewed rendered in a browser (GitHub shows it as source).
 
+Two further directories sit alongside the two formats: **[`env/`](env/README.md)** is
+the canonical doc for the pluggable-environments layer (`./env`, `./env-openshell`,
+`./env-daytona`), and **[`design/`](design/pluggable-environments.md)** holds design
+specs.
+
 ## Layout
 
 ```
@@ -21,6 +26,10 @@ docs/
     harnesses.md              the support matrix
     modules/                  per-module API reference
     guides/                   task-oriented walkthroughs
+  env/                      pluggable-environments doc (canonical for ./env*)
+    README.md
+  design/                   design specs
+    pluggable-environments.md
   html/                     rendered visual overview
     index.html
 ```

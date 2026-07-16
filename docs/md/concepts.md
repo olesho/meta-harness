@@ -261,6 +261,13 @@ a mid-turn clarifying question), the turns layer reports an **`InputRequest`**:
 write. The `id` is a content hash — stable across redraws of the *same* prompt,
 different for a new one.
 
+The client-surfaced `kind` vocabulary is `trust_prompt` (folder-trust / bypass dialog),
+`menu_select` (a numbered menu), `confirm` (a y/n confirmation), `text_input` (a
+free-text prompt), `question` / `question_review` (Claude Code's clarifying-question
+dialog, below), and `approval_prompt` (Codex's command / apply-patch approval dialog).
+Codex's startup interstitials are auto-dismissed rather than surfaced, so they never
+reach a client as vocabulary.
+
 Two kinds carry the **clarifying-question** dialog (Claude Code's `AskUserQuestion`
 tool): `"question"` — one question with its options — and `"question_review"` — the
 Submit/Cancel confirmation after the last question of a multi-question or multi-select
@@ -269,6 +276,12 @@ resolving as the next appears. These dialogs are why detection matters: the scre
 neither busy nor a ready composer while one is up, so an undetected question is a
 silent hang, not a completed turn. See
 [Guides › Handling input](guides/handling-input.md#clarifying-questions-question--question_review).
+
+`"approval_prompt"` carries Codex's mid-turn **command / apply-patch approval** dialog
+("Would you like to run the following command?" / "…make the following edits?"): a
+numbered menu whose options carry `proceed`/`deny` aliases, so a policy or client can
+approve or reject the action. See
+[Guides › Handling input](guides/handling-input.md#approval-prompts-approval_prompt).
 
 ### Disposition & InputPolicy
 

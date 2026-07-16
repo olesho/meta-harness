@@ -11,6 +11,10 @@ Docs live in [`docs/`](docs/README.md), split by format:
   the [module reference](docs/md/modules/README.md), and the [task guides](docs/md/guides/README.md).
 - **HTML** ([`docs/html/`](docs/html/index.html)) — a single-page visual overview with SVG
   architecture and turn-flow diagrams.
+- **Environments** ([`docs/env/`](docs/env/README.md)) — the canonical doc for the
+  pluggable-environments layer (`./env`, `./env-openshell`, `./env-daytona`).
+- **Design specs** ([`docs/design/`](docs/design/pluggable-environments.md)) — e.g. the
+  pluggable-environments design.
 
 ## Develop
 

@@ -15,8 +15,8 @@ is the ground truth for "what works with which."
 
 | Harness | name | binary | npm package | pinned¹ | chat adapter² | effort / model | transcript history³ |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| **Claude Code** | `claude-code` | `claude` | `@anthropic-ai/claude-code` | 2.1.193 | ✓ full | ✓ / ✓ | ✓ `ClaudeCodeReader` |
-| **Codex** | `codex` | `codex` | `@openai/codex` | 0.142.2 | ✓ full | ✓ / ✓ | ✓ `CodexReader` |
+| **Claude Code** | `claude-code` | `claude` | `@anthropic-ai/claude-code` | 2.1.201 | ✓ full | ✓ / ✓ | ✓ `ClaudeCodeReader` |
+| **Codex** | `codex` | `codex` | `@openai/codex` | 0.142.5 | ✓ full | ✓ / ✓ | ✓ `CodexReader` |
 | **pi** | `pi` | `pi` | `@earendil-works/pi-coding-agent` | 0.76.0 | ✓ full | ✗ / ✗ | ✓ `PiReader`⁴ |
 | **OpenCode** | `opencode` | `opencode` | `opencode-ai` | *(unpinned)* | ◑ stub | ✗ / ✗ | ✗ store only |
 | **Cursor** | `cursor` | — | — | — | ✗ wrapper-only | ✗ / ✗ | ✗ n/a |
@@ -45,6 +45,7 @@ returns the lossy `Turn[]` view directly, not `Event[]` like the other two reade
 | `SessionForkResumer` | no-fork | ✓ (false)⁶ | no-fork | — | — |
 | `TranscriptReader` | ✓ | ✓ | ✓ | — | — |
 | Startup interstitial auto-dismiss | — | ✓⁷ | — | — | — |
+| Input requests detected | ✓ `trust_prompt` · `question` · `question_review` | ✓ `approval_prompt`⁸ | — | — | — |
 
 ⁵ Codex ≤ 0.141 emitted a "Token usage:" footer chat could scrape; 0.142+ has no screen
 signal, so completion falls back to [status-driven mapping](#the-generic-fallback).
@@ -52,6 +53,9 @@ signal, so completion falls back to [status-driven mapping](#the-generic-fallbac
 codex-cli 0.142.5, resume continues the *same* id. ⁷ Codex's "Update available!",
 model-migration, and "Press enter to continue" interstitials are auto-dismissed at
 startup unless [`disableCodexAutoDismiss`](modules/chat.md#options) is set.
+⁸ Codex's command / apply-patch approval dialogs surface as `approval_prompt`
+[input requests](guides/handling-input.md#approval-prompts-approval_prompt); its startup
+interstitials (footnote ⁷) are auto-dismissed rather than surfaced.
 
 ---
 
@@ -108,6 +112,14 @@ Name `codex`, binary `codex`.
   is ignored — sessions are located by id).
 - **Startup interstitials.** "Update available!", the model-migration prompt, and
   "Press enter to continue" are auto-dismissed with safe keystrokes.
+- **Interactive prompts.** The command / apply-patch approval dialogs ("Would you like
+  to run the following command?" / "Would you like to make the following edits?") are
+  detected as `approval_prompt` input requests — numbered options with `proceed`/`deny`
+  aliases, so a policy or client can approve or reject. Detection is checked *before*
+  the interstitial anchors, so an approval dialog whose body quotes an interstitial
+  phrase is never auto-dismissed (auto-approved) by mistake. The [one-shot
+  loop](modules/oneshot.md) ships no policy for these — see its caveat. See
+  [Guides › Handling input](guides/handling-input.md#approval-prompts-approval_prompt).
 - **Wrapper patterns.** API-error phrase hints ("at capacity" → 503, "high demand" →
   500, "usage limit"/"out of credits" → 429, "stream disconnected" → 0) plus
   cost/retry/prompt. No session-limit banner matcher.
@@ -181,7 +193,7 @@ import { lookup, discover } from "meta-harness/discovery"
 
 lookup("claude-code")
 // → { installed: true, path: "/usr/local/bin/claude",
-//     pinnedVersion: "2.1.193", detectedVersion: "2.1.193",
+//     pinnedVersion: "2.1.201", detectedVersion: "2.1.201",
 //     versionMatchesPin: true, … }
 
 discover()   // Info[] for every harness in versions.json

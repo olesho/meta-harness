@@ -287,7 +287,10 @@ type DispositionKind = "ask" | "answer" | "deny"          // DispositionAsk / Di
 interface InputPolicy { default?: DispositionKind; byKind?: Record<string, Disposition> }
 ```
 
-`byKind[req.kind]` wins over `default`. See
+`byKind[req.kind]` wins over `default`. The client-surfaced `kind`s are `trust_prompt`,
+`menu_select`, `confirm`, `text_input`, `question`, `question_review` (both below), and
+`approval_prompt` (Codex's command / apply-patch approval dialog — options carry
+`proceed`/`deny` aliases). See
 [Guides › Handling input](../guides/handling-input.md) for the full ladder and recipes.
 
 ### Clarifying questions

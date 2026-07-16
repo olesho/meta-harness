@@ -55,7 +55,8 @@ interface Event {
 ```ts
 interface InputRequest {
   id: string              // stable across redraws of the SAME prompt; changes for a new one
-  kind: string            // "trust_prompt" | "question" | "question_review" | "menu_select" | …
+  kind: string            // "trust_prompt" | "menu_select" | "confirm" | "text_input"
+                          //   | "question" | "question_review" | "approval_prompt"
   prompt: string
   options?: InputOption[] // undefined for free-text prompts
   header?: string         // kind "question": the dialog's tab label
@@ -84,6 +85,13 @@ multi-question or multi-select dialog (`proceed`/`deny` aliases). A multi-questi
 surfaces one `question` request per question: answering one emits `InputResolved` for it
 and `InputRequested` for the next. Without this detection the dialog is a silent hang —
 the screen is neither busy nor a ready composer, so no other signal ever fires.
+
+`"approval_prompt"` carries Codex's mid-turn **command / apply-patch approval** dialog
+("Would you like to run the following command?" / "Would you like to make the following
+edits?"): the numbered menu rows become options with `proceed`/`deny` aliases. The codex
+adapter checks for it *before* its startup-interstitial anchors, so an approval dialog
+whose body quotes an interstitial phrase is never auto-dismissed — which would press
+Enter on the highlighted "Yes" and silently auto-approve.
 
 ### `Turn`
 
@@ -205,7 +213,8 @@ const a = claudecode.New()   // also: generic.New(), codex.New(), opencode.New()
   `RawSessionIDExtractor`, `TranscriptReader`.
 - **`codex`** — `/status`-box and resume-hint session id (`SessionIDExtractor`,
   `RawSessionIDExtractor`, `SessionIDPrimer`), `SessionResumer`, `SessionForkResumer`
-  (reports `false`), `TranscriptReader`, plus startup-interstitial auto-dismiss helpers.
+  (reports `false`), `TranscriptReader`, command / apply-patch approval detection
+  (`approval_prompt` requests), plus startup-interstitial auto-dismiss helpers.
 - **`pi`** — session control is the focus: `SessionInitializer`, `SessionResumer`,
   `SessionControlFlags`, `TranscriptReader`, `Quitter`, `BusyDetector`, and a launch-env
   binding hook.

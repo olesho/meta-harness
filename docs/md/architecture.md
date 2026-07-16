@@ -40,6 +40,9 @@ subpath (`meta-harness/<layer>`), and the dependency graph is acyclic and points
                                     │
                                     ▼
                             internal/async ──(only Context)──► async
+
+   env ──compose()──► env-openshell · env-daytona        (environments side stack:
+                                                          sandboxed workspaces for turns)
 ```
 
 ### `internal/async` — the private toolkit
@@ -109,6 +112,19 @@ Cross-cutting helpers, not part of the turn path.
 [`discovery`](modules/discovery.md) answers "is harness X installed, and at what
 version?" by probing `X --version`. [`versions`](modules/versions.md) is the pinned
 catalog (`versions.json`) tying each adapter's code to a known-good upstream release.
+
+### `env` + `env-openshell` + `env-daytona` — pluggable environments
+
+A side stack (not part of the live turn path) for running turns inside **sandboxed
+workspaces**: [`env`](../env/README.md) is the two-axis plugin model — a
+**Provisioner** answers *where the machine comes from* (local, Daytona cloud), a
+**Containment** answers *what the agent may touch* (none, OpenShell kernel-level
+isolation), and `compose()` pairs any provisioner with any containment. It also carries
+the credential injectors and `runStructuredTurn`, the host-side driver that executes one
+structured turn over any `Workspace`. `env-openshell` and `env-daytona` are the shipped
+containment/provisioner backends. Canonical doc:
+[Pluggable environments](../env/README.md); design spec:
+[`docs/design/pluggable-environments.md`](../design/pluggable-environments.md).
 
 ---
 

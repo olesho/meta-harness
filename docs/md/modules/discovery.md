@@ -6,10 +6,15 @@ caches the result by binary path + mtime, and never touches the filesystem beyon
 It is the single source of truth for harness availability and drift against the
 [pinned catalog](versions.md).
 
+It is also the **single source of truth for harness-binary path resolution**: the
+[`run` CLI](cli.md) and the wrapper's spawn path both defer to
+[`resolvePath`](#resolving-the-binary-path) rather than re-implementing PATH lookups
+(the wrapper's old `resolveBinary` helper is deprecated in its favor).
+
 ```ts
 import {
-  lookup, discover, registerProbe, resetCache, defaultProbeTimeoutMs,
-  SemverDashVProbe, semverRe,
+  lookup, resolvePath, discover, registerProbe, resetCache, defaultProbeTimeoutMs,
+  SemverDashVProbe, semverRe, WELL_KNOWN_DIRS,
   type Info, type Probe,
 } from "meta-harness/discovery"
 ```
@@ -65,6 +70,34 @@ interface Info {
 `versionMatchesPin` is deliberately forgiving: it is `false` only when both a pin and a
 detected version exist and they differ. An unknown or unpinned version never reads as
 "drift".
+
+---
+
+## Resolving the binary path
+
+```ts
+resolvePath(name: string, env?: Record<string, string>): string | null
+
+WELL_KNOWN_DIRS: readonly string[]
+// ["~/.claude/local/bin", "~/.local/bin", "/opt/homebrew/bin", "/usr/local/bin"]
+```
+
+`resolvePath` resolves a harness name (or any binary name) to an absolute executable
+path, or `null` when nothing is found. It is the resolution SSOT the
+[`run` CLI](cli.md) and the wrapper's spawn path use. Resolution order:
+
+0. A **path-bearing `name`** (absolute, or containing `/`) is checked directly.
+1. An **env override** — `HARNESS_BINARY_<NAME>` (e.g. `HARNESS_BINARY_CLAUDE_CODE`)
+   then `HARNESS_BINARY`. An *absolute* override is verified directly and does **not**
+   fall through on a miss; a bare-name override is searched on `PATH` only.
+2. The live **`PATH`**.
+3. The **`WELL_KNOWN_DIRS`** fallback — common install locations probed even when the
+   binary is not on `PATH` (independent of which runtime owns the calling interpreter's
+   bin dir).
+
+`lookup` shares the same core but stops at step 2 (no well-known-dirs probing); the
+wrapper's older `resolveBinary` (PATH/abs-path only) is `@deprecated` — new code should
+call `resolvePath`.
 
 ---
 

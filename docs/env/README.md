@@ -122,6 +122,15 @@ interface Provisioner {
 | `local` | `node:child_process` + fs copy | this repo (core) |
 | `daytona` | Daytona SDK | `src/env-daytona/` |
 
+The Daytona backend also ships **`sweep()`** (`src/env-daytona/sweep.ts`), the Tier-4
+orphan reaper: it lists the account's sandboxes (draining the SDK's auto-paginating
+iterator, so orphans past a page boundary are never missed) and deletes every one
+matching **all** of the given labels, returning a `SweepResult` (`swept` / `kept` /
+`failed`). Empty labels **throw** — an unscoped sweep would delete every sandbox in the
+account — and `dryRun: true` reports the match set without deleting. The live e2e test's
+`afterAll` uses it so a crashed run doesn't leak billed resources; it also works
+standalone for ops.
+
 ### How to add a provisioner
 
 1. Implement the `Provisioner` interface.
@@ -130,7 +139,14 @@ interface Provisioner {
 4. Pass the Tier-2 conformance suite (in `test/env/conformance.ts`).
 5. Add a test file like `test/env/<name>.test.ts` that instantiates the suite with your provisioner.
 
-Example: `test/env/conformance.test.ts` runs the suite against `local + none`.
+Example: `test/env/conformance.test.ts` runs the suite against `local + none`; the gated
+live runs instantiate the same suite against real backends
+(`test/env/daytona_live.test.ts`, `test/env/openshell-live.test.ts`).
+
+A `ConformanceTarget` may set `filterStderr` to strip backend-inherent stderr noise
+before the exec-fidelity assertions (e.g. the openshell guest image's node emits an
+UNDICI proxy warning on every run); it is identity when omitted, so `local + none` stays
+strict.
 
 ## Containment Contract
 
@@ -166,6 +182,50 @@ interface ContainmentLayer {
 3. The core `compose()` combinator (in `src/env/compose.ts`) handles path translation, alias folding, staging cleanup, and destroy ordering — you implement only the primitives.
 4. Pass the Tier-2 conformance suite against a fake provisioner.
 5. Test composition with the mapping table (§5.1 in `docs/design/pluggable-environments.md`): the combinator proves correct once; your primitives only need unit tests.
+
+## OpenShell Policy Generation
+
+The `./env-openshell` subpath exports a pure policy generator alongside the containment:
+
+```ts
+generatePolicy(scopes: PolicyScopes): string   // OpenShell policy YAML; no I/O
+
+interface PolicyScopes {
+  tier: string          // "untrusted" | "semi-trusted" | "trusted-internal"
+  modelHost: string     // model-API egress lane
+  modelPort?: number    // default 443
+  fleetHost: string     // fleet-db egress lane
+  fleetPort: number
+  harnessPath: string   // guest path of the harness binary (bound to the fleet lane)
+  scrapeEndpoints?: ScrapeEndpoint[]   // OPTIONAL extra egress targets
+}
+
+interface ScrapeEndpoint {
+  host: string
+  port?: number        // default 443
+  binaries: string[]   // absolute guest paths allowed to reach `host`
+}
+```
+
+The **tier** picks the read-only filesystem set and the enforcement mode
+(`untrusted` / `semi-trusted` enforce; `trusted-internal` observes). The generated
+policy always carries two egress lanes — `model` and `fleet` — each binding its
+endpoint to the specific guest binaries allowed to use it; git-hub traffic is
+bundle-out, with **no** network endpoint.
+
+### Optional scrape-egress lanes (`scrapeEndpoints`)
+
+Each `ScrapeEndpoint` emits its **own** lane (`scrape_0`, `scrape_1`, …) so every host
+is bound to exactly its own binaries — a shared lane would let any listed binary reach
+any listed host. Lanes are emitted as **bare `{host, port}` endpoints** (a plain CONNECT
+tunnel), which is the shape that actually works: a `tls: terminate` lane makes the
+in-guest proxy 403 the browser/curl CONNECT (field-tested, openshell 0.0.53). The knob
+is additive: absent or empty `scrapeEndpoints` emits no scrape lane and leaves the
+generated policy byte-for-byte unchanged, so existing consumers are unaffected.
+
+> **Guest-image prerequisite:** egress also requires the guest image to ship a statable
+> `/init.krun` (the proxy's ancestor-integrity check stats the libkrun PID-1 init);
+> without it every lane is denied regardless of this policy.
 
 ## Credential Injectors
 
@@ -221,7 +281,7 @@ runStructuredTurn(ctx: Context, ws: Workspace, cfg: TurnConfig): Promise<Structu
 | 1 | Unit, hermetic | Every PR | `test/env/` |
 | 2 | Conformance suite | Every PR (against fakes) | `test/env/conformance.ts` |
 | 3 | In-guest e2e, no cloud | Every PR (with docker/podman) | `test/env/container.test.ts` |
-| 4 | Live (Daytona, OpenShell) | Nightly / opt-in (`META_HARNESS_ENV_LIVE=<backend>`, e.g. `=openshell`) | `test/env/openshell-live.test.ts` |
+| 4 | Live (Daytona, OpenShell) | Nightly / opt-in (`META_HARNESS_ENV_LIVE=<backend>`, e.g. `=openshell` or `=daytona`) | `test/env/openshell-live.test.ts`, `test/env/daytona_live.test.ts` |
 | 5 | Protocol freeze, composition, leak-probe | Mix of tiers 1–4 | `test/env/` |
 
 ## References

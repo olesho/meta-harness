@@ -57,8 +57,13 @@ wording, and it satisfies both of the orchestrator's timeout signals.
 | `HARNESS_BINARY` | — | Override the resolved harness binary path (absolute or a PATH name). |
 | `CLAUDECODE`, `CLAUDE_CODE_*` | — | Stripped from the child harness env (via [`cleanEnv`](oneshot.md#environment-helpers)) so a nested run is clean. |
 
-Binary resolution order: `HARNESS_BINARY_<HARNESS>` → `HARNESS_BINARY` → the harness name
-itself (searched on `PATH`).
+Binary resolution defers to the [discovery SSOT
+`resolvePath()`](discovery.md#resolving-the-binary-path). Order: a path-bearing name is
+checked directly → `HARNESS_BINARY_<HARNESS>` → `HARNESS_BINARY` (an *absolute* env
+override is verified directly and does **not** fall through on a miss; a bare-name
+override is searched on `PATH` only) → the live `PATH` → the well-known install
+directories (`WELL_KNOWN_DIRS`: `~/.claude/local/bin`, `~/.local/bin`,
+`/opt/homebrew/bin`, `/usr/local/bin`).
 
 ---
 

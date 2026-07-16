@@ -126,13 +126,14 @@ never blocked behind Claude Code's folder-trust prompt. Pass your `env` through 
 (the [CLI](cli.md) does this for you) so a harness launched from inside Claude Code doesn't
 inherit the outer session context.
 
-> **Clarifying-question caveat.** `AutoAcceptTrust` covers `trust_prompt` only. If the
+> **Mid-turn prompt caveat.** `AutoAcceptTrust` covers `trust_prompt` only. If the
 > model stops mid-turn to ask a [clarifying question](chat.md#clarifying-questions)
-> (`question` / `question_review`), the one-shot has no client to answer it and no
-> `inputPolicy` knob to arm — the turn waits until the `ctx` deadline (`DeadlineError` /
-> the `deadline` outcome). If your prompts can trigger `AskUserQuestion`, either instruct
-> the model not to ask (answer from assumptions instead) or drive a
-> [conversation](chat.md) and answer the question.
+> (`question` / `question_review`), or Codex stops on a command / apply-patch approval
+> (`approval_prompt`), the one-shot has no client to answer it and no `inputPolicy` knob
+> to arm — the turn waits until the `ctx` deadline (`DeadlineError` / the `deadline`
+> outcome). If your prompts can trigger `AskUserQuestion` or a Codex approval, either
+> instruct the model not to ask (answer from assumptions instead) or drive a
+> [conversation](chat.md) and answer the prompt.
 
 ---
 
