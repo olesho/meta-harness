@@ -22,6 +22,11 @@ import { ErrInvalidOptions, ErrUnknownHarness, ErrNoControl, ErrTurnInFlight, Er
 import { newControlQueue } from "./control.js";
 import { submitKeyForHarness, requiresPromptReadiness, readyForInput } from "./ready.js";
 import { cleanHarnessEnv } from "./env.js";
+import { AcquisitionModeOff, AcquisitionModeHooks } from "../turns/index.js";
+import { StreamTap, adapterStreamParser } from "../acquisition/internal/streamTap.js";
+import { newDisplaySink } from "../acquisition/internal/display.js";
+import { hookEnv } from "../acquisition/internal/yield.js";
+import { planAcquisition, resolveProfile, } from "../acquisition/internal/planAcquisition.js";
 const enc = new TextEncoder();
 // idleCompletionGap — how long the screen must sit unchanged at the ready prompt
 // before the idle fallback completes an in-flight turn. (ms)
@@ -142,6 +147,12 @@ export class Conversation {
     releaseWriter;
     queue;
     session;
+    /**
+     * The per-run acquisition tap: a PARALLEL CONSUMER of the same durable PTY line
+     * tap `captureRawSessionID` reads from. Set by openWithSession when the plan or
+     * a display sink needs it; otherwise undefined. Never drives turn state.
+     */
+    streamTap;
     /**
      * Resume-only, one-shot latch. Armed by openWithSession ONLY when the session
      * was seeded from an Options.resume id AND the resolved adapter reports
@@ -812,6 +823,10 @@ export class Conversation {
             return false; // leave in-memory unchanged; retry on the next turn
         }
         this.session.harnessSessionID = id;
+        // Backfill any acquisition events emitted before the id was known (a
+        // cross-line hazard): the id now exists, so retained envelopes get it
+        // stamped in place. StreamTap reads the id here; it never writes the record.
+        this.streamTap?.backfill();
         return true;
     }
     /** Extract the id from the current screen and first-write it. True once set. */
@@ -1372,7 +1387,9 @@ async function openWithSession(ctx, opts, session, persist) {
     const rows = opts.rows && opts.rows > 0 ? opts.rows : 40;
     let adapter;
     try {
-        adapter = resolveAdapter(opts.harness);
+        // The advanced/testing seam wins: a caller-supplied adapter drives Open
+        // directly (used to exercise Stream mode with a fake interleaved adapter).
+        adapter = opts.adapter ?? resolveAdapter(opts.harness);
     }
     catch (err) {
         throw err;
@@ -1422,11 +1439,60 @@ async function openWithSession(ctx, opts, session, persist) {
         c.harnessSessionIDProvisional = true;
     }
     const runCtx = ctx ? { done: () => ctx.done(), err: () => ctx.err() } : undefined;
+    // ── Acquisition plan (StreamTap) ───────────────────────────────────────────
+    // Resolve the LATCHED acquisition mode for the run, then build StreamTap as an
+    // ADDITIONAL consumer of the SAME durable onLine tap chat uses for raw
+    // session-id capture — no second launch, no second PTY reader. The rendered
+    // Screen + turn watcher (below) stay the sole turn-state authority.
+    const haveSink = typeof opts.onAcquisitionEvent === "function";
+    const profile = resolveProfile({
+        info: {
+            harness: opts.harness,
+            // chat only reaches here as it launches the binary, so it is installed.
+            installed: true,
+            detectedVersion: "",
+            pinnedVersion: "",
+        },
+        adapter,
+        streamVersionPredicate: opts.streamVersionPredicate,
+    });
+    const acquisitionMode = planAcquisition(opts.acquisitionMode ?? AcquisitionModeOff, {
+        profile,
+        haveSink,
+        // Hooks side-channel delivery is a later subtask; not viable in A1, so the
+        // Hooks rung falls back to Stream (when eligible) or Off.
+        hooksViable: false,
+    });
+    const streamParser = adapterStreamParser(adapter);
+    const displaySink = opts.onDisplayLine ? newDisplaySink(opts.onDisplayLine) : null;
+    const streamTap = new StreamTap({
+        harness: opts.harness,
+        runID: session.id,
+        mode: acquisitionMode,
+        parser: streamParser,
+        onEvent: opts.onAcquisitionEvent,
+        display: displaySink,
+        // StreamTap READS the chat-captured id (never writes the session record).
+        sessionID: () => c.session.harnessSessionID,
+    });
+    c.streamTap = streamTap;
     // Compute the child env ONCE, before binding, so the exact array handed to the
     // wrapper is the one the adapter parses its session dir from — binding against
     // a different env than the child receives is thus impossible.
     const env = cleanHarnessEnv(opts.env);
     adapter.bindLaunchEnv?.(env, opts.workingDir ?? "");
+    // Wire the HW_* hook env (spool dir, cwd, home, yield file) into the launch env
+    // for Hooks mode or whenever a caller supplied a YieldControl handle.
+    const launchEnv = opts.yieldControl || acquisitionMode === AcquisitionModeHooks
+        ? hookEnv(env, opts.spoolDir ?? "", opts.workingDir ?? "", opts.yieldControl ?? null)
+        : env;
+    // Widen the tap-instantiation gate (critique (a)): the durable LineSplitter tap
+    // is created whenever EITHER consumer needs it — raw session-id capture OR the
+    // StreamTap (a StreamParser under a sink, or a display sink). This lets the tap
+    // exist for adapters that implement StreamParser but NOT extractSessionIDFromLine
+    // (codex/opencode/pi), where the old adapterRawSessionID()-only gate was a no-op.
+    const rawCapture = c["adapterRawSessionID"]();
+    const needsTap = rawCapture || streamTap.installs();
     const cfg = {
         binaryPath: opts.binaryPath,
         args: prefix.length > 0 ? [...prefix, ...(opts.args ?? [])] : opts.args,
@@ -1435,13 +1501,25 @@ async function openWithSession(ctx, opts, session, persist) {
         // nested `claude` persists its JSONL transcript. When opts.env is undefined
         // this materializes the parent env, since a PTY child would otherwise
         // inherit the markers. Mirrors run.go's cleanedEnv().
-        env,
+        env: launchEnv,
         stdout: scr,
         harness: opts.harness,
         effort: opts.effort,
         model: opts.model,
-        onLine: c["adapterRawSessionID"]()
-            ? (line) => { void c.captureRawSessionID(line).catch(() => { }); }
+        // The SINGLE durable onLine callback fans out to BOTH consumers. StreamTap
+        // runs synchronously (emitting live events with the current — possibly empty
+        // — session id); raw capture is async (it persists the record), so an early
+        // stream event ships with an empty id and is BACKFILLED once capture lands.
+        onLine: needsTap
+            ? (line) => {
+                streamTap.onLine(line);
+                if (rawCapture) {
+                    void c
+                        .captureRawSessionID(line)
+                        .then(() => streamTap.backfill())
+                        .catch(() => { });
+                }
+            }
             : undefined,
     };
     const sess = await wrapperStart(runCtx, cfg);

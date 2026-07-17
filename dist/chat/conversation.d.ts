@@ -5,6 +5,11 @@ import { Context } from "../internal/async/index.ts";
 import type { Store } from "./store.ts";
 import { type Session, type Turn, type ConversationEvent, type InputRequest, type InputAnswer, type InputPolicy, type HistorySource } from "./types.ts";
 import { ControlQueue } from "./control.ts";
+import type { AcquisitionMode } from "../turns/index.ts";
+import type { EventEnvelope } from "../transcript/index.ts";
+import { StreamTap } from "../acquisition/internal/streamTap.ts";
+import { type YieldControl } from "../acquisition/internal/yield.ts";
+import { type StreamVersionPredicate } from "../acquisition/internal/planAcquisition.ts";
 /** Options configures a single Conversation. Mirrors chat.Options. */
 export interface Options {
     /** Per-harness adapter name. Required. */
@@ -44,6 +49,42 @@ export interface Options {
     primeBound?: number;
     /** Test-only echo-gated submit deadline override (ms). Zero = package default. */
     echoBound?: number;
+    /**
+     * The REQUESTED acquisition mode. planAcquisition resolves it against the
+     * resolved adapter's capabilities to the LATCHED mode actually used. Absent ⇒
+     * Off (no live acquisition; the tap is created only if raw session-id capture
+     * needs it, exactly as before).
+     */
+    acquisitionMode?: AcquisitionMode;
+    /**
+     * The acquisition event bridge. Admitted, stamped EventEnvelopes are delivered
+     * here as the run streams. Its presence is the acquisition sink (Go's
+     * `haveSink`): with no sink the plan degrades to Off.
+     */
+    onAcquisitionEvent?: (env: EventEnvelope) => void;
+    /** Best-effort per-line display callback (bounded, may drop under back-pressure). */
+    onDisplayLine?: (line: string) => void;
+    /**
+     * Caller-supplied cooperative-preemption handle. When present its yield-file
+     * path is wired into the harness launch env (hookEnv) so a hook-capable harness
+     * can be preempted mid-turn.
+     */
+    yieldControl?: YieldControl;
+    /** Hook spool dir wired into the launch env (HW_EVENT_SPOOL) for Hooks mode. */
+    spoolDir?: string;
+    /**
+     * Advanced/testing seam: use this already-resolved turns.Adapter instead of
+     * resolving one from `harness`. Lets a test drive Open with a fake adapter that
+     * implements StreamParser + interleaves stream-json (the only live exercise of
+     * Stream mode in A1). Absent ⇒ resolveAdapter(harness), the normal path.
+     */
+    adapter?: Adapter;
+    /**
+     * Advanced/testing seam: overrides planAcquisition's fact-3 version predicate
+     * (does THIS installed binary support stream-json). Absent ⇒ the versions.json
+     * default. Injected so a test can make a fake harness Stream-eligible.
+     */
+    streamVersionPredicate?: StreamVersionPredicate;
 }
 /** A size-1 coalesced wake signal — the Go `chan struct{}` of capacity 1. */
 declare class Signal {
@@ -103,6 +144,12 @@ export declare class Conversation {
     releaseWriter?: () => void;
     queue: ControlQueue;
     session: Session;
+    /**
+     * The per-run acquisition tap: a PARALLEL CONSUMER of the same durable PTY line
+     * tap `captureRawSessionID` reads from. Set by openWithSession when the plan or
+     * a display sink needs it; otherwise undefined. Never drives turn state.
+     */
+    streamTap?: StreamTap;
     /**
      * Resume-only, one-shot latch. Armed by openWithSession ONLY when the session
      * was seeded from an Options.resume id AND the resolved adapter reports
