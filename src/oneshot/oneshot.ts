@@ -15,13 +15,12 @@ import {
   RoleAssistant,
   TurnStateComplete,
   TurnStateErrored,
-  type Adapter,
   type Conversation,
   type InputPolicy,
   type Turn,
 } from "../chat/index.ts"
 import { Context, ctxDeadlineExceeded } from "../internal/async/index.ts"
-import type { AcquisitionMode } from "../turns/index.ts"
+import type { AcquisitionMode, Adapter } from "../turns/index.ts"
 import type { EventEnvelope } from "../transcript/index.ts"
 import type { YieldControl } from "../acquisition/internal/yield.ts"
 import type { StreamVersionPredicate } from "../acquisition/internal/planAcquisition.ts"
