@@ -9,6 +9,7 @@ export declare const EventToolResult = "tool_result";
 export declare const EventSessionMeta = "session_meta";
 export declare const SourceLive = "live";
 export declare const SourceFile = "file";
+export declare const SourceHook = "hook";
 export interface Event {
     seq?: number;
     timestamp?: Date;

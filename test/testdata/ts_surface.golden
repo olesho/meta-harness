@@ -117,6 +117,7 @@ transcript/index.ts
   RoleUser: string="user"
   SchemaVersion: number=1
   SourceFile: string="file"
+  SourceHook: string="hook"
   SourceLive: string="live"
   Turn: type
   Usage: type
@@ -127,6 +128,7 @@ transcript/index.ts
   eventID: function
   locateLatestSession: function
   marshalParsedEvents: function
+  mergeHookEvents: function
   parseRollout: function
   readSessionMeta: function
   slugForCwd: function

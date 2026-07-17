@@ -17,6 +17,7 @@ export {
   EventSessionMeta,
   SourceLive,
   SourceFile,
+  SourceHook,
   eventID,
   turnsFromEvents,
   envelope,
@@ -29,6 +30,9 @@ export {
 
 // Durable wire codec.
 export { marshalParsedEvents, unmarshalParsedEvents } from "./eventWire.ts"
+
+// Hook-sourced event dedup consumer (eventID-based).
+export { mergeHookEvents } from "./hookMerge.ts"
 
 // Token-usage extraction (separate from the Event DTO, which carries no token
 // fields by contract).
