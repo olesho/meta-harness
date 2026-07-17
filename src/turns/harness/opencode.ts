@@ -12,6 +12,16 @@ export class OpenCodeAdapter extends GenericAdapter implements Adapter {
   override name(): string {
     return "opencode"
   }
+
+  /**
+   * Implements turns.StreamInterleaved. OpenCode shows no interleaved
+   * stream-json surface in-repo, so it is not Stream-eligible in A1 and does not
+   * implement StreamParser.parseStreamLine. The Stream branch is scaffolding lit
+   * up by a later interleaving adapter.
+   */
+  streamInterleaved(): boolean {
+    return false
+  }
 }
 
 /** Constructs an OpenCode adapter. */

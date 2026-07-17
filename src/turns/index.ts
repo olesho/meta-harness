@@ -6,6 +6,7 @@
 // capability interfaces, the Watcher, and the adapter constructors are exposed.
 
 export type {
+  AcquisitionMode,
   Adapter,
   BusyDetector,
   Event,
@@ -21,12 +22,18 @@ export type {
   SessionIDPrimer,
   SessionInitializer,
   SessionResumer,
+  StreamInterleaved,
+  StreamParser,
   TranscriptReader,
   Turn,
 } from "./types.ts"
 
 export {
+  AcquisitionModeHooks,
+  AcquisitionModeOff,
+  AcquisitionModeStream,
   Blocked,
+  describeAcquisitionMode,
   Errored,
   InputRequested,
   InputResolved,

@@ -9,6 +9,7 @@
 //
 // Port of pkg/turns/turns.go.
 
+import type { ParsedEvent } from "../transcript/event.ts"
 import type { Snapshot } from "../screen/index.ts"
 import type { Status } from "./wrapper.ts"
 
@@ -37,6 +38,46 @@ export const Errored: Kind = "errored"
 export const InputRequested: Kind = "input_requested"
 /** A previously-requested interactive prompt is no longer on screen. */
 export const InputResolved: Kind = "input_resolved"
+
+/**
+ * AcquisitionMode selects HOW live transcript events are acquired for a run.
+ * Mirrors harness-wrapper's pkg/harness Mode (renamed here because MH already
+ * has a `Mode` in src/wrapper/internal/mode.ts). Values:
+ *
+ *   - Off    — no live acquisition; the run relies on the on-disk transcript.
+ *   - Stream — parse events from the harness's stream-json interleaved with the
+ *     interactive TUI (via a StreamParser + the PTY line tap).
+ *   - Hooks  — the harness emits events through a hooks side-channel.
+ *
+ * Go's Mode also carries an `Auto`, but only as a pre-resolution placeholder
+ * that it latches to Stream|Hooks BEFORE any event is filtered. MH resolves the
+ * concrete mode in planAcquisition (a later subtask) directly, so there is no
+ * un-latched Auto value here to leak into the event path.
+ */
+export type AcquisitionMode = "off" | "stream" | "hooks"
+
+/** No live acquisition; fall back to the on-disk transcript. */
+export const AcquisitionModeOff: AcquisitionMode = "off"
+/** Parse events from stream-json interleaved with the interactive TUI. */
+export const AcquisitionModeStream: AcquisitionMode = "stream"
+/** Acquire events from the harness hooks side-channel. */
+export const AcquisitionModeHooks: AcquisitionMode = "hooks"
+
+/**
+ * describeAcquisitionMode renders an AcquisitionMode for logs — the
+ * `String()`-equivalent of Go's Mode.String(). Returns the canonical lowercase
+ * label ("off" | "stream" | "hooks").
+ */
+export function describeAcquisitionMode(m: AcquisitionMode): "off" | "stream" | "hooks" {
+  switch (m) {
+    case AcquisitionModeOff:
+      return "off"
+    case AcquisitionModeStream:
+      return "stream"
+    case AcquisitionModeHooks:
+      return "hooks"
+  }
+}
 
 /** One observation about the conversation flow. Mirrors turns.Event. */
 export interface Event {
@@ -211,6 +252,42 @@ export interface SessionControlFlags {
  */
 export interface SessionForkResumer {
   resumeForksSessionID(): boolean
+}
+
+/**
+ * Parses live transcript events out of a single RAW harness stream-json line.
+ * Mirrors harness-wrapper's pkg/harness StreamParser.
+ *
+ * Contract:
+ *   - STATELESS and IDEMPOTENT per line: parsing a line never depends on, or
+ *     mutates, state carried between calls; the same input always yields the
+ *     same output.
+ *   - One input line yields ZERO OR MORE ParsedEvents — an assistant line can
+ *     carry both a text block and a tool_use block, so a single line fans out
+ *     to multiple events.
+ *   - It MUST TOLERATE non-event lines — non-JSON, ANSI-polluted, and
+ *     system/result lines — by returning an empty array rather than throwing,
+ *     because the PTY line tap delivers raw bytes with no framing guarantees.
+ *   - Each returned event is tagged source=live (transcript SourceLive). The
+ *     caller (StreamTap, a later subtask) stamps run/harness ids and assigns the
+ *     monotonic seq from arrival order; the parser leaves those unset.
+ */
+export interface StreamParser {
+  parseStreamLine(line: string): ParsedEvent[]
+}
+
+/**
+ * Reports whether the adapter's stream-json is emitted INTERLEAVED with the
+ * interactive TUI (so a StreamParser can tap it live) versus only via a
+ * non-interactive launch that suppresses the TUI. planAcquisition consults this
+ * to decide Stream-eligibility: only an interleaved adapter is Stream-eligible.
+ *
+ * All four A1 adapters return false (see each adapter's note), so the Stream
+ * branch is scaffolding until an interleaving adapter lights it up. Omitting the
+ * interface entirely means "not interleaved" (the conservative default).
+ */
+export interface StreamInterleaved {
+  streamInterleaved(): boolean
 }
 
 /**
