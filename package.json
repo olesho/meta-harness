@@ -88,6 +88,7 @@
     "typecheck": "tsc --noEmit",
     "build": "node scripts/build.mjs",
     "verify:exports": "node scripts/verify-exports.mjs",
+    "check-deps": "node scripts/check-deps.mjs",
     "check-versions": "node dist/cli/check-versions.js"
   },
   "devDependencies": {
