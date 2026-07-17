@@ -5,12 +5,12 @@ export interface Recv<T> {
     ok: boolean;
 }
 export declare class Channel<T> {
-    private readonly _capacity;
     private readonly _buffer;
     private readonly _recvWaiters;
     private readonly _sendWaiters;
     private _closed;
-    constructor(_capacity?: number);
+    private readonly _capacity;
+    constructor(capacity?: number);
     get closed(): boolean;
     /** Buffer a value, awaiting room if the buffer is full. Rejects if closed. */
     send(value: T): Promise<void>;

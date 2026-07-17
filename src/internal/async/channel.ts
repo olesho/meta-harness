@@ -22,8 +22,11 @@ export class Channel<T> {
   private readonly _recvWaiters: Array<(r: Recv<T>) => void> = []
   private readonly _sendWaiters: Array<{ value: T; resolve: () => void }> = []
   private _closed = false
+  private readonly _capacity: number
 
-  constructor(private readonly _capacity = 0) {}
+  constructor(capacity = 0) {
+    this._capacity = capacity
+  }
 
   get closed(): boolean {
     return this._closed

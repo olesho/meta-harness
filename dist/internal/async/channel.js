@@ -7,13 +7,13 @@
 import { defineSentinel } from "./errors.js";
 export const chanClosed = defineSentinel("channel/closed", "send on closed channel");
 export class Channel {
-    _capacity;
     _buffer = [];
     _recvWaiters = [];
     _sendWaiters = [];
     _closed = false;
-    constructor(_capacity = 0) {
-        this._capacity = _capacity;
+    _capacity;
+    constructor(capacity = 0) {
+        this._capacity = capacity;
     }
     get closed() {
         return this._closed;

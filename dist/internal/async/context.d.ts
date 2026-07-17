@@ -3,12 +3,12 @@ export declare const ctxCanceled: Sentinel;
 export declare const ctxDeadlineExceeded: Sentinel;
 export type CancelFn = (cause?: unknown) => void;
 export declare class Context {
-    private readonly _parent?;
     private _err;
     private _resolveDone;
     private readonly _done;
     private readonly _children;
     private _timer;
+    private readonly _parent?;
     private constructor();
     /** The root, never-cancelled context. */
     static background(): Context;

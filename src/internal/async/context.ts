@@ -24,8 +24,10 @@ export class Context {
   private readonly _done: Promise<void>
   private readonly _children = new Set<Context>()
   private _timer: ReturnType<typeof setTimeout> | undefined
+  private readonly _parent?: Context
 
-  private constructor(private readonly _parent?: Context) {
+  private constructor(_parent?: Context) {
+    this._parent = _parent
     this._done = new Promise<void>((resolve) => {
       this._resolveDone = resolve
     })

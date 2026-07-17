@@ -8,12 +8,12 @@ import { defineSentinel } from "./errors.js";
 export const ctxCanceled = defineSentinel("context/canceled", "context canceled");
 export const ctxDeadlineExceeded = defineSentinel("context/deadline-exceeded", "context deadline exceeded");
 export class Context {
-    _parent;
     _err = undefined;
     _resolveDone;
     _done;
     _children = new Set();
     _timer;
+    _parent;
     constructor(_parent) {
         this._parent = _parent;
         this._done = new Promise((resolve) => {
