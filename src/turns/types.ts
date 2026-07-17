@@ -70,11 +70,11 @@ export const AcquisitionModeHooks: AcquisitionMode = "hooks"
  */
 export function describeAcquisitionMode(m: AcquisitionMode): "off" | "stream" | "hooks" {
   switch (m) {
-    case AcquisitionModeOff:
+    case "off":
       return "off"
-    case AcquisitionModeStream:
+    case "stream":
       return "stream"
-    case AcquisitionModeHooks:
+    case "hooks":
       return "hooks"
   }
 }
