@@ -4,5 +4,6 @@ export { ensureSettingsJSONHooks, removeManagedHooks, type SettingsHookCmd, type
 export { resolveWithinBase, isWithinBase, PathEscapeError, } from "./pathguard.ts";
 export { specFromProfile, type HookContext, type HookEntry, type HookProvider, type HookSpec, type StaticHookProfile, } from "./provider.ts";
 export { guardPath, sessionMatches } from "./guard.ts";
+export { appendSpool, drainSpool, spoolFileName, spoolFilePath, } from "./spool.ts";
 export { ClaudeHookProvider, EventTurnBoundary, HookEventPostTask, HookEventPostToolUse, HookEventSessionStart, HookEventStop, HookEventSubagentStop, claudeHookOwner, parseClaudeHookPayload, type ClaudeHookPayload, } from "./claude.ts";
 //# sourceMappingURL=index.d.ts.map

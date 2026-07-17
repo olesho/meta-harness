@@ -44,6 +44,13 @@ export {
 export { guardPath, sessionMatches } from "./guard.ts"
 
 export {
+  appendSpool,
+  drainSpool,
+  spoolFileName,
+  spoolFilePath,
+} from "./spool.ts"
+
+export {
   ClaudeHookProvider,
   EventTurnBoundary,
   HookEventPostTask,
