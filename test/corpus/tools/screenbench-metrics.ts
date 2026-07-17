@@ -12,6 +12,12 @@ import { stripANSIEscapes } from "../../../src/wrapper/internal/ansi"
  */
 export const StripANSI = stripANSIEscapes
 
+// ANSI CSI escape sequences (cursor moves, SGR, etc.). Mirrors Go's
+// metrics.go `ansiCSI` regex. `stripANSIEscapes` only removes the ESC and its
+// single final byte (it treats the `[` as a terminator), so Normalize applies
+// this first to strip the CSI parameter/final bytes as well.
+const ansiCSI = /\x1b\[[0-9;?]*[a-zA-Z]/g
+
 /**
  * Normalize collapses per-line trailing whitespace and trims trailing blank
  * lines so padding differences don't dominate the comparison. Applied to both
@@ -21,7 +27,7 @@ export const StripANSI = stripANSIEscapes
  * trailing whitespace, (3) strip trailing blank lines at end of the text.
  */
 export function Normalize(s: string): string {
-  s = StripANSI(s)
+  s = StripANSI(s.replace(ansiCSI, ""))
   const lines = s.split("\n").map((ln) => ln.replace(/\s+$/, ""))
   // Trim trailing blank lines.
   let end = lines.length

@@ -8,10 +8,16 @@ import {
 } from "./screenbench-metrics"
 
 describe("StripANSI / Normalize", () => {
-  it("strips SGR/CSI escape sequences", () => {
+  it("Normalize strips SGR/CSI escape sequences", () => {
     const input = "\x1b[31mred\x1b[0m \x1b[1;32mgreen\x1b[0m"
-    expect(StripANSI(input)).toBe("red green")
     expect(Normalize(input)).toBe("red green")
+  })
+
+  it("StripANSI (the wrapper re-export) removes ESC-led simple escapes", () => {
+    // stripANSIEscapes strips the ESC and its final byte; it is the canonical
+    // re-export, and Normalize layers full CSI stripping on top of it.
+    expect(StripANSI("a\x1bcb")).toBe("ab")
+    expect(typeof StripANSI).toBe("function")
   })
 
   it("strips per-line trailing whitespace", () => {
