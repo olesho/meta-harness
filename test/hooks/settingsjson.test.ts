@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vitest"
+import { execFile } from "node:child_process"
 import {
   existsSync,
   mkdtempSync,
@@ -8,6 +9,8 @@ import {
 } from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"
+import { fileURLToPath } from "node:url"
+import { promisify } from "node:util"
 import {
   atomicWriteFileSync,
   ensureSettingsJSONHooks,
@@ -162,6 +165,39 @@ describe("removeManagedHooks", () => {
 
     const settings = JSON.parse(readFileSync(cfg, "utf8"))
     expect(settings.hooks).toBeUndefined()
+  })
+})
+
+// True multi-process contention: N Node processes hammer ensure on one config.
+// Requires native TS execution (Node >=22), so it is skipped on older runtimes —
+// the in-process suite above covers the same guarantees deterministically.
+const nodeMajor = Number(process.versions.node.split(".")[0])
+const here = path.dirname(fileURLToPath(import.meta.url))
+const execFileAsync = promisify(execFile)
+
+describe.skipIf(nodeMajor < 22)("ensureSettingsJSONHooks under real parallelism", () => {
+  test("8 concurrent writers leave exactly one managed block, co-tenant intact", async () => {
+    const dir = tempDir()
+    const cfg = path.join(dir, "settings.json")
+    writeFileSync(cfg, JSON.stringify({ hooks: { Stop: [coTenant] } }))
+
+    const worker = path.join(here, "contend-worker.mjs")
+    const modulePath = path.resolve(here, "../../src/hooks/index.ts")
+    await Promise.all(
+      Array.from({ length: 8 }, () =>
+        execFileAsync(process.execPath, [worker, modulePath, cfg, "20"]),
+      ),
+    )
+
+    const settings = JSON.parse(readFileSync(cfg, "utf8"))
+    const cmds = settings.hooks.Stop.flatMap((m: SettingsHookMatcher) =>
+      m.hooks.map((h) => h.command),
+    )
+    expect(cmds.filter(isManagedHookCommand)).toHaveLength(1)
+    expect(cmds).toContain(coTenant.hooks[0].command)
+    // No leaked lock/tmp after the storm.
+    expect(existsSync(`${cfg}.lock`)).toBe(false)
+    expect(existsSync(`${cfg}.tmp`)).toBe(false)
   })
 })
 

@@ -26,12 +26,13 @@ function canonicalize(abs: string): string {
 }
 
 export class PathEscapeError extends Error {
-  constructor(
-    readonly baseDir: string,
-    readonly candidate: string,
-  ) {
+  readonly baseDir: string
+  readonly candidate: string
+  constructor(baseDir: string, candidate: string) {
     super(`path escapes base directory: ${candidate} (base ${baseDir})`)
     this.name = "PathEscapeError"
+    this.baseDir = baseDir
+    this.candidate = candidate
   }
 }
 
