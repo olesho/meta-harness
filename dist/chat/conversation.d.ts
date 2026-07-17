@@ -10,6 +10,8 @@ import type { EventEnvelope } from "../transcript/index.ts";
 import { StreamTap } from "../acquisition/internal/streamTap.ts";
 import { type YieldControl } from "../acquisition/internal/yield.ts";
 import { type StreamVersionPredicate } from "../acquisition/internal/planAcquisition.ts";
+import { HookDrain } from "./hookDrain.ts";
+import type { ParsedEvent, Turn as TranscriptTurn } from "../transcript/event.ts";
 /** Options configures a single Conversation. Mirrors chat.Options. */
 export interface Options {
     /** Per-harness adapter name. Required. */
@@ -73,6 +75,26 @@ export interface Options {
     /** Hook spool dir wired into the launch env (HW_EVENT_SPOOL) for Hooks mode. */
     spoolDir?: string;
     /**
+     * The durable-store/dedup sink for drained hook events. Its presence is what
+     * activates the hook drain (the analogue of onAcquisitionEvent for hooks). It
+     * receives freshly-deduped SourceHook ParsedEvents — provenance observable
+     * here (the durable-store layer), NEVER on an events() ConversationEvent.
+     */
+    onHookEvents?: (events: ParsedEvent[]) => void;
+    /**
+     * Optional SEPARATE chat-surface projection of turn-boundary lifecycle edges,
+     * as Turns via turnsFromEvents (which carry no `source`, by construction).
+     */
+    onHookBoundaryTurns?: (turns: TranscriptTurn[]) => void;
+    /**
+     * Overrides the harness config/state dir the spool dir is derived from
+     * (HookContext.configDir). Absent ⇒ the provider default (~/.claude). Mainly a
+     * test seam so the managed settings.json + spool dir land under a temp dir.
+     */
+    hooksConfigDir?: string;
+    /** Test-only bounded fallback-timer override (ms) for the hook drain loop. */
+    hookDrainFallbackMs?: number;
+    /**
      * Advanced/testing seam: use this already-resolved turns.Adapter instead of
      * resolving one from `harness`. Lets a test drive Open with a fake adapter that
      * implements StreamParser + interleaves stream-json (the only live exercise of
@@ -130,6 +152,7 @@ export interface ConversationInit {
     currentTurn?: Turn | null;
     markerArmCh?: Signal;
     inputStateCh?: Signal;
+    hookDrainCh?: Signal;
     closed?: boolean;
     /** Test injection: replaces sess.writeStdin for answer/quit keystrokes. */
     writeStdin?: (p: Uint8Array) => void;
@@ -185,6 +208,16 @@ export declare class Conversation {
     private sentTranscriptWatermark;
     markerArmCh: Signal;
     inputStateCh: Signal;
+    /**
+     * The hook drain's independent wake Signal (same primitive as markerArmCh).
+     * The spool fs-watch raises it; the drain loop receives it, racing it against
+     * the close promise and a BOUNDED fallback timer — so a missed wake can never
+     * wedge the tail. Distinct from markerArmCh: hook-event latency is NOT coupled
+     * to the turn watcher yielding a live/file event.
+     */
+    hookDrainCh: Signal;
+    /** The active hook drain, when the run opted in AND the adapter supports hooks. */
+    hookDrain?: HookDrain;
     currentInput: TurnsInputRequest | null;
     inputSurfaced: boolean;
     writeStdin?: (p: Uint8Array) => void;
