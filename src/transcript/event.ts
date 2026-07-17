@@ -23,6 +23,12 @@ export const EventSessionMeta = "session_meta"
 // Event provenance (Source) — which acquisition produced the event.
 export const SourceLive = "live"
 export const SourceFile = "file"
+// SourceHook tags events sourced from a harness hook stream. It is the SECOND
+// actually-emitted provenance (after SourceFile) — NOT a third among three live
+// producers: SourceLive remains an unproduced (dead) constant, assigned nowhere
+// in src/. Hook events feed the eventID-based dedup consumer in hookMerge.ts,
+// where they collapse against the authoritative SourceFile event.
+export const SourceHook = "hook"
 
 // Event is the canonical representation of a single moment in a session's
 // transcript. The PUBLIC fields mirror loomcli's DTO; the INTERNAL fields
@@ -42,7 +48,7 @@ export interface Event {
 
   // --- INTERNAL metadata: durable store row only, NOT public DTO ---
   schemaVersion?: number
-  source?: string // SourceLive | SourceFile
+  source?: string // SourceLive | SourceFile | SourceHook
   nativeID?: string // PRIMARY identity (parser-owned); see eventID
 }
 
