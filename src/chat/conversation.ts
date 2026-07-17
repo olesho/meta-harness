@@ -89,6 +89,10 @@ import {
   resolveProfile,
   type StreamVersionPredicate,
 } from "../acquisition/internal/planAcquisition.ts"
+import { HookDrain } from "./hookDrain.ts"
+import type { HookProvider } from "../hooks/provider.ts"
+import type { ParsedEvent, Turn as TranscriptTurn } from "../transcript/event.ts"
+import { EnvConfigDir, EnvSessionID } from "../cli/hooks.ts"
 
 /** Options configures a single Conversation. Mirrors chat.Options. */
 export interface Options {
@@ -160,6 +164,33 @@ export interface Options {
   yieldControl?: YieldControl
   /** Hook spool dir wired into the launch env (HW_EVENT_SPOOL) for Hooks mode. */
   spoolDir?: string
+
+  // ── Hook drain (spool → canonical-Event runtime integration) opt-in ──────────
+  // Inert unless onHookEvents is set AND the resolved adapter implements the
+  // HookProviderCapability (Claude Code). When active, a HookDrain owns a spool
+  // dir under the harness config dir, installs the managed settings.json block,
+  // watches the spool for out-of-process hook writes, and drains them on its own
+  // wakeup (independent of the turn watcher) into the durable-store/dedup layer.
+  /**
+   * The durable-store/dedup sink for drained hook events. Its presence is what
+   * activates the hook drain (the analogue of onAcquisitionEvent for hooks). It
+   * receives freshly-deduped SourceHook ParsedEvents — provenance observable
+   * here (the durable-store layer), NEVER on an events() ConversationEvent.
+   */
+  onHookEvents?: (events: ParsedEvent[]) => void
+  /**
+   * Optional SEPARATE chat-surface projection of turn-boundary lifecycle edges,
+   * as Turns via turnsFromEvents (which carry no `source`, by construction).
+   */
+  onHookBoundaryTurns?: (turns: TranscriptTurn[]) => void
+  /**
+   * Overrides the harness config/state dir the spool dir is derived from
+   * (HookContext.configDir). Absent ⇒ the provider default (~/.claude). Mainly a
+   * test seam so the managed settings.json + spool dir land under a temp dir.
+   */
+  hooksConfigDir?: string
+  /** Test-only bounded fallback-timer override (ms) for the hook drain loop. */
+  hookDrainFallbackMs?: number
   /**
    * Advanced/testing seam: use this already-resolved turns.Adapter instead of
    * resolving one from `harness`. Lets a test drive Open with a fake adapter that
@@ -298,6 +329,7 @@ export interface ConversationInit {
   currentTurn?: Turn | null
   markerArmCh?: Signal
   inputStateCh?: Signal
+  hookDrainCh?: Signal
   closed?: boolean
   /** Test injection: replaces sess.writeStdin for answer/quit keystrokes. */
   writeStdin?: (p: Uint8Array) => void
@@ -365,6 +397,17 @@ export class Conversation {
   markerArmCh: Signal
   inputStateCh: Signal
 
+  /**
+   * The hook drain's independent wake Signal (same primitive as markerArmCh).
+   * The spool fs-watch raises it; the drain loop receives it, racing it against
+   * the close promise and a BOUNDED fallback timer — so a missed wake can never
+   * wedge the tail. Distinct from markerArmCh: hook-event latency is NOT coupled
+   * to the turn watcher yielding a live/file event.
+   */
+  hookDrainCh: Signal
+  /** The active hook drain, when the run opted in AND the adapter supports hooks. */
+  hookDrain?: HookDrain
+
   currentInput: TurnsInputRequest | null = null
   inputSurfaced = false
 
@@ -394,6 +437,7 @@ export class Conversation {
     this.currentTurn = init.currentTurn ?? null
     this.markerArmCh = init.markerArmCh ?? new Signal()
     this.inputStateCh = init.inputStateCh ?? new Signal()
+    this.hookDrainCh = init.hookDrainCh ?? new Signal()
     this.writeStdin = init.writeStdin
     this.closedPromise = new Promise<void>((resolve) => {
       this.closedResolve = resolve
@@ -439,6 +483,11 @@ export class Conversation {
     this.closedResolve()
     this.queue.close()
     if (this.releaseWriter) this.releaseWriter()
+    // Reap the hook drain BEFORE stopping the harness/watcher: close() runs a
+    // final flush drain (catching a Stop/idle hook that landed after the last
+    // wake) and then reaps the spool dir. Managed settings.json blocks are left
+    // installed (idempotent, re-ensured each session) — removal is explicit only.
+    if (this.hookDrain) this.hookDrain.close()
     if (this.sess) await this.sess.stop(ctx)
     if (this.watcher) this.watcher.close()
   }
@@ -1461,6 +1510,11 @@ export class Conversation {
   startPumps(): void {
     void this.consumeWatcher()
     void this.idleCompletionWatcher()
+    // The hook drain runs its OWN loop (spool watch + bounded fallback timer),
+    // deliberately NOT hung off consumeWatcher — so a SessionStart-before-any-
+    // file-change or an idle-period Stop drains promptly regardless of turn
+    // activity. Inert unless the run opted in and the adapter supports hooks.
+    if (this.hookDrain) this.hookDrain.start()
   }
 }
 
@@ -1629,6 +1683,34 @@ async function openWithSession(
     c.harnessSessionIDProvisional = true
   }
 
+  // ── Hook drain (spool → canonical-Event) ─────────────────────────────────────
+  // Opt-in (onHookEvents set) AND the adapter must implement HookProviderCapability
+  // (structural probe, Go-optional-interface style). When active, the drain owns a
+  // per-run spool dir keyed on the tracked harnessSessionID (seeded above by
+  // initSession for claude-code), installs the managed settings.json block, and
+  // wires HW_EVENT_SPOOL into the launch env below so out-of-process hook fires
+  // land where the drain reads. Inert otherwise — existing runs are unchanged.
+  if (opts.onHookEvents) {
+    const provider = adapterHookProvider(adapter)
+    if (provider) {
+      const drain = new HookDrain({
+        provider,
+        workingDir: opts.workingDir ?? "",
+        harnessSessionID: session.harnessSessionID,
+        configDir: opts.hooksConfigDir,
+        wake: c.hookDrainCh,
+        closed: c["closedPromise"],
+        isClosed: () => c.isClosed(),
+        onEvents: opts.onHookEvents,
+        onBoundaryTurns: opts.onHookBoundaryTurns,
+        fallbackMs: opts.hookDrainFallbackMs,
+      })
+      // Create the spool dir + install the managed hook block before launch.
+      drain.ensureConfig()
+      c.hookDrain = drain
+    }
+  }
+
   const runCtx = ctx ? { done: () => ctx.done(), err: () => ctx.err() } : undefined
 
   // ── Acquisition plan (StreamTap) ───────────────────────────────────────────
@@ -1679,11 +1761,26 @@ async function openWithSession(
   }).bindLaunchEnv?.(env, opts.workingDir ?? "")
 
   // Wire the HW_* hook env (spool dir, cwd, home, yield file) into the launch env
-  // for Hooks mode or whenever a caller supplied a YieldControl handle.
-  const launchEnv =
-    opts.yieldControl || acquisitionMode === AcquisitionModeHooks
-      ? hookEnv(env, opts.spoolDir ?? "", opts.workingDir ?? "", opts.yieldControl ?? null)
-      : env
+  // for Hooks mode, whenever a caller supplied a YieldControl handle, or when the
+  // hook drain is active. The active drain's own spool dir wins so out-of-process
+  // hook fires land where the drain reads (its ensureConfig already created it);
+  // otherwise fall back to the raw opts.spoolDir (Hooks-mode/yield callers).
+  const hookSpoolDir = c.hookDrain ? c.hookDrain.spoolDir() : (opts.spoolDir ?? "")
+  const needHookEnv =
+    !!opts.yieldControl || acquisitionMode === AcquisitionModeHooks || !!c.hookDrain
+  let launchEnv = needHookEnv
+    ? hookEnv(env, hookSpoolDir, opts.workingDir ?? "", opts.yieldControl ?? null)
+    : env
+  // The out-of-process hook CLI keys its session-mismatch guard and config dir off
+  // these; set them so a stray hook from an unrelated session is dropped and the
+  // CLI resolves the same config dir the drain installed the managed block under.
+  if (c.hookDrain) {
+    launchEnv = [
+      ...launchEnv,
+      `${EnvConfigDir}=${c.hookDrain.hookContext().configDir}`,
+      `${EnvSessionID}=${session.harnessSessionID}`,
+    ]
+  }
 
   // Widen the tap-instantiation gate (critique (a)): the durable LineSplitter tap
   // is created whenever EITHER consumer needs it — raw session-id capture OR the
@@ -1805,6 +1902,17 @@ export async function Reopen(
     resume: stored.harnessSessionID,
   }
   return openWithSession(ctx, launch, { ...stored }, /* persist */ false)
+}
+
+/**
+ * Structurally probes an adapter for the optional HookProviderCapability (the
+ * same Go-optional-interface style as readTranscript / SessionIDExtractor).
+ * Returns the HookProvider when present (Claude Code), else null.
+ */
+function adapterHookProvider(adapter: Adapter): HookProvider | null {
+  const a = adapter as unknown as Record<string, unknown>
+  if (typeof a.hookProvider !== "function") return null
+  return (a.hookProvider as () => HookProvider)()
 }
 
 /** Structurally probes an adapter for SessionResumer; null when unsupported. */
