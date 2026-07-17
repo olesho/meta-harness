@@ -61,6 +61,15 @@ export class CodexAdapter extends GenericAdapter {
         return "codex";
     }
     /**
+     * Implements turns.StreamInterleaved. Codex shows no interleaved stream-json
+     * surface in-repo, so it is not Stream-eligible in A1 and does not implement
+     * StreamParser.parseStreamLine. The Stream branch is scaffolding lit up by a
+     * later interleaving adapter.
+     */
+    streamInterleaved() {
+        return false;
+    }
+    /**
      * Suppresses the generic `waiting_for_input → TurnComplete` mapping while a
      * structured input request is on screen (lastInputID !== ""). The
      * InputRequested event already represents that state; letting the generic

@@ -81,6 +81,15 @@ export class ClaudeCodeAdapter extends GenericAdapter {
     name() {
         return "claude-code";
     }
+    /**
+     * Implements turns.StreamInterleaved. Claude Code drives the interactive TUI
+     * exclusively and exposes no interleaved stream-json surface, so it is not
+     * Stream-eligible in A1 and does not implement StreamParser.parseStreamLine.
+     * The Stream branch is scaffolding lit up by a later interleaving adapter.
+     */
+    streamInterleaved() {
+        return false;
+    }
     onScreen(snap) {
         const out = [];
         // Interrupt detection — transition not-seen → seen.

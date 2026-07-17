@@ -1,5 +1,6 @@
 import type { Snapshot, Screen } from "../screen/index.ts";
 import type { Context } from "../internal/async/index.ts";
+import type { ParsedEvent } from "../transcript/event.ts";
 /** A blocking interactive prompt as the turns layer reports it (with keystrokes). */
 export interface TurnsInputOption {
     id: string;
@@ -90,6 +91,17 @@ export interface StartConfig {
 export interface Adapter {
     /** turns.RawSessionIDExtractor — recover the harness id from a raw output line. */
     extractSessionIDFromLine?(line: string): [string, boolean];
+    /**
+     * turns.StreamParser — parse zero or more live transcript events from a raw
+     * stream-json line. Stateless/idempotent per line; tolerates non-event lines
+     * by returning []. Omitted by adapters with no interleaved stream-json.
+     */
+    parseStreamLine?(line: string): ParsedEvent[];
+    /**
+     * turns.StreamInterleaved — reports whether stream-json is emitted interleaved
+     * with the interactive TUI (Stream-eligible). Omitted => not interleaved.
+     */
+    streamInterleaved?(): boolean;
     /** turns.SessionIDExtractor — scrape the id from the rendered screen. */
     extractSessionID?(snap: Snapshot): [string, boolean];
     /** turns.SessionIDLocator — locate the id from the on-disk session log. */

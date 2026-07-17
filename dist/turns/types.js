@@ -20,4 +20,25 @@ export const Errored = "errored";
 export const InputRequested = "input_requested";
 /** A previously-requested interactive prompt is no longer on screen. */
 export const InputResolved = "input_resolved";
+/** No live acquisition; fall back to the on-disk transcript. */
+export const AcquisitionModeOff = "off";
+/** Parse events from stream-json interleaved with the interactive TUI. */
+export const AcquisitionModeStream = "stream";
+/** Acquire events from the harness hooks side-channel. */
+export const AcquisitionModeHooks = "hooks";
+/**
+ * describeAcquisitionMode renders an AcquisitionMode for logs — the
+ * `String()`-equivalent of Go's Mode.String(). Returns the canonical lowercase
+ * label ("off" | "stream" | "hooks").
+ */
+export function describeAcquisitionMode(m) {
+    switch (m) {
+        case "off":
+            return "off";
+        case "stream":
+            return "stream";
+        case "hooks":
+            return "hooks";
+    }
+}
 //# sourceMappingURL=types.js.map

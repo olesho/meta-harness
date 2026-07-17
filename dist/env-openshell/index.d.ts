@@ -16,6 +16,21 @@ export declare function sandboxName(agentId: string): string;
 /** Rewrite a loopback URL to a guest-reachable address for the driver.
  *  Throws when loopback can't be routed and no override is configured. */
 export declare function resolveGuestUrl(hostUrl: string, driver: string, guestOverride?: string): string;
+/** An extra egress target the guest may reach (e.g. a scrape site), bound to the
+ *  processes allowed to reach it. Emitted as a BARE `{host, port}` endpoint — a plain
+ *  CONNECT tunnel — which is the shape that actually works: a `tls: terminate` lane
+ *  makes the in-guest proxy 403 the browser/curl CONNECT (field-tested, openshell
+ *  0.0.53). NB egress ALSO requires the guest image to ship a statable `/init.krun`
+ *  (the proxy's ancestor-integrity check stats the libkrun PID-1 init); without it
+ *  every lane is denied regardless of this policy. */
+export interface ScrapeEndpoint {
+    host: string;
+    /** Defaults to 443. */
+    port?: number;
+    /** Absolute guest paths of the processes allowed to reach `host` (e.g. a browser
+     *  binary). openshell matches the CONNECTING process's exe + ancestor chain. */
+    binaries: string[];
+}
 /** Policy generation: per-tier filesystem sets, landlock, per-binary egress.
  *  Pure function, no I/O. */
 export interface PolicyScopes {
@@ -25,6 +40,9 @@ export interface PolicyScopes {
     fleetHost: string;
     fleetPort: number;
     harnessPath: string;
+    /** OPTIONAL extra egress targets. Absent/empty ⇒ NO scrape lane is emitted and the
+     *  generated policy is byte-for-byte unchanged (additive; existing consumers unaffected). */
+    scrapeEndpoints?: ScrapeEndpoint[];
 }
 export declare function generatePolicy(scopes: PolicyScopes): string;
 /** OpenShell containment implementation. */

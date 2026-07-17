@@ -133,6 +133,11 @@ export function generatePolicy(scopes) {
     lines.push("  fleet:");
     lines.push(`    endpoints: [{ host: ${scopes.fleetHost}, port: ${scopes.fleetPort}, protocol: rest, access: full, enforcement: ${enforcement} }]`);
     lines.push(`    binaries: [{ path: ${scopes.harnessPath} }, { path: /usr/local/bin/orche }]`);
+    (scopes.scrapeEndpoints ?? []).forEach((e, i) => {
+        lines.push(`  scrape_${i}:`);
+        lines.push(`    endpoints: [{ host: ${e.host}, port: ${e.port ?? 443} }]`);
+        lines.push(`    binaries: [${e.binaries.map((b) => `{ path: ${b} }`).join(", ")}]`);
+    });
     lines.push("  # git hub: bundle-out ⇒ NO network endpoint");
     return `${lines.join("\n")}\n`;
 }
@@ -207,6 +212,7 @@ export class OpenShellContainment {
                 fleetHost: policy.fleetHost ?? "localhost",
                 fleetPort: policy.fleetPort ?? 53343,
                 harnessPath: policy.harnessPath ?? "/usr/local/bin/harness-wrapper",
+                scrapeEndpoints: policy.scrapeEndpoints,
             });
             policyPath = `${ws.guestPath("tmp")}/openshell-policy-${name}.yaml`;
             const staged = await ws.exec(ctx, ["sh", "-c", `cat > '${policyPath}'`], {

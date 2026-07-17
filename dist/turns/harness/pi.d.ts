@@ -7,6 +7,15 @@ export declare class PiAdapter extends GenericAdapter implements Adapter {
     pinnedSessionsDir: string;
     name(): string;
     /**
+     * Implements turns.StreamInterleaved. pi's stream-json is `pi -p --mode json`,
+     * a headless print mode that SUPPRESSES the TUI (test/corpus/pi/README.md), so
+     * it is not emitted interleaved with the interactive session pi runs under
+     * here. Not Stream-eligible in A1 — no StreamParser.parseStreamLine is
+     * implemented; the Stream branch is scaffolding lit up by a later interleaving
+     * adapter.
+     */
+    streamInterleaved(): boolean;
+    /**
      * Optional capability: chat calls this once at Open with the effective child
      * env AND cwd, so the reader resolves the same sessions dir the child was
      * launched with (see PI_CODING_AGENT_* precedence).
