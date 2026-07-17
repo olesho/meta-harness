@@ -118,6 +118,16 @@ export async function runOneShotDetailed(ctx, cfg) {
             markerGap: cfg.markerGap,
             store: newMemStore(),
             inputPolicy: AutoAcceptTrust,
+            // Inherit acquisition from THIS single chat seam — the StreamTap attaches
+            // once inside Open/Watch. oneshot forwards the opt-in and NEVER attaches
+            // its own tap (that would double-write the session record).
+            acquisitionMode: cfg.acquisitionMode,
+            onAcquisitionEvent: cfg.onAcquisitionEvent,
+            onDisplayLine: cfg.onDisplayLine,
+            yieldControl: cfg.yieldControl,
+            spoolDir: cfg.spoolDir,
+            adapter: cfg.adapter,
+            streamVersionPredicate: cfg.streamVersionPredicate,
         });
     }
     catch (err) {
