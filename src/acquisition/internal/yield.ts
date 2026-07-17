@@ -65,7 +65,7 @@ export class YieldControl {
 /**
  * YieldOutcome directs the caller to BLOCK the tool: print `blockOutput` to
  * stdout and exit with the non-zero code the harness interprets as "block"
- * (Claude/Gemini: exit 2). The zero value ({ block: false }) means proceed.
+ * (Claude: exit 2). The zero value ({ block: false }) means proceed.
  */
 export interface YieldOutcome {
   block: boolean
@@ -75,7 +75,7 @@ export interface YieldOutcome {
 /**
  * checkYield inspects the yield file and, if a yield was requested, returns a
  * blocking outcome carrying the harness's block-decision JSON. The protocol
- * (decision:block + exit 2) is the shared Claude/Gemini shell-hook contract. No
+ * (decision:block + exit 2) is the Claude shell-hook contract. No
  * file (or empty path) ⇒ no block ⇒ the tool proceeds.
  */
 export function checkYield(yieldFile: string): YieldOutcome {

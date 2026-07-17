@@ -99,7 +99,7 @@ describe("handleHookEvent", () => {
 
   test("unknown harness spools nothing", () => {
     const spool = freshSpool()
-    const n = handleHookEvent("gemini", HookEventStop, env(spool), "{}")
+    const n = handleHookEvent("nonexistent", HookEventStop, env(spool), "{}")
     expect(n).toBe(0)
     expect(drainSpool(spool)).toHaveLength(0)
   })

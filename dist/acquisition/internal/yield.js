@@ -56,7 +56,7 @@ export class YieldControl {
 /**
  * checkYield inspects the yield file and, if a yield was requested, returns a
  * blocking outcome carrying the harness's block-decision JSON. The protocol
- * (decision:block + exit 2) is the shared Claude/Gemini shell-hook contract. No
+ * (decision:block + exit 2) is the Claude shell-hook contract. No
  * file (or empty path) ⇒ no block ⇒ the tool proceeds.
  */
 export function checkYield(yieldFile) {

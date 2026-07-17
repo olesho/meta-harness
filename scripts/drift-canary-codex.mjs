@@ -1,7 +1,8 @@
 // Single-harness registry-drift canary — pinned to `codex` (@openai/codex).
 //
-// This is the tightest single-harness drift signal (Go analogue:
-// `schema-canary-gemini`; gemini is out of MH scope). We pick `codex` because:
+// This is the tightest single-harness drift signal. Out-of-scope Go-only
+// harnesses have their own canary; this file scopes to the MH-relevant pinned
+// harnesses. We pick `codex` because:
 //   - It has the most frequently-moving upstream of the pinned three, so a drift
 //     fires soonest — exercising the sentry's `match` -> `drift` transition
 //     earliest of any pinned harness.
@@ -9,7 +10,7 @@
 //     `encodeURIComponent` URL path (`%40openai%2Fcodex`) rather than the bare
 //     name path.
 // We deliberately do NOT canary `opencode` (unpinned `pinned: ""` — perpetual
-// `unpinned`, no signal) or gemini (absent from versions.json).
+// `unpinned`, no signal) or any harness absent from versions.json.
 //
 // Unlike the corpus rebake tooling, this canary runs against the EMBEDDED
 // catalog via `all()` and needs no A5 screenbench recorder — so it lands and
