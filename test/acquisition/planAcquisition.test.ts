@@ -10,8 +10,9 @@
 // land on Hooks/Off.
 
 import { describe, expect, test } from "vitest"
-import type { Adapter, Event, Snapshot } from "../../src/turns/index.ts"
+import type { Adapter, Event } from "../../src/turns/index.ts"
 import type { Status } from "../../src/turns/wrapper.ts"
+import type { Snapshot } from "../../src/screen/index.ts"
 import {
   AcquisitionModeHooks,
   AcquisitionModeOff,
