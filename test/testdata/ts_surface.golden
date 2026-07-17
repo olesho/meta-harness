@@ -45,6 +45,10 @@ wrapper/index.ts
   validateConfig: function
 
 turns/index.ts
+  AcquisitionMode: type
+  AcquisitionModeHooks: string="hooks"
+  AcquisitionModeOff: string="off"
+  AcquisitionModeStream: string="stream"
   Adapter: type
   Blocked: string="blocked"
   BusyDetector: type
@@ -77,6 +81,8 @@ turns/index.ts
   StatusStale: string="stale"
   StatusUnknown: string="unknown"
   StatusWaitingForInput: string="waiting_for_input"
+  StreamInterleaved: type
+  StreamParser: type
   ToolCall: string="tool_call"
   TranscriptReader: type
   Turn: type
@@ -85,6 +91,7 @@ turns/index.ts
   Watcher: class{close,events,pumpDone,send}
   claudecode: object{ClaudeCodeAdapter,DetectInput,DetectQuestion,New}
   codex: object{AutoDismissKeys,CODEX_STATUS_MIN_COLS,CodexAdapter,DetectInput,KindApproval,KindModelMigration,KindNotice,KindUpdateNotice,New,PromptReady}
+  describeAcquisitionMode: function
   generic: object{GenericAdapter,New}
   opencode: object{New,OpenCodeAdapter}
   pi: object{New,PiAdapter,PromptReady}
