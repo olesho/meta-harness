@@ -18,6 +18,12 @@ export const EventSessionMeta = "session_meta";
 // Event provenance (Source) — which acquisition produced the event.
 export const SourceLive = "live";
 export const SourceFile = "file";
+// SourceHook tags events sourced from a harness hook stream. It is the SECOND
+// actually-emitted provenance (after SourceFile) — NOT a third among three live
+// producers: SourceLive remains an unproduced (dead) constant, assigned nowhere
+// in src/. Hook events feed the eventID-based dedup consumer in hookMerge.ts,
+// where they collapse against the authoritative SourceFile event.
+export const SourceHook = "hook";
 // unixNanoStr renders a timestamp the way Go's Timestamp.UnixNano() feeds the
 // content hash. Exact value is unimportant — only stability matters.
 function unixNanoStr(ts) {
