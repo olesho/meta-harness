@@ -66,14 +66,14 @@ afterEach(() => {
 
 describe("fetchLatest — scoped-package URL encoding", () => {
   test("scoped name is percent-encoded and dist-tags.latest is read (primary path)", async () => {
-    const fetchMock = vi.fn(async () => okJson(packument("0.142.5")))
+    const fetchMock = vi.fn(async (_url: string) => okJson(packument("0.142.5")))
     vi.stubGlobal("fetch", fetchMock)
 
     const latest = await fetchLatest("@openai/codex")
     expect(latest).toBe("0.142.5")
 
     // The `/` in the scope must never land raw in the URL path.
-    const url = fetchMock.mock.calls[0]![0] as string
+    const url = fetchMock.mock.calls[0]![0]
     expect(url).toBe("https://registry.npmjs.org/%40openai%2Fcodex")
     expect(url).not.toContain("@openai/codex")
   })
@@ -95,7 +95,7 @@ describe("fetchLatest — scoped-package URL encoding", () => {
   })
 
   test("bare name uses the same single encoded code path", async () => {
-    const fetchMock = vi.fn(async () => okJson(packument("1.2.3")))
+    const fetchMock = vi.fn(async (_url: string) => okJson(packument("1.2.3")))
     vi.stubGlobal("fetch", fetchMock)
 
     const latest = await fetchLatest("opencode-ai")
