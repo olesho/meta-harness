@@ -21,6 +21,11 @@
 // StreamTap tolerates this: such an event ships with an EMPTY id, is retained,
 // and is BACKFILLED in place once the id becomes known (see `backfill`) — never
 // dropped, never left permanently blank.
+//
+// TODO(packaging subtask): this module lives under src/acquisition/internal and
+// is imported directly by src/chat/conversation.ts. If StreamTap needs a PUBLIC
+// entry point, the separate packaging subtask owns adding the barrel export — do
+// NOT re-export it from a public barrel here.
 
 import {
   SchemaVersion,
