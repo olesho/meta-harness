@@ -15,11 +15,16 @@ import {
   RoleAssistant,
   TurnStateComplete,
   TurnStateErrored,
+  type Adapter,
   type Conversation,
   type InputPolicy,
   type Turn,
 } from "../chat/index.ts"
 import { Context, ctxDeadlineExceeded } from "../internal/async/index.ts"
+import type { AcquisitionMode } from "../turns/index.ts"
+import type { EventEnvelope } from "../transcript/index.ts"
+import type { YieldControl } from "../acquisition/internal/yield.ts"
+import type { StreamVersionPredicate } from "../acquisition/internal/planAcquisition.ts"
 
 /** Config for a single one-shot turn. `harness` is the adapter name (e.g. "claude-code", "codex"). */
 export interface OneShotConfig {
@@ -38,6 +43,30 @@ export interface OneShotConfig {
   idleGap?: number
   /** Test-only marker-confirm window override (ms). Zero/undefined = package default. */
   markerGap?: number
+
+  // ── Acquisition (StreamTap) opt-in ─────────────────────────────────────────
+  // A one-shot run is a thin client over a single chat Conversation, so it must
+  // INHERIT acquisition from that one Open/Watch seam rather than attach its own
+  // — the chat Open machinery attaches the StreamTap exactly once. These fields
+  // are threaded verbatim into the internal `Open({...})` options object (and
+  // nowhere else): oneshot never wires onLine/StreamTap itself. Absent ⇒ Off,
+  // behaviour unchanged (no tap fan-off). They mirror the matching acquisition
+  // fields on chat.Options one-for-one.
+
+  /** REQUESTED acquisition mode; planAcquisition latches it against the adapter. Absent ⇒ Off. */
+  acquisitionMode?: AcquisitionMode
+  /** Acquisition event sink. Its presence is the sink gate (Go's `haveSink`); absent ⇒ plan degrades to Off. */
+  onAcquisitionEvent?: (env: EventEnvelope) => void
+  /** Best-effort per-line display callback (bounded, may drop under back-pressure). */
+  onDisplayLine?: (line: string) => void
+  /** Caller-supplied cooperative-preemption handle wired into the launch env (hookEnv). */
+  yieldControl?: YieldControl
+  /** Hook spool dir wired into the launch env (HW_EVENT_SPOOL) for Hooks mode. */
+  spoolDir?: string
+  /** Advanced/testing seam: use this already-resolved adapter instead of resolving from `harness`. */
+  adapter?: Adapter
+  /** Advanced/testing seam: overrides planAcquisition's fact-3 version predicate. */
+  streamVersionPredicate?: StreamVersionPredicate
 }
 
 /** Thrown when the run's deadline (or an ancestor deadline) fired before completion. */
@@ -173,6 +202,16 @@ export async function runOneShotDetailed(
       markerGap: cfg.markerGap,
       store: newMemStore(),
       inputPolicy: AutoAcceptTrust,
+      // Inherit acquisition from THIS single chat seam — the StreamTap attaches
+      // once inside Open/Watch. oneshot forwards the opt-in and NEVER attaches
+      // its own tap (that would double-write the session record).
+      acquisitionMode: cfg.acquisitionMode,
+      onAcquisitionEvent: cfg.onAcquisitionEvent,
+      onDisplayLine: cfg.onDisplayLine,
+      yieldControl: cfg.yieldControl,
+      spoolDir: cfg.spoolDir,
+      adapter: cfg.adapter,
+      streamVersionPredicate: cfg.streamVersionPredicate,
     })
   } catch (err) {
     // Open failed before any durable session existed — no id to read back.
