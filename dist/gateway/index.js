@@ -3,4 +3,5 @@
 // fanout + SSE framing; daemon-core wiring lives in a sibling subtask.
 export { Fanout, Subscription } from "./fanout.js";
 export { streamSSE, onStop, } from "./sse.js";
+export { Server, newToken, eventDTO, parseBind, main, } from "./server.js";
 //# sourceMappingURL=index.js.map
