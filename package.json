@@ -79,14 +79,16 @@
   },
   "bin": {
     "meta-harness-run": "./dist/cli/run.js",
-    "meta-harness-structured-run": "./dist/cli/structured-runner.js"
+    "meta-harness-structured-run": "./dist/cli/structured-runner.js",
+    "meta-harness-check-versions": "./dist/cli/check-versions.js"
   },
   "scripts": {
     "postinstall": "node scripts/postinstall.mjs",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "build": "node scripts/build.mjs",
-    "verify:exports": "node scripts/verify-exports.mjs"
+    "verify:exports": "node scripts/verify-exports.mjs",
+    "check-versions": "node dist/cli/check-versions.js"
   },
   "devDependencies": {
     "@daytonaio/sdk": "^0.196.0",
