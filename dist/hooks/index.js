@@ -9,5 +9,6 @@ export { ensureSettingsJSONHooks, removeManagedHooks, } from "./settingsjson.js"
 export { resolveWithinBase, isWithinBase, PathEscapeError, } from "./pathguard.js";
 export { specFromProfile, } from "./provider.js";
 export { guardPath, sessionMatches } from "./guard.js";
+export { appendSpool, drainSpool, spoolFileName, spoolFilePath, } from "./spool.js";
 export { ClaudeHookProvider, EventTurnBoundary, HookEventPostTask, HookEventPostToolUse, HookEventSessionStart, HookEventStop, HookEventSubagentStop, claudeHookOwner, parseClaudeHookPayload, } from "./claude.js";
 //# sourceMappingURL=index.js.map

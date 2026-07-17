@@ -80,7 +80,8 @@
   "bin": {
     "meta-harness-run": "./dist/cli/run.js",
     "meta-harness-structured-run": "./dist/cli/structured-runner.js",
-    "meta-harness-check-versions": "./dist/cli/check-versions.js"
+    "meta-harness-check-versions": "./dist/cli/check-versions.js",
+    "meta-harness-hooks": "./dist/cli/hooks.js"
   },
   "scripts": {
     "postinstall": "node scripts/postinstall.mjs",
