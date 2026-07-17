@@ -1,10 +1,23 @@
 import type { Snapshot } from "../../screen/index.ts";
+import { type HookProvider } from "../../hooks/index.ts";
 import { GenericAdapter } from "../generic.ts";
 import type { Adapter, Event, InputRequest, Turn } from "../types.ts";
 /** Adapter implements turns.Adapter for Claude Code. */
 export declare class ClaudeCodeAdapter extends GenericAdapter implements Adapter {
     /** Overrides ~/.claude/projects for the on-disk transcript reader. */
     projectsRoot: string;
+    /**
+     * Absolute path to the Node binary the installed hook commands launch under.
+     * Empty means "resolve at ensure time" (defaults to process.execPath). Set by
+     * tests (or a packaging layer) to pin a specific interpreter.
+     */
+    nodePath: string;
+    /**
+     * Absolute path to the committed `dist` directory holding `cli/hooks.js`, the
+     * hook entrypoint. Empty means "resolve relative to this module". Set by tests
+     * to point at a fixture dist.
+     */
+    distDir: string;
     private lastFingerprint;
     private lastInterruptSeen;
     private lastInputID;
@@ -43,6 +56,15 @@ export declare class ClaudeCodeAdapter extends GenericAdapter implements Adapter
     extractSessionIDFromLine(line: string): [string, boolean];
     /** Implements turns.TranscriptReader — reads the on-disk Claude Code log. */
     readTranscript(harnessSessionID: string, workingDir: string): Turn[];
+    /**
+     * Implements turns.HookProviderCapability. Returns a HookProvider that:
+     *   - ensureConfig: resolves the Claude static hook spec (from provider-parse)
+     *     and installs/rewrites it in settings.json using the config-install
+     *     primitives — idempotent and co-tenant-safe under the O_EXCL lock.
+     *   - parsePayload: delegates to the Claude provider's payload parser.
+     * Only the Claude adapter implements this; codex/opencode/pi/generic omit it.
+     */
+    hookProvider(): HookProvider;
 }
 /** Constructs a Claude Code adapter. */
 export declare function New(): ClaudeCodeAdapter;

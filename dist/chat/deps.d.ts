@@ -1,6 +1,7 @@
 import type { Snapshot, Screen } from "../screen/index.ts";
 import type { Context } from "../internal/async/index.ts";
 import type { ParsedEvent } from "../transcript/event.ts";
+import type { HookProvider } from "../hooks/provider.ts";
 /** A blocking interactive prompt as the turns layer reports it (with keystrokes). */
 export interface TurnsInputOption {
     id: string;
@@ -140,6 +141,13 @@ export interface Adapter {
      * env and cwd so an adapter can pin where it reads its session log from.
      */
     bindLaunchEnv?(env: string[], workingDir: string): void;
+    /**
+     * turns.HookProviderCapability — surface the harness's HookProvider, whose
+     * ensureConfig installs/rewrites the managed on-disk hook block and whose
+     * parsePayload parses native hook payloads into canonical Events. Probed
+     * structurally, like readTranscript; omitted => no managed-hook integration.
+     */
+    hookProvider?(): HookProvider;
 }
 /**
  * Backend wires the chat layer's three injected dependencies: adapter

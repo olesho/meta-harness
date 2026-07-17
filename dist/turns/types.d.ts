@@ -1,6 +1,7 @@
 import type { ParsedEvent } from "../transcript/event.ts";
 import type { Snapshot } from "../screen/index.ts";
 import type { Status } from "./wrapper.ts";
+import type { HookProvider } from "../hooks/provider.ts";
 /**
  * Kind is the categorical type of a turn event. The vocabulary is intentionally
  * small; adapters with richer signals attach details via Event.reason / .snap
@@ -235,6 +236,21 @@ export interface StreamParser {
  */
 export interface StreamInterleaved {
     streamInterleaved(): boolean;
+}
+/**
+ * Surfaces the harness's managed-hook integration: a HookProvider whose
+ * ensureConfig installs/rewrites the managed on-disk hook block (config-ensure)
+ * and whose parsePayload turns the harness's native hook payloads into
+ * canonical transcript Events (payload-parse). Probed structurally — the same
+ * Go-optional-interface style as TranscriptReader / SessionIDExtractor —
+ * so the chat layer discovers hook support without a separate registry.
+ *
+ * Implemented only by adapters whose harness ships a managed-hook surface
+ * (Claude Code). Omitting the interface entirely means "no managed hooks".
+ */
+export interface HookProviderCapability {
+    /** Returns the harness's HookProvider (config-ensure + payload-parse). */
+    hookProvider(): HookProvider;
 }
 /**
  * One message read from a harness session log. Mirrors transcript.Turn; kept

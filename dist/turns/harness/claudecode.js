@@ -8,8 +8,11 @@
 // Embeds the generic adapter so wrapper-level status events keep flowing.
 // Port of pkg/turns/harness/claudecode/{claudecode.go}.
 import { createHash, randomUUID } from "node:crypto";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { ClaudeCodeReader } from "../../transcript/claudecode/claudecode.js";
 import { turnsFromEvents } from "../../transcript/event.js";
+import { ClaudeHookProvider, ensureSettingsJSONHooks, renderHookCommand, } from "../../hooks/index.js";
 import { GenericAdapter } from "../generic.js";
 import { Errored, InputRequested, InputResolved, TurnComplete } from "../types.js";
 const enc = new TextEncoder();
@@ -74,6 +77,18 @@ const quitCommand = enc.encode("/quit\x1b[13u");
 export class ClaudeCodeAdapter extends GenericAdapter {
     /** Overrides ~/.claude/projects for the on-disk transcript reader. */
     projectsRoot = "";
+    /**
+     * Absolute path to the Node binary the installed hook commands launch under.
+     * Empty means "resolve at ensure time" (defaults to process.execPath). Set by
+     * tests (or a packaging layer) to pin a specific interpreter.
+     */
+    nodePath = "";
+    /**
+     * Absolute path to the committed `dist` directory holding `cli/hooks.js`, the
+     * hook entrypoint. Empty means "resolve relative to this module". Set by tests
+     * to point at a fixture dist.
+     */
+    distDir = "";
     lastFingerprint = "";
     lastInterruptSeen = false;
     lastInputID = "";
@@ -260,6 +275,70 @@ export class ClaudeCodeAdapter extends GenericAdapter {
         const evs = new ClaudeCodeReader(this.projectsRoot).read(harnessSessionID, workingDir);
         return turnsFromEvents(evs);
     }
+    /**
+     * Implements turns.HookProviderCapability. Returns a HookProvider that:
+     *   - ensureConfig: resolves the Claude static hook spec (from provider-parse)
+     *     and installs/rewrites it in settings.json using the config-install
+     *     primitives — idempotent and co-tenant-safe under the O_EXCL lock.
+     *   - parsePayload: delegates to the Claude provider's payload parser.
+     * Only the Claude adapter implements this; codex/opencode/pi/generic omit it.
+     */
+    hookProvider() {
+        const delegate = new ClaudeHookProvider();
+        const nodePath = this.nodePath !== "" ? this.nodePath : process.execPath;
+        const distDir = this.distDir !== "" ? this.distDir : defaultDistDir();
+        return {
+            ensureConfig(ctx) {
+                const spec = delegate.ensureConfig(ctx);
+                ensureSettingsJSONHooks(spec.configPath, managedHooksFromSpec(spec, nodePath, distDir));
+                return renderedSpec(spec, nodePath, distDir);
+            },
+            parsePayload(raw, ctx) {
+                return delegate.parsePayload(raw, ctx);
+            },
+        };
+    }
+}
+/**
+ * defaultDistDir resolves the committed `dist` directory relative to this
+ * module. Compiled, this file lives at `dist/turns/harness/claudecode.js`, so
+ * the `dist` root is two levels up from its directory.
+ */
+function defaultDistDir() {
+    return path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
+}
+/**
+ * managedHooksFromSpec turns a resolved HookSpec into the ManagedHooks the
+ * settings.json editor installs: each hook entry becomes a marker-tagged
+ * command (rendered via renderHookCommand) under its event, preserving the
+ * entry's tool matcher when present. The marker is what makes a re-ensure
+ * rewrite exactly our own block and leave co-tenant blocks intact.
+ */
+function managedHooksFromSpec(spec, nodePath, distDir) {
+    const managed = {};
+    for (const entry of spec.events) {
+        const command = renderHookCommand({ nodePath, distDir, event: entry.event });
+        const matcher = {
+            ...(entry.matcher !== undefined ? { matcher: entry.matcher } : {}),
+            hooks: [{ type: "command", command }],
+        };
+        (managed[entry.event] ??= []).push(matcher);
+    }
+    return managed;
+}
+/**
+ * renderedSpec returns a copy of the spec whose entry commands are the actual
+ * marker-tagged commands installed on disk, so callers see what was written
+ * rather than the provider's abstract placeholder commands.
+ */
+function renderedSpec(spec, nodePath, distDir) {
+    return {
+        ...spec,
+        events: spec.events.map((entry) => ({
+            ...entry,
+            command: renderHookCommand({ nodePath, distDir, event: entry.event }),
+        })),
+    };
 }
 /** Constructs a Claude Code adapter. */
 export function New() {
