@@ -1,5 +1,9 @@
 import { type InputPolicy } from "../chat/index.ts";
 import { Context } from "../internal/async/index.ts";
+import type { AcquisitionMode, Adapter } from "../turns/index.ts";
+import type { EventEnvelope } from "../transcript/index.ts";
+import type { YieldControl } from "../acquisition/internal/yield.ts";
+import type { StreamVersionPredicate } from "../acquisition/internal/planAcquisition.ts";
 /** Config for a single one-shot turn. `harness` is the adapter name (e.g. "claude-code", "codex"). */
 export interface OneShotConfig {
     harness: string;
@@ -17,6 +21,20 @@ export interface OneShotConfig {
     idleGap?: number;
     /** Test-only marker-confirm window override (ms). Zero/undefined = package default. */
     markerGap?: number;
+    /** REQUESTED acquisition mode; planAcquisition latches it against the adapter. Absent ⇒ Off. */
+    acquisitionMode?: AcquisitionMode;
+    /** Acquisition event sink. Its presence is the sink gate (Go's `haveSink`); absent ⇒ plan degrades to Off. */
+    onAcquisitionEvent?: (env: EventEnvelope) => void;
+    /** Best-effort per-line display callback (bounded, may drop under back-pressure). */
+    onDisplayLine?: (line: string) => void;
+    /** Caller-supplied cooperative-preemption handle wired into the launch env (hookEnv). */
+    yieldControl?: YieldControl;
+    /** Hook spool dir wired into the launch env (HW_EVENT_SPOOL) for Hooks mode. */
+    spoolDir?: string;
+    /** Advanced/testing seam: use this already-resolved adapter instead of resolving from `harness`. */
+    adapter?: Adapter;
+    /** Advanced/testing seam: overrides planAcquisition's fact-3 version predicate. */
+    streamVersionPredicate?: StreamVersionPredicate;
 }
 /** Thrown when the run's deadline (or an ancestor deadline) fired before completion. */
 export declare class DeadlineError extends Error {
