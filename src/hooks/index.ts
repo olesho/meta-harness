@@ -1,5 +1,8 @@
-// Public barrel for the config-install leaf utilities of the hook subsystem.
-// Pure filesystem helpers — no runtime/chat dependency.
+// Public surface of the hooks package.
+//
+// Config-install leaf utilities (pure filesystem helpers — no runtime/chat
+// dependency) plus the provider surface types and the Claude concrete provider
+// + payload parser.
 
 export {
   withLockedFile,
@@ -28,3 +31,27 @@ export {
   isWithinBase,
   PathEscapeError,
 } from "./pathguard.ts"
+
+export {
+  specFromProfile,
+  type HookContext,
+  type HookEntry,
+  type HookProvider,
+  type HookSpec,
+  type StaticHookProfile,
+} from "./provider.ts"
+
+export { guardPath, sessionMatches } from "./guard.ts"
+
+export {
+  ClaudeHookProvider,
+  EventTurnBoundary,
+  HookEventPostTask,
+  HookEventPostToolUse,
+  HookEventSessionStart,
+  HookEventStop,
+  HookEventSubagentStop,
+  claudeHookOwner,
+  parseClaudeHookPayload,
+  type ClaudeHookPayload,
+} from "./claude.ts"
