@@ -13,12 +13,5 @@ export default defineConfig({
     // makes the PTY tests flaky, so run files sequentially (mirrors how the
     // former `bun test` runner exercised them).
     fileParallelism: false,
-    // Isolate each test file in its own forked process rather than the default
-    // shared worker, so per-file memory — coverage instrumentation plus the
-    // PTY/child handles these tests spawn — is freed between files instead of
-    // accumulating into a "JavaScript heap out of memory" crash on CI (where
-    // the default heap is smaller than on dev machines). Verified: the full
-    // suite and the coverage run both pass with the fork heap capped at 512MB.
-    pool: "forks",
   },
 });
