@@ -13,7 +13,7 @@ export { mergeHookEvents } from "./hookMerge.js";
 // fields by contract).
 export { usageFromClaudeJSONL, usageFromCodexJSONL, usageToPublicJSON, } from "./usage.js";
 // Error sentinels.
-export { ErrEmptySessionID, ErrEmptyWorkingDir, ErrSessionNotFound } from "./errors.js";
+export { ErrEmptySessionID, ErrEmptyWorkingDir, ErrSessionNotFound, } from "./errors.js";
 // Per-harness readers.
 export { PiReader, slugForCwd } from "./pi/pi.js";
 export { CodexReader } from "./codex/codex.js";

@@ -19,7 +19,7 @@
 // handler's "absent ⇒ inert" contract.
 import { pathToFileURL } from "node:url";
 import { homedir } from "node:os";
-import { EnvHome, EnvHookCwd, EnvSpool } from "../acquisition/internal/yield.js";
+import { EnvHome, EnvHookCwd, EnvSpool, } from "../acquisition/internal/yield.js";
 import { ClaudeHookProvider } from "../hooks/claude.js";
 import { appendSpool } from "../hooks/spool.js";
 // Extra HW_* env vars this CLI reads that are not part of the yield handshake.
@@ -66,7 +66,9 @@ function injectEventName(stdin, event) {
     catch {
         return stdin;
     }
-    if (payload && typeof payload === "object" && payload.hook_event_name === undefined) {
+    if (payload &&
+        typeof payload === "object" &&
+        payload.hook_event_name === undefined) {
         payload.hook_event_name = event;
         return JSON.stringify(payload);
     }

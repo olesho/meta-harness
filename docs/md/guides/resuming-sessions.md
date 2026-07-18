@@ -11,11 +11,11 @@ First, the two ids you have to keep straight.
 
 - **Chat session id** — meta-harness's own record id, what `conv.sessionID()` returns and
   what the [store](../modules/chat.md#the-store) is keyed on.
-- **Harness session id** — the harness's *own* id (a UUID it assigns itself). This is what
+- **Harness session id** — the harness's _own_ id (a UUID it assigns itself). This is what
   actually resumes a session. It is **empty until meta-harness captures it** (from the
   screen, a raw output line, or the on-disk log) during the first turn.
 
-You resume with the *harness* id; `Reopen` looks it up from the chat id for you. See
+You resume with the _harness_ id; `Reopen` looks it up from the chat id for you. See
 [Concepts › Session](../concepts.md#session).
 
 ---
@@ -33,8 +33,10 @@ Resuming works only when both hold:
 Check the capture before relying on it:
 
 ```ts
-const s = await store.getSession(conv.sessionID())
-if (!s.harnessSessionID) { /* nothing to resume yet */ }
+const s = await store.getSession(conv.sessionID());
+if (!s.harnessSessionID) {
+  /* nothing to resume yet */
+}
 ```
 
 ---
@@ -46,11 +48,11 @@ if (!s.harnessSessionID) { /* nothing to resume yet */ }
 chat session id** — so `sessionID()` and `history()` reflect the resumed session.
 
 ```ts
-import { Open, Reopen, newMemStore } from "meta-harness/chat"
-import { Context } from "meta-harness/async"
+import { Open, Reopen, newMemStore } from "meta-harness/chat";
+import { Context } from "meta-harness/async";
 
-const ctx = Context.background()
-const store = newMemStore()
+const ctx = Context.background();
+const store = newMemStore();
 
 // --- first run ---
 const first = await Open(ctx, {
@@ -58,23 +60,23 @@ const first = await Open(ctx, {
   binaryPath: "/usr/local/bin/claude",
   workingDir: process.cwd(),
   store,
-})
+});
 // … drive a turn so the harness session id gets captured …
-const chatID = first.sessionID()
-await first.close()
+const chatID = first.sessionID();
+await first.close();
 
 // --- later: resume the SAME session ---
 const resumed = await Reopen(ctx, {
   sessionID: chatID,
-  binaryPath: "/usr/local/bin/claude",   // launch knobs are NOT stored — re-supply them
+  binaryPath: "/usr/local/bin/claude", // launch knobs are NOT stored — re-supply them
   store,
-})
-console.log(resumed.sessionID() === chatID)   // true — same chat session
+});
+console.log(resumed.sessionID() === chatID); // true — same chat session
 ```
 
 **What the store persists vs what you re-supply.** A `Session` stores only `harness`,
 `workingDir`, and `harnessSessionID`. Everything else — `binaryPath`, `env`, `args`,
-`effort`, `model`, geometry, policies — is *not* restored; pass it again via
+`effort`, `model`, geometry, policies — is _not_ restored; pass it again via
 [`ReopenOptions`](../modules/chat.md#resume) (which omits `harness`/`workingDir`/`resume`,
 since those come from the record).
 
@@ -97,8 +99,8 @@ const conv = await Open(ctx, {
   binaryPath: "/usr/local/bin/codex",
   workingDir: process.cwd(),
   store: newMemStore(),
-  resume: harnessSessionID,   // prepends the adapter's resumeArgs at launch
-})
+  resume: harnessSessionID, // prepends the adapter's resumeArgs at launch
+});
 ```
 
 `resume` names the **harness** session id (not the chat id). The adapter's resume args are
@@ -110,7 +112,7 @@ harness can't resume. Unlike `Reopen`, this mints a **new** chat session id.
 
 ## Fork-on-resume
 
-Some harnesses **fork** on resume — they mint a *new* harness session id rather than
+Some harnesses **fork** on resume — they mint a _new_ harness session id rather than
 continuing the old one. Adapters signal this with `resumeForksSessionID()`. When it's true,
 chat arms a one-shot provisional refresh: the seeded id is allowed to be overwritten
 exactly once by the freshly-minted id captured on the resumed run. You don't manage this —
@@ -122,7 +124,7 @@ is verified against codex-cli 0.142.5.)
 
 ## Errors
 
-| Sentinel | Meaning |
-| --- | --- |
-| [`ErrResumeUnsupported`](../modules/chat.md#errors) | The harness can't resume (no `SessionResumer`). |
-| [`ErrNoHarnessSession`](../modules/chat.md#errors) | `Reopen`'s stored session never captured a harness id. |
+| Sentinel                                            | Meaning                                                |
+| --------------------------------------------------- | ------------------------------------------------------ |
+| [`ErrResumeUnsupported`](../modules/chat.md#errors) | The harness can't resume (no `SessionResumer`).        |
+| [`ErrNoHarnessSession`](../modules/chat.md#errors)  | `Reopen`'s stored session never captured a harness id. |

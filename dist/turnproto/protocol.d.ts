@@ -24,7 +24,7 @@ export interface StructuredTurnResult {
     /** The harness's own session id ("" when it could not be recovered). */
     harnessSessionID: string;
     /** The canonical transcript, read in-guest (both harnesses). */
-    transcript_entries: Array<Record<string, unknown>>;
+    transcript_entries: Record<string, unknown>[];
     /** The guest working directory the turn ran in. */
     working_dir: string;
     /** Additive token telemetry; absent when the transcript records none. */

@@ -18,23 +18,27 @@
 // absent (HW_EVENT_SPOOL unset) the handler is inert, mirroring the yield
 // handler's "absent ⇒ inert" contract.
 
-import { pathToFileURL } from "node:url"
-import { homedir } from "node:os"
+import { pathToFileURL } from "node:url";
+import { homedir } from "node:os";
 
-import { EnvHome, EnvHookCwd, EnvSpool } from "../acquisition/internal/yield.ts"
-import { ClaudeHookProvider } from "../hooks/claude.ts"
-import { appendSpool } from "../hooks/spool.ts"
-import type { HookContext, HookProvider } from "../hooks/provider.ts"
+import {
+  EnvHome,
+  EnvHookCwd,
+  EnvSpool,
+} from "../acquisition/internal/yield.ts";
+import { ClaudeHookProvider } from "../hooks/claude.ts";
+import { appendSpool } from "../hooks/spool.ts";
+import type { HookContext, HookProvider } from "../hooks/provider.ts";
 
 // Extra HW_* env vars this CLI reads that are not part of the yield handshake.
 // EnvConfigDir overrides the harness config dir (else the provider defaults it
 // from home); EnvSessionID is the expected session id for the session-mismatch
 // guard (empty ⇒ no expectation).
-export const EnvConfigDir = "HW_CONFIG_DIR"
-export const EnvSessionID = "HW_HARNESS_SESSION_ID"
+export const EnvConfigDir = "HW_CONFIG_DIR";
+export const EnvSessionID = "HW_HARNESS_SESSION_ID";
 
 // Env is the ambient environment shape handleHookEvent reads (process.env).
-export type Env = Record<string, string | undefined>
+export type Env = Record<string, string | undefined>;
 
 // providers maps a harness name to its concrete HookProvider. Only Claude Code
 // ships a provider today; an unknown name yields no events (inert).
@@ -43,9 +47,9 @@ function providerFor(harnessName: string): HookProvider | null {
     case "claude":
     case "claudecode":
     case "claude-code":
-      return new ClaudeHookProvider()
+      return new ClaudeHookProvider();
     default:
-      return null
+      return null;
   }
 }
 
@@ -58,7 +62,7 @@ function contextFromEnv(env: Env): HookContext {
     configDir: env[EnvConfigDir] ?? "",
     spoolDir: env[EnvSpool] ?? "",
     harnessSessionID: env[EnvSessionID] ?? "",
-  }
+  };
 }
 
 // injectEventName ensures the payload carries a hook_event_name. The harness
@@ -67,18 +71,22 @@ function contextFromEnv(env: Env): HookContext {
 // dispatch. A non-JSON payload is returned unchanged (the provider will drop
 // it). An empty event arg is ignored.
 function injectEventName(stdin: string, event: string): string {
-  if (event === "") return stdin
-  let payload: Record<string, unknown>
+  if (event === "") return stdin;
+  let payload: Record<string, unknown>;
   try {
-    payload = JSON.parse(stdin) as Record<string, unknown>
+    payload = JSON.parse(stdin) as Record<string, unknown>;
   } catch {
-    return stdin
+    return stdin;
   }
-  if (payload && typeof payload === "object" && payload.hook_event_name === undefined) {
-    payload.hook_event_name = event
-    return JSON.stringify(payload)
+  if (
+    payload &&
+    typeof payload === "object" &&
+    payload.hook_event_name === undefined
+  ) {
+    payload.hook_event_name = event;
+    return JSON.stringify(payload);
   }
-  return stdin
+  return stdin;
 }
 
 // handleHookEvent is the hook CLI entry: parse the stdin payload through the
@@ -92,41 +100,41 @@ export function handleHookEvent(
   env: Env,
   stdin: string,
 ): number {
-  const ctx = contextFromEnv(env)
+  const ctx = contextFromEnv(env);
   // No spool dir ⇒ nowhere to hand off ⇒ inert.
-  if (ctx.spoolDir === "") return 0
+  if (ctx.spoolDir === "") return 0;
 
-  const provider = providerFor(harnessName)
-  if (provider === null) return 0
+  const provider = providerFor(harnessName);
+  if (provider === null) return 0;
 
-  const raw = injectEventName(stdin, event)
-  const parsed = provider.parsePayload(raw, ctx)
-  if (parsed.length === 0) return 0
+  const raw = injectEventName(stdin, event);
+  const parsed = provider.parsePayload(raw, ctx);
+  if (parsed.length === 0) return 0;
 
-  appendSpool(ctx.spoolDir, parsed)
-  return parsed.length
+  appendSpool(ctx.spoolDir, parsed);
+  return parsed.length;
 }
 
 // readStdin reads all of stdin as a UTF-8 string. Hook payloads are small; a
 // synchronous slurp of fd 0 is simplest and avoids an async pipeline in a
 // process whose only job is one parse+append.
 async function readStdin(): Promise<string> {
-  const chunks: Buffer[] = []
+  const chunks: Buffer[] = [];
   for await (const chunk of process.stdin) {
-    chunks.push(chunk as Buffer)
+    chunks.push(chunk as Buffer);
   }
-  return Buffer.concat(chunks).toString("utf8")
+  return Buffer.concat(chunks).toString("utf8");
 }
 
 export async function main(argv: string[]): Promise<number> {
   // argv: [harnessName, eventName?]
-  const harnessName = argv[0] ?? ""
-  const event = argv[1] ?? ""
-  const stdin = await readStdin()
-  handleHookEvent(harnessName, event, process.env, stdin)
+  const harnessName = argv[0] ?? "";
+  const event = argv[1] ?? "";
+  const stdin = await readStdin();
+  handleHookEvent(harnessName, event, process.env, stdin);
   // A hook always succeeds from the harness's perspective — its output is
   // consumed asynchronously via the spool, never inline.
-  return 0
+  return 0;
 }
 
 // Entry point — only when executed directly (not when imported by tests).
@@ -136,8 +144,8 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
     (code) => process.exit(code),
     (err) => {
       // Never fail the harness on a hook error — diagnose and exit clean.
-      process.stderr.write("meta-harness-hooks: " + String(err) + "\n")
-      process.exit(0)
+      process.stderr.write("meta-harness-hooks: " + String(err) + "\n");
+      process.exit(0);
     },
-  )
+  );
 }

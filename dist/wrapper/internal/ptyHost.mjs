@@ -17,32 +17,32 @@
 //   host -> parent:  'r' ready {pid}   'o' output bytes   'x' exit {exitCode,signal}
 //   parent -> host:  'i' stdin bytes   'w' resize {cols,rows}   'k' kill {signal}
 
-import pty from "node-pty"
+import pty from "node-pty";
 
-const T_READY = "r".charCodeAt(0)
-const T_OUTPUT = "o".charCodeAt(0)
-const T_EXIT = "x".charCodeAt(0)
-const T_STDIN = "i".charCodeAt(0)
-const T_RESIZE = "w".charCodeAt(0)
-const T_KILL = "k".charCodeAt(0)
+const T_READY = "r".charCodeAt(0);
+const T_OUTPUT = "o".charCodeAt(0);
+const T_EXIT = "x".charCodeAt(0);
+const T_STDIN = "i".charCodeAt(0);
+const T_RESIZE = "w".charCodeAt(0);
+const T_KILL = "k".charCodeAt(0);
 
 function frame(type, payload) {
   const body = Buffer.isBuffer(payload)
     ? payload
-    : Buffer.from(payload ?? "", "utf8")
-  const head = Buffer.allocUnsafe(5)
-  head[0] = type
-  head.writeUInt32BE(body.length, 1)
-  return Buffer.concat([head, body])
+    : Buffer.from(payload ?? "", "utf8");
+  const head = Buffer.allocUnsafe(5);
+  head[0] = type;
+  head.writeUInt32BE(body.length, 1);
+  return Buffer.concat([head, body]);
 }
 
 function send(type, payload) {
-  process.stdout.write(frame(type, payload))
+  process.stdout.write(frame(type, payload));
 }
 
-const spec = JSON.parse(process.argv[2] || "{}")
+const spec = JSON.parse(process.argv[2] || "{}");
 
-let proc
+let proc;
 try {
   proc = pty.spawn(spec.binaryPath, spec.args ?? [], {
     name: "xterm-256color",
@@ -50,63 +50,63 @@ try {
     rows: spec.rows ?? 24,
     cwd: spec.cwd || process.cwd(),
     env: spec.env ?? process.env,
-  })
+  });
 } catch (err) {
-  send(T_EXIT, JSON.stringify({ exitCode: -1, signal: 0, error: String(err) }))
-  process.exit(0)
+  send(T_EXIT, JSON.stringify({ exitCode: -1, signal: 0, error: String(err) }));
+  process.exit(0);
 }
 
-send(T_READY, JSON.stringify({ pid: proc.pid }))
+send(T_READY, JSON.stringify({ pid: proc.pid }));
 
-proc.onData((d) => send(T_OUTPUT, Buffer.from(d, "utf8")))
+proc.onData((d) => send(T_OUTPUT, Buffer.from(d, "utf8")));
 
-let exited = false
+let exited = false;
 proc.onExit(({ exitCode, signal }) => {
-  if (exited) return
-  exited = true
-  send(T_EXIT, JSON.stringify({ exitCode, signal: signal ?? 0 }))
+  if (exited) return;
+  exited = true;
+  send(T_EXIT, JSON.stringify({ exitCode, signal: signal ?? 0 }));
   // Give the pipe a tick to flush before tearing down.
-  setTimeout(() => process.exit(0), 10)
-})
+  setTimeout(() => process.exit(0), 10);
+});
 
 // Decode control frames arriving on our stdin.
-let buf = Buffer.alloc(0)
+let buf = Buffer.alloc(0);
 process.stdin.on("data", (chunk) => {
-  buf = buf.length === 0 ? chunk : Buffer.concat([buf, chunk])
+  buf = buf.length === 0 ? chunk : Buffer.concat([buf, chunk]);
   for (;;) {
-    if (buf.length < 5) break
-    const type = buf[0]
-    const len = buf.readUInt32BE(1)
-    if (buf.length < 5 + len) break
-    const payload = buf.subarray(5, 5 + len)
-    buf = buf.subarray(5 + len)
-    handleControl(type, payload)
+    if (buf.length < 5) break;
+    const type = buf[0];
+    const len = buf.readUInt32BE(1);
+    if (buf.length < 5 + len) break;
+    const payload = buf.subarray(5, 5 + len);
+    buf = buf.subarray(5 + len);
+    handleControl(type, payload);
   }
-})
+});
 
 function handleControl(type, payload) {
-  if (exited) return
+  if (exited) return;
   switch (type) {
     case T_STDIN:
-      proc.write(payload.toString("utf8"))
-      break
+      proc.write(payload.toString("utf8"));
+      break;
     case T_RESIZE: {
-      const { cols, rows } = JSON.parse(payload.toString("utf8"))
+      const { cols, rows } = JSON.parse(payload.toString("utf8"));
       try {
-        proc.resize(cols, rows)
+        proc.resize(cols, rows);
       } catch {
         /* terminal teardown races; ignore */
       }
-      break
+      break;
     }
     case T_KILL: {
-      const { signal } = JSON.parse(payload.toString("utf8"))
+      const { signal } = JSON.parse(payload.toString("utf8"));
       try {
-        proc.kill(signal)
+        proc.kill(signal);
       } catch {
         /* already gone */
       }
-      break
+      break;
     }
   }
 }
@@ -115,9 +115,9 @@ function handleControl(type, payload) {
 process.stdin.on("end", () => {
   if (!exited) {
     try {
-      proc.kill("SIGTERM")
+      proc.kill("SIGTERM");
     } catch {
       /* already gone */
     }
   }
-})
+});

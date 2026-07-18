@@ -66,7 +66,9 @@ export async function env(ctx, cfg) {
             async destroy(dctx, outcome = "success") {
                 const errs = await runAll([
                     // Reverse acquisition: last-applied injector cleans up first.
-                    ...[...injectors].reverse().map((inj) => () => inj.cleanup(dctx, composed)),
+                    ...[...injectors]
+                        .reverse()
+                        .map((inj) => () => inj.cleanup(dctx, composed)),
                     () => composed.destroy(dctx, outcome),
                 ]);
                 if (errs.length > 0)

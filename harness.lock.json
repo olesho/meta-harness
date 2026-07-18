@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "layout": "single",
+  "capabilities": {
+    "agents": ["claude"],
+    "gitHooks": true,
+    "ci": true,
+    "agentDocs": true,
+    "skills": true
+  },
+  "projects": [
+    {
+      "name": "meta-harness",
+      "language": "typescript",
+      "features": {
+        "lint": true,
+        "test": true,
+        "markdown": true,
+        "diagrams": true,
+        "coverage": true,
+        "audit": true,
+        "semgrep": true
+      },
+      "coverageMin": 80
+    }
+  ]
+}

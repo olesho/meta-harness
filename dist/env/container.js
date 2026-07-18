@@ -2,7 +2,7 @@
 // implementation for Tier-3 in-guest e2e testing. Uses plain docker run/exec/cp
 // over node:child_process (no SDK, hermetic, suitable for CI).
 import { execSync, spawn } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 /**

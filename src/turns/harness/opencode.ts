@@ -4,13 +4,13 @@
 // transcript reader identified yet (the on-disk store is in flux), so it simply
 // delegates to the generic adapter. Port of pkg/turns/harness/opencode.
 
-import { GenericAdapter } from "../generic.ts"
-import type { Adapter } from "../types.ts"
+import { GenericAdapter } from "../generic.ts";
+import type { Adapter } from "../types.ts";
 
 /** Adapter implements turns.Adapter for the OpenCode CLI. */
 export class OpenCodeAdapter extends GenericAdapter implements Adapter {
   override name(): string {
-    return "opencode"
+    return "opencode";
   }
 
   /**
@@ -20,11 +20,11 @@ export class OpenCodeAdapter extends GenericAdapter implements Adapter {
    * up by a later interleaving adapter.
    */
   streamInterleaved(): boolean {
-    return false
+    return false;
   }
 }
 
 /** Constructs an OpenCode adapter. */
 export function New(): OpenCodeAdapter {
-  return new OpenCodeAdapter()
+  return new OpenCodeAdapter();
 }

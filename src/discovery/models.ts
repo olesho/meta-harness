@@ -15,46 +15,42 @@
 // against a curated static list (models.json), which works offline without
 // launching a CLI.
 
-import { readFileSync } from "node:fs"
-import { dirname, join } from "node:path"
-import { fileURLToPath } from "node:url"
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
-import {
-  Open,
-  newMemStore,
-  type Conversation,
-} from "../chat/index.ts"
-import { Context } from "../internal/async/index.ts"
-import { normHarness } from "../wrapper/internal/harnessargs.ts"
+import { Open, newMemStore, type Conversation } from "../chat/index.ts";
+import { Context } from "../internal/async/index.ts";
+import { normHarness } from "../wrapper/internal/harnessargs.ts";
 
 /** One model as listed by a harness's `/model` picker. */
 export interface ModelInfo {
   /** The value to pass to the wrapper's model selection (`--model` / `-c model=`). */
-  id: string
+  id: string;
   /** The human-facing label shown in the picker (e.g. "Opus", "gpt-5.4-mini"). */
-  label: string
+  label: string;
   /** The one-line description shown beside the label, when present. */
-  description: string
+  description: string;
   /** True for the harness's currently-active model. */
-  current: boolean
+  current: boolean;
   /** True for the model the picker marks as the default / recommended pick. */
-  isDefault: boolean
+  isDefault: boolean;
 }
 
 // A picker row: optional cursor marker (❯ / › / *), an index, then a
 // two-column "label  description" split on a run of 2+ spaces.
-const rowRe = /^\s*[❯›*]?\s*\d+\.\s+(.+?)\s{2,}(\S.*?)\s*$/u
+const rowRe = /^\s*[❯›*]?\s*\d+\.\s+(.+?)\s{2,}(\S.*?)\s*$/u;
 
 /** Picker header text that must be present for a screen to be treated as a `/model` picker. */
 function pickerHeader(harness: string): RegExp | null {
   switch (normHarness(harness)) {
     case "claude":
     case "claude-code":
-      return /Select model/i
+      return /Select model/i;
     case "codex":
-      return /Select Model and Effort/i
+      return /Select Model and Effort/i;
     default:
-      return null
+      return null;
   }
 }
 
@@ -65,63 +61,70 @@ function pickerHeader(harness: string): RegExp | null {
  * numbered list elsewhere on screen never yields false positives).
  */
 export function parseModelPicker(text: string, harness: string): ModelInfo[] {
-  const header = pickerHeader(harness)
-  if (header === null || !header.test(text)) return []
-  const kind = normHarness(harness)
-  const out: ModelInfo[] = []
+  const header = pickerHeader(harness);
+  if (!header?.test(text)) return [];
+  const kind = normHarness(harness);
+  const out: ModelInfo[] = [];
   for (const line of text.split("\n")) {
-    const m = rowRe.exec(line)
-    if (!m) continue
-    const rawLabel = m[1]!.trim()
-    const description = m[2]!.trim()
+    const m = rowRe.exec(line);
+    if (!m) continue;
+    const rawLabel = m[1].trim();
+    const description = m[2].trim();
     if (kind === "codex") {
-      const current = /\(current\)/i.test(rawLabel)
-      const isDefault = /\(default\)/i.test(rawLabel)
+      const current = /\(current\)/i.test(rawLabel);
+      const isDefault = /\(default\)/i.test(rawLabel);
       // "gpt-5.4-mini (current)" → id/label "gpt-5.4-mini".
-      const id = rawLabel.replace(/\([^)]*\)/g, "").trim().split(/\s+/)[0] ?? ""
-      if (id === "") continue
-      out.push({ id, label: id, description, current, isDefault })
+      const id =
+        rawLabel
+          .replace(/\([^)]*\)/g, "")
+          .trim()
+          .split(/\s+/)[0] ?? "";
+      if (id === "") continue;
+      out.push({ id, label: id, description, current, isDefault });
     } else {
       // claude-code: "Opus ✔" (active) / "Default (recommended)" (default).
-      const current = /✔/.test(rawLabel)
-      const cleaned = rawLabel.replace(/✔/g, "").trim()
-      const isDefault = /^Default\b|\(recommended\)/i.test(cleaned)
+      const current = rawLabel.includes("✔");
+      const cleaned = rawLabel.replace(/✔/g, "").trim();
+      const isDefault = /^Default\b|\(recommended\)/i.test(cleaned);
       // The picker's short name is the `--model` alias, case-insensitively.
-      const id = (cleaned.split(/\s+/)[0] ?? "").toLowerCase()
-      if (id === "") continue
-      out.push({ id, label: cleaned, description, current, isDefault })
+      const id = (cleaned.split(/\s+/)[0] ?? "").toLowerCase();
+      if (id === "") continue;
+      out.push({ id, label: cleaned, description, current, isDefault });
     }
   }
-  return out
+  return out;
 }
 
 // ── Curated static registry (models.json), for offline validation ──────────
 
 interface RegistryEntry {
-  default: string
-  models: string[]
+  default: string;
+  models: string[];
 }
 
-const embeddedPath = join(dirname(fileURLToPath(import.meta.url)), "models.json")
+const embeddedPath = join(
+  dirname(fileURLToPath(import.meta.url)),
+  "models.json",
+);
 const registry: Record<string, RegistryEntry> = JSON.parse(
   readFileSync(embeddedPath, "utf8"),
-) as Record<string, RegistryEntry>
+) as Record<string, RegistryEntry>;
 
 /** Canonical registry key ("claude" → "claude-code", so both resolve alike). */
 function registryKey(harness: string): string {
-  const h = normHarness(harness)
-  return h === "claude" ? "claude-code" : h
+  const h = normHarness(harness);
+  return h === "claude" ? "claude-code" : h;
 }
 
 /** The curated list of known model ids/aliases for a harness, or [] if unknown. */
 export function knownModels(harness: string): string[] {
-  const e = registry[registryKey(harness)]
-  return e ? [...e.models] : []
+  const e = registry[registryKey(harness)];
+  return e ? [...e.models] : [];
 }
 
 /** The curated default model id for a harness, or "" if unknown. */
 export function defaultModel(harness: string): string {
-  return registry[registryKey(harness)]?.default ?? ""
+  return registry[registryKey(harness)]?.default ?? "";
 }
 
 /**
@@ -131,26 +134,26 @@ export function defaultModel(harness: string): string {
  * list is not rejected — callers opt into this check when they want it.
  */
 export function isKnownModel(harness: string, model: string): boolean {
-  const want = model.trim().toLowerCase()
-  if (want === "") return false
-  return knownModels(harness).some((m) => m.toLowerCase() === want)
+  const want = model.trim().toLowerCase();
+  if (want === "") return false;
+  return knownModels(harness).some((m) => m.toLowerCase() === want);
 }
 
 // ── Live discovery driver ──────────────────────────────────────────────────
 
 /** Options for {@link discoverModels}. Mirrors the chat/oneshot launch surface. */
 export interface DiscoverModelsOptions {
-  harness: string
-  binaryPath: string
-  workingDir?: string
-  env?: string[]
-  cols?: number
-  rows?: number
+  harness: string;
+  binaryPath: string;
+  workingDir?: string;
+  env?: string[];
+  cols?: number;
+  rows?: number;
   /** How long to wait for the picker to render before giving up (ms). Default 15000. */
-  timeoutMs?: number
+  timeoutMs?: number;
 }
 
-const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 /**
  * discoverModels launches the harness, sends the `/model` slash command, waits
@@ -163,7 +166,9 @@ export async function discoverModels(
   opts: DiscoverModelsOptions,
 ): Promise<ModelInfo[]> {
   if (pickerHeader(opts.harness) === null) {
-    throw new Error(`discoverModels: unsupported harness ${JSON.stringify(opts.harness)}`)
+    throw new Error(
+      `discoverModels: unsupported harness ${JSON.stringify(opts.harness)}`,
+    );
   }
   const conv: Conversation = await Open(ctx, {
     harness: opts.harness,
@@ -173,25 +178,27 @@ export async function discoverModels(
     cols: opts.cols,
     rows: opts.rows,
     store: newMemStore(),
-  })
+  });
   try {
-    const release = await conv.acquireControl(ctx)
+    const release = await conv.acquireControl(ctx);
     try {
-      await conv.send(ctx, "/model")
+      await conv.send(ctx, "/model");
     } finally {
-      release()
+      release();
     }
-    const deadline = Date.now() + (opts.timeoutMs ?? 15_000)
+    const deadline = Date.now() + (opts.timeoutMs ?? 15_000);
     for (;;) {
-      const models = parseModelPicker(conv.screenSnapshot().text, opts.harness)
-      if (models.length > 0) return models
+      const models = parseModelPicker(conv.screenSnapshot().text, opts.harness);
+      if (models.length > 0) return models;
       if (Date.now() >= deadline) {
-        throw new Error("discoverModels: /model picker did not render before timeout")
+        throw new Error(
+          "discoverModels: /model picker did not render before timeout",
+        );
       }
-      await sleep(150)
+      await sleep(150);
     }
   } finally {
-    const { ctx: closeCtx } = Context.withDeadline(Context.background(), 2000)
-    await conv.close(closeCtx).catch(() => {})
+    const { ctx: closeCtx } = Context.withDeadline(Context.background(), 2000);
+    await conv.close(closeCtx).catch(() => {});
   }
 }

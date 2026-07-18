@@ -12,15 +12,15 @@ interactive.
 
 The client-surfaced `kind` values, and which harness produces each:
 
-| `kind` | Prompt | Surfaced by |
-| --- | --- | --- |
-| `trust_prompt` | Folder-trust / "bypass permissions" startup dialog. | Claude Code |
-| `menu_select` | A numbered menu. | any |
-| `confirm` | A y/n confirmation. | any |
-| `text_input` | A free-text prompt (no `options`). | any |
-| `question` | A mid-turn [clarifying question](#clarifying-questions-question--question_review) (`AskUserQuestion`). | Claude Code |
-| `question_review` | The Submit/Cancel confirmation ending a multi-question / multi-select dialog. | Claude Code |
-| `approval_prompt` | A mid-turn [command / apply-patch approval](#approval-prompts-approval_prompt). | Codex |
+| `kind`            | Prompt                                                                                                 | Surfaced by |
+| ----------------- | ------------------------------------------------------------------------------------------------------ | ----------- |
+| `trust_prompt`    | Folder-trust / "bypass permissions" startup dialog.                                                    | Claude Code |
+| `menu_select`     | A numbered menu.                                                                                       | any         |
+| `confirm`         | A y/n confirmation.                                                                                    | any         |
+| `text_input`      | A free-text prompt (no `options`).                                                                     | any         |
+| `question`        | A mid-turn [clarifying question](#clarifying-questions-question--question_review) (`AskUserQuestion`). | Claude Code |
+| `question_review` | The Submit/Cancel confirmation ending a multi-question / multi-select dialog.                          | Claude Code |
+| `approval_prompt` | A mid-turn [command / apply-patch approval](#approval-prompts-approval_prompt).                        | Codex       |
 
 Codex's startup interstitials ("Update available!", model migration, "Press enter to
 continue") are auto-dismissed on the ladder's first rung and never surface as kinds.
@@ -60,7 +60,7 @@ Pre-arm an [`InputPolicy`](../modules/chat.md#interactive-input) at `Open` to re
 prompts by their `kind`, with no live handler:
 
 ```ts
-import { Open, DispositionAnswer, DispositionDeny } from "meta-harness/chat"
+import { Open, DispositionAnswer, DispositionDeny } from "meta-harness/chat";
 
 const conv = await Open(ctx, {
   harness: "claude-code",
@@ -69,11 +69,11 @@ const conv = await Open(ctx, {
   inputPolicy: {
     byKind: {
       trust_prompt: { kind: DispositionAnswer, optionID: "proceed" },
-      confirm:      { kind: DispositionDeny },   // pick the option aliased "deny"
+      confirm: { kind: DispositionDeny }, // pick the option aliased "deny"
     },
-    default: DispositionAnswer,                    // fallback for unlisted kinds (optional)
+    default: DispositionAnswer, // fallback for unlisted kinds (optional)
   },
-})
+});
 ```
 
 `byKind[req.kind]` wins over `default`; an explicit `{ kind: DispositionAsk }` entry means
@@ -82,14 +82,14 @@ const conv = await Open(ctx, {
 ### Dispositions
 
 ```ts
-type Disposition = { kind: DispositionKind; optionID?: string; text?: string }
+type Disposition = { kind: DispositionKind; optionID?: string; text?: string };
 ```
 
-| `kind` | Effect |
-| --- | --- |
-| `DispositionAnswer` | Choose `optionID` (or provide `text` for a free-text prompt). |
-| `DispositionDeny` | Choose the option whose [`alias`](../modules/turns.md#interactive-prompts) is `"deny"`. |
-| `DispositionAsk` | Don't resolve — fall through to the handler / surface to the client. |
+| `kind`              | Effect                                                                                  |
+| ------------------- | --------------------------------------------------------------------------------------- |
+| `DispositionAnswer` | Choose `optionID` (or provide `text` for a free-text prompt).                           |
+| `DispositionDeny`   | Choose the option whose [`alias`](../modules/turns.md#interactive-prompts) is `"deny"`. |
+| `DispositionAsk`    | Don't resolve — fall through to the handler / surface to the client.                    |
 
 ---
 
@@ -99,27 +99,38 @@ To decide per-prompt at runtime, watch for `EventInputRequest` on the event stre
 `answer()`:
 
 ```ts
-import { EventInputRequest, EventTurn, TurnStateComplete, TurnStateErrored } from "meta-harness/chat"
+import {
+  EventInputRequest,
+  EventTurn,
+  TurnStateComplete,
+  TurnStateErrored,
+} from "meta-harness/chat";
 
 for await (const ev of conv.events()) {
   if (ev.type === EventInputRequest && ev.input) {
-    const req = ev.input
-    console.log(req.prompt)
-    for (const opt of req.options ?? []) console.log(`  [${opt.id}] ${opt.label}`)
+    const req = ev.input;
+    console.log(req.prompt);
+    for (const opt of req.options ?? [])
+      console.log(`  [${opt.id}] ${opt.label}`);
 
-    const release = await conv.acquireControl(ctx)
+    const release = await conv.acquireControl(ctx);
     try {
-      await conv.answer(ctx, req.id, { optionID: "proceed" })   // or { text: "…" } for free-text
+      await conv.answer(ctx, req.id, { optionID: "proceed" }); // or { text: "…" } for free-text
     } finally {
-      release()
+      release();
     }
   }
-  if (ev.type === EventTurn && (ev.turn?.state === TurnStateComplete || ev.turn?.state === TurnStateErrored)) break
+  if (
+    ev.type === EventTurn &&
+    (ev.turn?.state === TurnStateComplete ||
+      ev.turn?.state === TurnStateErrored)
+  )
+    break;
 }
 ```
 
 `answer(ctx, requestID, ans)` requires the [control token](conversation.md#3-send-and-wait)
-and a `requestID` that matches the *currently* surfaced request. The
+and a `requestID` that matches the _currently_ surfaced request. The
 [`InputAnswer`](../modules/chat.md#interactive-input) is either `{ optionID }` (pick a
 choice) or `{ text }` (free-text prompt).
 
@@ -131,10 +142,10 @@ For a programmatic fallback without touching the event loop, supply `onInputRequ
 const conv = await Open(ctx, {
   /* … */
   onInputRequest: (req) => {
-    if (req.kind === "trust_prompt") return [{ optionID: "proceed" }, true]
-    return [{}, false]   // not handled → falls through to surfacing
+    if (req.kind === "trust_prompt") return [{ optionID: "proceed" }, true];
+    return [{}, false]; // not handled → falls through to surfacing
   },
-})
+});
 ```
 
 Return `[answer, true]` to resolve, or `[…, false]` to decline and let the prompt surface.
@@ -150,7 +161,7 @@ dialog and surfaces it through the same ladder as every other prompt:
 
 - **kind `"question"`** — one question: `prompt` is the question text, `header` the
   dialog's tab label, `options` the model's choices (with `description`s) plus the UI's
-  two affordances: *"Type something."* (alias `"other"`) and *"Chat about this"*.
+  two affordances: _"Type something."_ (alias `"other"`) and _"Chat about this"_.
 - **kind `"question_review"`** — after the last question of a multi-question or
   multi-select dialog: a Submit/Cancel confirmation (`proceed`/`deny` aliases). Answer
   `{ optionID: "proceed" }` to commit the answers.
@@ -163,19 +174,21 @@ something" either from `EventInputRequest` on the event stream or by polling
 ```ts
 for await (const ev of conv.events()) {
   if (ev.type === EventInputRequest && ev.input?.kind === "question") {
-    const req = ev.input
+    const req = ev.input;
     // req.prompt: "Which color should I use?"; req.options: Red / Blue / …
-    const release = await conv.acquireControl(ctx)
+    const release = await conv.acquireControl(ctx);
     try {
-      await conv.answer(ctx, req.id, { optionID: "Blue" })  // id, alias, or label
+      await conv.answer(ctx, req.id, { optionID: "Blue" }); // id, alias, or label
     } finally {
-      release()
+      release();
     }
   }
   if (ev.type === EventInputRequest && ev.input?.kind === "question_review") {
-    /* acquire control and */ await conv.answer(ctx, ev.input.id, { optionID: "proceed" })
+    /* acquire control and */ await conv.answer(ctx, ev.input.id, {
+      optionID: "proceed",
+    });
   }
-  if (ev.type === EventTurn && ev.turn?.state === TurnStateComplete) break
+  if (ev.type === EventTurn && ev.turn?.state === TurnStateComplete) break;
 }
 ```
 
@@ -184,7 +197,7 @@ for await (const ev of conv.events()) {
 confirmation):
 
 ```ts
-await conv.answer(ctx, req.id, { optionIDs: ["Cheese", "Olives"] })
+await conv.answer(ctx, req.id, { optionIDs: ["Cheese", "Olives"] });
 ```
 
 Passing several `optionIDs` to a single-select question throws
@@ -195,9 +208,9 @@ the structured question: the dialog closes, the tool reports "user declined", an
 **turn completes**. Send your free-text answer as the next ordinary message:
 
 ```ts
-await conv.answer(ctx, req.id, { optionID: "other" })  // turn completes ("declined")
+await conv.answer(ctx, req.id, { optionID: "other" }); // turn completes ("declined")
 // … wait for TurnStateComplete, then:
-await conv.send(ctx, "Turquoise")                       // the actual answer, as a new turn
+await conv.send(ctx, "Turquoise"); // the actual answer, as a new turn
 ```
 
 To auto-answer unattended runs, pre-arm a policy — e.g. always pick the first option and
@@ -224,7 +237,9 @@ with `proceed`/`deny` aliases. Answer it like any other prompt:
 
 ```ts
 if (ev.type === EventInputRequest && ev.input?.kind === "approval_prompt") {
-  /* acquire control and */ await conv.answer(ctx, ev.input.id, { optionID: "proceed" })
+  /* acquire control and */ await conv.answer(ctx, ev.input.id, {
+    optionID: "proceed",
+  });
   // or { optionID: "deny" } to reject the command / edits
 }
 ```
@@ -239,7 +254,7 @@ inputPolicy: {
 }
 ```
 
-Approval detection runs *before* the interstitial auto-dismiss anchors, so an approval
+Approval detection runs _before_ the interstitial auto-dismiss anchors, so an approval
 dialog whose body happens to quote an interstitial phrase can never be auto-approved by
 the dismiss keystrokes. Note the [one-shot loop](one-shot-turns.md) ships **no** policy
 for `approval_prompt` — an unanswered approval waits out the deadline (see the
@@ -249,12 +264,12 @@ for `approval_prompt` — an unanswered approval waits out the deadline (see the
 
 ## Errors
 
-| Sentinel | Raised when |
-| --- | --- |
-| [`ErrInputPending`](../modules/chat.md#errors) | `send` while a prompt is pending — answer it first. |
-| [`ErrNoInputPending`](../modules/chat.md#errors) | `answer` with nothing pending. |
+| Sentinel                                            | Raised when                                                               |
+| --------------------------------------------------- | ------------------------------------------------------------------------- |
+| [`ErrInputPending`](../modules/chat.md#errors)      | `send` while a prompt is pending — answer it first.                       |
+| [`ErrNoInputPending`](../modules/chat.md#errors)    | `answer` with nothing pending.                                            |
 | [`ErrStaleInputRequest`](../modules/chat.md#errors) | `answer`'s `requestID` isn't the current prompt (it changed or resolved). |
-| [`ErrUnknownOption`](../modules/chat.md#errors) | The `optionID`/alias matches no option. |
+| [`ErrUnknownOption`](../modules/chat.md#errors)     | The `optionID`/alias matches no option.                                   |
 
 Because a prompt's `id` is stable only while that exact prompt is shown, answer promptly —
 if the screen changes, your `requestID` goes stale.

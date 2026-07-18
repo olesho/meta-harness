@@ -7,7 +7,7 @@ import {
   argsContainFlag,
   normHarness,
   prependArgs,
-} from "./harnessargs.ts"
+} from "./harnessargs.ts";
 
 /** Prepend a per-harness model override. Empty leaves the harness default. */
 export function argsWithHarnessModel(
@@ -15,16 +15,16 @@ export function argsWithHarnessModel(
   args: string[],
   model: string,
 ): string[] {
-  if (model === "") return args
+  if (model === "") return args;
   switch (normHarness(harness)) {
     case "claude":
     case "claude-code":
-      if (argsContainFlag(args, "--model")) return args
-      return prependArgs(args, "--model", model)
+      if (argsContainFlag(args, "--model")) return args;
+      return prependArgs(args, "--model", model);
     case "codex":
-      if (argsContainConfigKey(args, "model")) return args
-      return prependArgs(args, "-c", `model="${model}"`)
+      if (argsContainConfigKey(args, "model")) return args;
+      return prependArgs(args, "-c", `model="${model}"`);
     default:
-      return args
+      return args;
   }
 }

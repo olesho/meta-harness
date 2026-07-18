@@ -1,8 +1,8 @@
 // Port of pkg/turns/harness/claudecode/extract_message_test.go.
 
-import { describe, expect, test } from "vitest"
-import * as claudecode from "../../../src/turns/harness/claudecode.ts"
-import { textSnap } from "../corpus.ts"
+import { describe, expect, test } from "vitest";
+import * as claudecode from "../../../src/turns/harness/claudecode.ts";
+import { textSnap } from "../corpus.ts";
 
 const oneShotScreen = `╭─── Claude Code v2.1.181 ───────────────────────────────────╮
 │ Welcome back Oleh!                                         │
@@ -18,7 +18,7 @@ const oneShotScreen = `╭─── Claude Code v2.1.181 ───────�
 ❯
 ────────────────────────────────────────────────────────────
   ⏵⏵ bypass permissions on (shift+tab to cycle)
-`
+`;
 
 const toolThenReplyScreen = `❯ Create result.txt then say DONE.
 
@@ -31,7 +31,7 @@ const toolThenReplyScreen = `❯ Create result.txt then say DONE.
 
 ────────────────────────────────────────────────────────────
 ❯
-`
+`;
 
 const multiLineScreen = `❯ summarize
 
@@ -43,7 +43,7 @@ const multiLineScreen = `❯ summarize
 
 ────────────────────────────────────────────────────────────
 ❯
-`
+`;
 
 const staleThenFreshScreen = `⏺ Old answer from a previous turn
 
@@ -57,58 +57,60 @@ const staleThenFreshScreen = `⏺ Old answer from a previous turn
 
 ────────────────────────────────────────────────────────────
 ❯
-`
+`;
 
 describe("claude-code extract message", () => {
   test("one-shot reply", () => {
-    const [got, ok] = claudecode.New().extractMessage(textSnap(oneShotScreen))
-    expect(ok).toBe(true)
-    expect(got).toBe("PONG")
-  })
+    const [got, ok] = claudecode.New().extractMessage(textSnap(oneShotScreen));
+    expect(ok).toBe(true);
+    expect(got).toBe("PONG");
+  });
 
   test("skips tool call, takes final message", () => {
     const [got, ok] = claudecode
       .New()
-      .extractMessage(textSnap(toolThenReplyScreen))
-    expect(ok).toBe(true)
-    expect(got).toBe("DONE")
-  })
+      .extractMessage(textSnap(toolThenReplyScreen));
+    expect(ok).toBe(true);
+    expect(got).toBe("DONE");
+  });
 
   test("multi-line dedented", () => {
-    const [got, ok] = claudecode.New().extractMessage(textSnap(multiLineScreen))
-    expect(ok).toBe(true)
-    expect(got).toBe("Here is the summary:\n- point one\n- point two")
-  })
+    const [got, ok] = claudecode
+      .New()
+      .extractMessage(textSnap(multiLineScreen));
+    expect(ok).toBe(true);
+    expect(got).toBe("Here is the summary:\n- point one\n- point two");
+  });
 
   test("ignores stale prior turn", () => {
     const [got, ok] = claudecode
       .New()
-      .extractMessage(textSnap(staleThenFreshScreen))
-    expect(ok).toBe(true)
-    expect(got).toBe("Fresh answer")
-  })
+      .extractMessage(textSnap(staleThenFreshScreen));
+    expect(ok).toBe(true);
+    expect(got).toBe("Fresh answer");
+  });
 
   test("no bullet returns false", () => {
     const [, ok] = claudecode
       .New()
-      .extractMessage(textSnap("just a banner\n❯\n"))
-    expect(ok).toBe(false)
-  })
+      .extractMessage(textSnap("just a banner\n❯\n"));
+    expect(ok).toBe(false);
+  });
 
   test("QuitSequence", () => {
-    const q = claudecode.New().quitSequence()
-    expect(new TextDecoder().decode(q)).toBe("/quit\x1b[13u")
-  })
+    const q = claudecode.New().quitSequence();
+    expect(new TextDecoder().decode(q)).toBe("/quit\x1b[13u");
+  });
 
   test("ExtractSessionIDFromLine", () => {
-    const a = claudecode.New()
-    const id = "74ca2184-c064-492c-88dc-c79c128de13e"
-    const cases: Array<{
-      name: string
-      line: string
-      want: string
-      wantOK: boolean
-    }> = [
+    const a = claudecode.New();
+    const id = "74ca2184-c064-492c-88dc-c79c128de13e";
+    const cases: {
+      name: string;
+      line: string;
+      want: string;
+      wantOK: boolean;
+    }[] = [
       { name: "plain", line: "claude --resume " + id, want: id, wantOK: true },
       {
         name: "ansi-and-cr",
@@ -130,11 +132,11 @@ describe("claude-code extract message", () => {
         want: "",
         wantOK: false,
       },
-    ]
+    ];
     for (const tc of cases) {
-      const [got, ok] = a.extractSessionIDFromLine(tc.line)
-      expect(ok).toBe(tc.wantOK)
-      expect(got).toBe(tc.want)
+      const [got, ok] = a.extractSessionIDFromLine(tc.line);
+      expect(ok).toBe(tc.wantOK);
+      expect(got).toBe(tc.want);
     }
-  })
-})
+  });
+});

@@ -2,7 +2,7 @@
 
 Supervises a harness CLI under a pseudoterminal and normalizes its behavior. The wrapper
 launches the binary, streams its PTY output into a [screen](screen.md), runs a
-**classifier** on a fixed cadence, and folds everything — mid-run output *and* the final
+**classifier** on a fixed cadence, and folds everything — mid-run output _and_ the final
 exit code — into a stable [`Status`](#status-values) and [`ErrorClass`](#error-taxonomy).
 It owns the process lifecycle (start / wait / stop), stdin forwarding, resize, and a
 durable line tap.
@@ -30,18 +30,18 @@ import {
 ## Quickstart
 
 ```ts
-import { run } from "meta-harness/wrapper"
-import { newScreen } from "meta-harness/screen"
+import { run } from "meta-harness/wrapper";
+import { newScreen } from "meta-harness/screen";
 
-const screen = newScreen(120, 40)
+const screen = newScreen(120, 40);
 const { result, err } = await run(undefined, {
   binaryPath: "/usr/local/bin/claude",
   harness: "claude-code",
   args: ["-p", "hello"],
   stdout: screen,
-})
+});
 
-console.log(result.status, result.class, result.exitCode)
+console.log(result.status, result.class, result.exitCode);
 // err is non-null only on a *wrapper* failure (bad config, missing binary, PTY alloc).
 // A harness that ran and failed is reported in result, never thrown.
 ```
@@ -56,30 +56,31 @@ exiting non-zero, hitting a rate limit, or timing out — comes back in `result`
 
 ```ts
 interface Config {
-  binaryPath?: string        // harness executable (required)
-  stdout?: unknown           // PTY byte sink — a Screen, or any { write(Uint8Array) } (required)
-  harness?: string           // "claude"/"claude-code", "codex", "cursor", "opencode", "pi"
-  args?: string[]            // harness CLI args
-  env?: string[]             // environment as "KEY=VALUE" entries
-  effort?: string            // low | medium | high | xhigh | max
-  model?: string             // model override
-  workingDir?: string
-  stdin?: unknown            // string | Uint8Array | async iterable, streamed to the PTY
+  binaryPath?: string; // harness executable (required)
+  stdout?: unknown; // PTY byte sink — a Screen, or any { write(Uint8Array) } (required)
+  harness?: string; // "claude"/"claude-code", "codex", "cursor", "opencode", "pi"
+  args?: string[]; // harness CLI args
+  env?: string[]; // environment as "KEY=VALUE" entries
+  effort?: string; // low | medium | high | xhigh | max
+  model?: string; // model override
+  workingDir?: string;
+  stdin?: unknown; // string | Uint8Array | async iterable, streamed to the PTY
 
-  idleQuiet?: number         // ms of no output → "quiet"          (default 15_000)
-  idleClassify?: number      // ms of no output → run classifier   (default 60_000)
-  staleThreshold?: number    // ms of no output → StatusStale      (default 300_000)
-  waitDelay?: number         // ms between SIGTERM and SIGKILL      (default 5_000)
+  idleQuiet?: number; // ms of no output → "quiet"          (default 15_000)
+  idleClassify?: number; // ms of no output → run classifier   (default 60_000)
+  staleThreshold?: number; // ms of no output → StatusStale      (default 300_000)
+  waitDelay?: number; // ms between SIGTERM and SIGKILL      (default 5_000)
 
-  classifier?: Classifier | null    // override the per-harness classifier
-  onLine?: ((line: string) => void) | null   // durable tap: one call per complete PTY line (ANSI intact)
-  trace?: unknown            // a trace.Emitter for diagnostics
+  classifier?: Classifier | null; // override the per-harness classifier
+  onLine?: ((line: string) => void) | null; // durable tap: one call per complete PTY line (ANSI intact)
+  trace?: unknown; // a trace.Emitter for diagnostics
 }
 ```
 
 ```ts
 validateConfig(cfg: Config): Error | null
 ```
+
 Validate without launching. Returns an error wrapping [`ErrInvalidConfig`](#errors) on
 failure (e.g. missing `binaryPath`/`stdout`, or `idleClassify < idleQuiet`), else `null`.
 `start`/`run` validate for you.
@@ -96,6 +97,7 @@ The idle thresholds are ordered: the classifier tick runs at `max(idleQuiet/3, 1
 ```ts
 start(ctx: RunContext | undefined, cfg: Config): Promise<Session>
 ```
+
 Launch the harness under a PTY and return a live [`Session`](#session). Throws only on a
 wrapper failure, with a cause chain you can match: [`ErrInvalidConfig`](#errors),
 [`ErrBinaryNotFound`](#errors), [`ErrPTYAllocation`](#errors). Pass `undefined` for `ctx`
@@ -106,6 +108,7 @@ to run uncancelled.
 ```ts
 run(ctx: RunContext | undefined, cfg: Config): Promise<{ result: Result; err: Error | null }>
 ```
+
 Convenience: `start` + `wait`. Always resolves with a `result`; `err` is non-null only on
 a wrapper failure. If `start` failed with a missing binary, `result.status` is
 `binary_not_found`.
@@ -114,10 +117,11 @@ a wrapper failure. If `start` failed with a missing binary, `result.status` is
 
 ```ts
 interface RunContext {
-  done(): Promise<void>   // resolves when cancelled
-  err?(): unknown         // the cancellation cause
+  done(): Promise<void>; // resolves when cancelled
+  err?(): unknown; // the cancellation cause
 }
 ```
+
 The wrapper's minimal cancellation surface — structurally satisfied by a
 [`Context`](async.md) from `meta-harness/async`. When it fires, the harness is terminated
 and the run ends as `StatusInterrupted`; a `ctxDeadlineExceeded` cause is reported as
@@ -131,15 +135,15 @@ A live handle to the supervised harness.
 
 ```ts
 class Session {
-  pid(): number                                  // 0 until the PTY is open
-  wait(): Promise<{ result: Result; err: Error | null }>   // block until terminated
-  stop(ctx?): Promise<Error | null>              // graceful shutdown (SIGTERM → SIGKILL after waitDelay); idempotent
-  snapshot(): Snapshot                           // point-in-time { status, reason, lastOutputAt }
-  events(): EventChannel                          // ordered SessionEvent stream; closes after the terminal event
-  recentOutput(): string                          // last ~64 KB of raw PTY output (ANSI intact)
-  writeStdin(data: Uint8Array): void              // forward keystrokes to the harness
-  resize(cols: number, rows: number): void        // resize the PTY (0 values ignored)
-  acquireWriter(): { release: () => void; ok: boolean }   // claim the exclusive stdin-writer lock
+  pid(): number; // 0 until the PTY is open
+  wait(): Promise<{ result: Result; err: Error | null }>; // block until terminated
+  stop(ctx?): Promise<Error | null>; // graceful shutdown (SIGTERM → SIGKILL after waitDelay); idempotent
+  snapshot(): Snapshot; // point-in-time { status, reason, lastOutputAt }
+  events(): EventChannel; // ordered SessionEvent stream; closes after the terminal event
+  recentOutput(): string; // last ~64 KB of raw PTY output (ANSI intact)
+  writeStdin(data: Uint8Array): void; // forward keystrokes to the harness
+  resize(cols: number, rows: number): void; // resize the PTY (0 values ignored)
+  acquireWriter(): { release: () => void; ok: boolean }; // claim the exclusive stdin-writer lock
 }
 ```
 
@@ -151,15 +155,15 @@ treat themselves as read-only watchers (the restriction is advisory). This is wh
 
 ```ts
 interface Result {
-  status: Status
-  class: ErrorClass
-  exitCode: number
-  signal: string        // e.g. "interrupt", "terminated"; "" if not signalled
-  reason: string
-  pid: number
-  startedAt: Date | null
-  endedAt: Date | null
-  lastOutputAt: Date | null
+  status: Status;
+  class: ErrorClass;
+  exitCode: number;
+  signal: string; // e.g. "interrupt", "terminated"; "" if not signalled
+  reason: string;
+  pid: number;
+  startedAt: Date | null;
+  endedAt: Date | null;
+  lastOutputAt: Date | null;
 }
 ```
 
@@ -167,14 +171,14 @@ interface Result {
 
 ```ts
 interface SessionEvent {
-  at: Date
-  status: Status
-  reason: string
-  terminated: boolean      // true when the run should end
-  class: ErrorClass
-  httpCode: number         // upstream HTTP status for StatusAPIError, else 0
-  retryAfter: number       // suggested wait (ms), else 0
-  resumeAt: Date | null    // absolute reset instant parsed from a session-limit banner
+  at: Date;
+  status: Status;
+  reason: string;
+  terminated: boolean; // true when the run should end
+  class: ErrorClass;
+  httpCode: number; // upstream HTTP status for StatusAPIError, else 0
+  retryAfter: number; // suggested wait (ms), else 0
+  resumeAt: Date | null; // absolute reset instant parsed from a session-limit banner
 }
 ```
 
@@ -183,10 +187,10 @@ Consumed by the [`turns.Watcher`](turns.md#the-watcher). Delivered through an
 
 ```ts
 class EventChannel {
-  emit(e: SessionEvent): void          // enqueue (dropped if the buffer is full)
-  receive(): Promise<EventRecv>        // { value, ok } — ok:false once closed and drained
-  close(): void
-  [Symbol.asyncIterator](): AsyncIterator<SessionEvent>
+  emit(e: SessionEvent): void; // enqueue (dropped if the buffer is full)
+  receive(): Promise<EventRecv>; // { value, ok } — ok:false once closed and drained
+  close(): void;
+  [Symbol.asyncIterator](): AsyncIterator<SessionEvent>;
 }
 ```
 
@@ -204,8 +208,16 @@ class EventChannel {
 
 ```ts
 type Status =
-  | "idle" | "failed" | "blocked_by_cost" | "retry_later" | "api_error"
-  | "waiting_for_input" | "stale" | "interrupted" | "unknown" | "binary_not_found"
+  | "idle"
+  | "failed"
+  | "blocked_by_cost"
+  | "retry_later"
+  | "api_error"
+  | "waiting_for_input"
+  | "stale"
+  | "interrupted"
+  | "unknown"
+  | "binary_not_found";
 ```
 
 Exported as constants: `StatusIdle`, `StatusFailed`, `StatusBlockedByCost`,
@@ -222,30 +234,31 @@ The classifier turns harness output into a verdict.
 ```ts
 classifyOutput(harness: string, output: string): Classification
 ```
+
 One-shot classification over a finished output blob (forces `idle=true` so cost/retry
 patterns are eligible). Returns a zero `Classification` (`status: ""`) when nothing
 matches.
 
 ```ts
 interface Classification {
-  status: Status       // "" means "no classification" (a no-op; no state transition)
-  class: ErrorClass
-  reason: string
-  terminal: boolean    // should the wrapper terminate to make progress?
-  httpCode: number
-  retryAfter: number
-  resumeAt: Date | null
+  status: Status; // "" means "no classification" (a no-op; no state transition)
+  class: ErrorClass;
+  reason: string;
+  terminal: boolean; // should the wrapper terminate to make progress?
+  httpCode: number;
+  retryAfter: number;
+  resumeAt: Date | null;
 }
 
 interface ClassifierInput {
-  recentOutput: string       // tail of PTY output (~64 KB), ANSI intact
-  sinceLastOutput?: number   // ms since the last byte
-  quiet?: boolean            // sinceLastOutput ≥ idleQuiet
-  idle?: boolean             // sinceLastOutput ≥ idleClassify
+  recentOutput: string; // tail of PTY output (~64 KB), ANSI intact
+  sinceLastOutput?: number; // ms since the last byte
+  quiet?: boolean; // sinceLastOutput ≥ idleQuiet
+  idle?: boolean; // sinceLastOutput ≥ idleClassify
 }
 
 interface Classifier {
-  classify(input: ClassifierInput): Classification
+  classify(input: ClassifierInput): Classification;
 }
 ```
 
@@ -271,7 +284,7 @@ ErrContextOverflow (5) · ErrTimeout (6) · ErrTransient (7) · ErrUnknown (8)
 errorClassString(c: ErrorClass): string   // canonical display name, e.g. ErrAuth → "AuthFailure"
 ```
 
-Orthogonal to `Status`: `Status` says *what state* the run is in, `ErrorClass` says *why*
+Orthogonal to `Status`: `Status` says _what state_ the run is in, `ErrorClass` says _why_
 it failed, in a form suitable for retry/backoff logic. The key split is cost/quota →
 `ErrRateLimited` (transient) vs `ErrBilling` (fatal), decided by payment/credit hints in
 the output. See [Concepts › Error class](../concepts.md#error-class).
@@ -300,12 +313,12 @@ argsWithHarnessModel(harness: string, args: string[], model: string): string[]
 
 All are [sentinels](../concepts.md#sentinel-errors) — match by identity, not message.
 
-| Sentinel | Raised when |
-| --- | --- |
-| `ErrInvalidConfig` | `validateConfig`/`start` rejects the config. |
+| Sentinel            | Raised when                                                                                                                      |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `ErrInvalidConfig`  | `validateConfig`/`start` rejects the config.                                                                                     |
 | `ErrBinaryNotFound` | The harness binary isn't found. Also detectable via `isBinaryNotFound(err)`, which walks the cause chain (and catches `ENOENT`). |
-| `ErrPTYAllocation` | The PTY bridge couldn't be spawned or the PTY died on open. |
-| `ErrPTYRead` | A read on the PTY master failed. |
+| `ErrPTYAllocation`  | The PTY bridge couldn't be spawned or the PTY died on open.                                                                      |
+| `ErrPTYRead`        | A read on the PTY master failed.                                                                                                 |
 
 ```ts
 isBinaryNotFound(err: unknown): boolean

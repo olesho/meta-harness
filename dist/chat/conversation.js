@@ -13,17 +13,17 @@
 // methods cooperate on the microtask/timer queue, not on real threads.
 import { newScreen } from "../screen/index.js";
 import { Watch, TurnComplete, ToolCall, Blocked, Errored, InputRequested, InputResolved, generic, claudecode, codex, opencode, pi, } from "../turns/index.js";
-import { start as wrapperStart } from "../wrapper/index.js";
+import { start as wrapperStart, } from "../wrapper/index.js";
 import { Context, isSentinel, wrap } from "../internal/async/index.js";
 import { ErrEmptySessionID, ErrSessionNotFound } from "../transcript/errors.js";
 import { stripIDEContextTags } from "../transcript/stripTags.js";
 import { RoleUser, RoleAssistant, TurnStatePending, TurnStateComplete, TurnStateErrored, EventTurn, EventInputRequest, EventInputResolved, DispositionAnswer, DispositionDeny, HistorySourceTranscript, HistorySourceStore, newID, } from "./types.js";
 import { ErrInvalidOptions, ErrUnknownHarness, ErrNoControl, ErrTurnInFlight, ErrClosed, ErrInputPending, ErrNoInputPending, ErrStaleInputRequest, ErrUnknownOption, ErrNotMultiSelect, ErrQuitUnsupported, ErrResumeUnsupported, ErrNoHarnessSession, } from "./errors.js";
 import { newControlQueue } from "./control.js";
-import { submitKeyForHarness, requiresPromptReadiness, readyForInput } from "./ready.js";
+import { submitKeyForHarness, requiresPromptReadiness, readyForInput, } from "./ready.js";
 import { cleanHarnessEnv } from "./env.js";
 import { AcquisitionModeOff, AcquisitionModeHooks } from "../turns/index.js";
-import { StreamTap, adapterStreamParser } from "../acquisition/internal/streamTap.js";
+import { StreamTap, adapterStreamParser, } from "../acquisition/internal/streamTap.js";
 import { newDisplaySink } from "../acquisition/internal/display.js";
 import { hookEnv } from "../acquisition/internal/yield.js";
 import { planAcquisition, resolveProfile, } from "../acquisition/internal/planAcquisition.js";
@@ -208,7 +208,12 @@ export class Conversation {
     closedPromise;
     closeDone = false;
     constructor(init = {}) {
-        this.opts = { harness: "", binaryPath: "", store: undefined, ...init.opts };
+        this.opts = {
+            harness: "",
+            binaryPath: "",
+            store: undefined,
+            ...init.opts,
+        };
         if (init.store)
             this.store = init.store;
         if (init.adapter)
@@ -225,7 +230,11 @@ export class Conversation {
             createdAt: new Date(),
             harnessSessionID: "",
         };
-        this.eventCh = init.eventCh ?? new EventBus(this.opts.eventBuffer && this.opts.eventBuffer > 0 ? this.opts.eventBuffer : 32);
+        this.eventCh =
+            init.eventCh ??
+                new EventBus(this.opts.eventBuffer && this.opts.eventBuffer > 0
+                    ? this.opts.eventBuffer
+                    : 32);
         this.currentTurn = init.currentTurn ?? null;
         this.markerArmCh = init.markerArmCh ?? new Signal();
         this.inputStateCh = init.inputStateCh ?? new Signal();
@@ -447,7 +456,9 @@ export class Conversation {
             return Promise.resolve();
         }
         this.writeKeys(enc.encode(text));
-        return this.awaitComposerEcho(text, preWriteScreen, ctx).then(() => this.writeKeys(submitKey));
+        return this.awaitComposerEcho(text, preWriteScreen, ctx).then(() => {
+            this.writeKeys(submitKey);
+        });
     }
     echoBoundDur() {
         const configured = this.opts.echoBound && this.opts.echoBound > 0
@@ -474,7 +485,9 @@ export class Conversation {
      * event outrace the deadline classification (exit 1 instead of 124).
      */
     async awaitComposerEcho(text, preWriteScreen, ctx) {
-        const needle = (text.split("\n", 1)[0] ?? "").trim().slice(0, echoNeedleLen);
+        const needle = (text.split("\n", 1)[0] ?? "")
+            .trim()
+            .slice(0, echoNeedleLen);
         const bound = this.echoBoundDur();
         const deadline = sleep(bound);
         const half = sleep(bound / 2);
@@ -490,13 +503,17 @@ export class Conversation {
                     return;
                 const which = await Promise.race([
                     this.closedPromise.then(() => "closed"),
-                    notify.receive().then((r) => (r.ok ? "changed" : "closed")),
+                    notify
+                        .receive()
+                        .then((r) => (r.ok ? "changed" : "closed")),
                     (halfDone ? never : half.promise).then(() => "half"),
                     deadline.promise.then(() => "deadline"),
-                    ctx ? ctx.done().then(() => "ctx") : never.then(() => "ctx"),
+                    ctx
+                        ? ctx.done().then(() => "ctx")
+                        : never.then(() => "ctx"),
                 ]);
                 if (which === "ctx")
-                    throw (ctx?.err() ?? new Error("chat: context done"));
+                    throw ctx?.err() ?? new Error("chat: context done");
                 if (which === "closed" || which === "deadline")
                     return;
                 if (which === "half")
@@ -662,10 +679,14 @@ export class Conversation {
         this.emit({ type: EventTurn, turn: { ...turn } });
     }
     idleGapDur() {
-        return this.opts.idleGap && this.opts.idleGap > 0 ? this.opts.idleGap : idleCompletionGap;
+        return this.opts.idleGap && this.opts.idleGap > 0
+            ? this.opts.idleGap
+            : idleCompletionGap;
     }
     markerGapDur() {
-        return this.opts.markerGap && this.opts.markerGap > 0 ? this.opts.markerGap : markerConfirmGap;
+        return this.opts.markerGap && this.opts.markerGap > 0
+            ? this.opts.markerGap
+            : markerConfirmGap;
     }
     async idleCompletionWatcher() {
         if (!requiresPromptReadiness(this.opts.harness))
@@ -775,7 +796,8 @@ export class Conversation {
         turn.completedAt = new Date();
         turn.reason = marker
             ? this.opts.harness + ": end-of-turn marker confirmed at a settled prompt"
-            : this.opts.harness + ": idle-completion fallback (end-of-turn marker not observed)";
+            : this.opts.harness +
+                ": idle-completion fallback (end-of-turn marker not observed)";
         turn.text = this.assistantText(snap, /* wholeScreenFallback */ marker);
         try {
             await this.store.updateTurn(turn);
@@ -799,7 +821,8 @@ export class Conversation {
             if (ok && id !== "" && id !== this.session.harnessSessionID) {
                 // Persist-before-set: on a persist failure keep the latch armed and the
                 // old id so the next TurnComplete retries.
-                const done = await this.captureAndPersistSessionID(id, /* replace */ true);
+                const done = await this.captureAndPersistSessionID(id, 
+                /* replace */ true);
                 if (done)
                     this.harnessSessionIDProvisional = false;
             }
@@ -917,7 +940,9 @@ export class Conversation {
                     const which = await Promise.race([
                         ctx.done().then(() => "ctx"),
                         this.closedPromise.then(() => "closed"),
-                        notify.receive().then((r) => (r.ok ? "changed" : "closed")),
+                        notify
+                            .receive()
+                            .then((r) => (r.ok ? "changed" : "closed")),
                         (resent ? never : half.promise).then(() => "half"),
                         deadline.promise.then(() => "deadline"),
                     ]);
@@ -1018,7 +1043,8 @@ export class Conversation {
             // A not-yet-flushed (or lost) transcript degrades to store history,
             // favoring availability. Real reader failures (parse/permission/etc.)
             // rethrow so they are not silently masked.
-            if (isSentinel(err, ErrSessionNotFound) || isSentinel(err, ErrEmptySessionID)) {
+            if (isSentinel(err, ErrSessionNotFound) ||
+                isSentinel(err, ErrEmptySessionID)) {
                 const out = await this.store.listTurns(sessionCopy.id);
                 return [out, HistorySourceStore];
             }
@@ -1102,7 +1128,8 @@ export class Conversation {
             return this.readTranscriptTurns(this.session.harnessSessionID).length;
         }
         catch (err) {
-            if (isSentinel(err, ErrSessionNotFound) || isSentinel(err, ErrEmptySessionID))
+            if (isSentinel(err, ErrSessionNotFound) ||
+                isSentinel(err, ErrEmptySessionID))
                 return 0;
             return null;
         }
@@ -1170,7 +1197,11 @@ export class Conversation {
                 return { proof: null, diag: "", retryable: true };
             if (isSentinel(err, ErrEmptySessionID))
                 return { proof: null, diag: "", retryable: false };
-            return { proof: null, diag: "transcript check failed: " + String(err), retryable: false };
+            return {
+                proof: null,
+                diag: "transcript check failed: " + String(err),
+                retryable: false,
+            };
         }
         const want = stripIDEContextTags(this.sentPromptText);
         let match = -1;
@@ -1198,7 +1229,11 @@ export class Conversation {
         }
         if (replies.length === 0)
             return { proof: null, diag: "", retryable: false };
-        return { proof: { text: replies.join("\n\n") }, diag: "", retryable: false };
+        return {
+            proof: { text: replies.join("\n\n") },
+            diag: "",
+            retryable: false,
+        };
     }
     adapterBusy(snap) {
         const a = this.adapter;
@@ -1241,7 +1276,9 @@ export class Conversation {
                     ctx.done().then(() => "ctx"),
                     this.closedPromise.then(() => "closed"),
                     this.inputStateCh.receive().then(() => "input"),
-                    notify.receive().then((r) => r.ok ? "notify" : "notifyClosed"),
+                    notify
+                        .receive()
+                        .then((r) => r.ok ? "notify" : "notifyClosed"),
                 ]);
                 if (which === "ctx")
                     throw ctx.err();
@@ -1278,7 +1315,9 @@ export class Conversation {
                     ctx.done().then(() => "ctx"),
                     this.closedPromise.then(() => "closed"),
                     this.inputStateCh.receive().then(() => "input"),
-                    notify.receive().then((r) => r.ok ? "notify" : "notifyClosed"),
+                    notify
+                        .receive()
+                        .then((r) => r.ok ? "notify" : "notifyClosed"),
                     deadlinePromise.then(() => "deadline"),
                 ]);
                 if (which === "ctx")
@@ -1319,13 +1358,18 @@ function sleep(ms) {
     const promise = new Promise((resolve) => {
         timeout = setTimeout(resolve, ms);
     });
-    return { promise, cancel: () => clearTimeout(timeout) };
+    return {
+        promise,
+        cancel: () => {
+            clearTimeout(timeout);
+        },
+    };
 }
 function resolvePolicy(p, kind) {
     if (!p)
         return null;
     const d = p.byKind?.[kind];
-    if (d && d.kind)
+    if (d?.kind)
         return d;
     if (p.default)
         return { kind: p.default };
@@ -1352,7 +1396,9 @@ function findOption(req, s) {
         return null;
     const ls = s.toLowerCase();
     for (const o of req.options ?? []) {
-        if (o.id === s || o.alias.toLowerCase() === ls || o.label.toLowerCase() === ls)
+        if (o.id === s ||
+            o.alias.toLowerCase() === ls ||
+            o.label.toLowerCase() === ls)
             return o;
     }
     return null;
@@ -1410,15 +1456,9 @@ export async function Open(ctx, opts) {
 async function openWithSession(ctx, opts, session, persist) {
     const cols = opts.cols && opts.cols > 0 ? opts.cols : 120;
     const rows = opts.rows && opts.rows > 0 ? opts.rows : 40;
-    let adapter;
-    try {
-        // The advanced/testing seam wins: a caller-supplied adapter drives Open
-        // directly (used to exercise Stream mode with a fake interleaved adapter).
-        adapter = opts.adapter ?? resolveAdapter(opts.harness);
-    }
-    catch (err) {
-        throw err;
-    }
+    // The advanced/testing seam wins: a caller-supplied adapter drives Open
+    // directly (used to exercise Stream mode with a fake interleaved adapter).
+    const adapter = opts.adapter ?? resolveAdapter(opts.harness);
     // Resolve resume args up front so an unsupported harness fails before launch.
     let resumeArgs = [];
     if (opts.resume) {
@@ -1490,7 +1530,9 @@ async function openWithSession(ctx, opts, session, persist) {
             c.hookDrain = drain;
         }
     }
-    const runCtx = ctx ? { done: () => ctx.done(), err: () => ctx.err() } : undefined;
+    const runCtx = ctx
+        ? { done: () => ctx.done(), err: () => ctx.err() }
+        : undefined;
     // ── Acquisition plan (StreamTap) ───────────────────────────────────────────
     // Resolve the LATCHED acquisition mode for the run, then build StreamTap as an
     // ADDITIONAL consumer of the SAME durable onLine tap chat uses for raw
@@ -1516,7 +1558,9 @@ async function openWithSession(ctx, opts, session, persist) {
         hooksViable: false,
     });
     const streamParser = adapterStreamParser(adapter);
-    const displaySink = opts.onDisplayLine ? newDisplaySink(opts.onDisplayLine) : null;
+    const displaySink = opts.onDisplayLine
+        ? newDisplaySink(opts.onDisplayLine)
+        : null;
     const streamTap = new StreamTap({
         harness: opts.harness,
         runID: session.id,
@@ -1538,8 +1582,12 @@ async function openWithSession(ctx, opts, session, persist) {
     // hook drain is active. The active drain's own spool dir wins so out-of-process
     // hook fires land where the drain reads (its ensureConfig already created it);
     // otherwise fall back to the raw opts.spoolDir (Hooks-mode/yield callers).
-    const hookSpoolDir = c.hookDrain ? c.hookDrain.spoolDir() : (opts.spoolDir ?? "");
-    const needHookEnv = !!opts.yieldControl || acquisitionMode === AcquisitionModeHooks || !!c.hookDrain;
+    const hookSpoolDir = c.hookDrain
+        ? c.hookDrain.spoolDir()
+        : (opts.spoolDir ?? "");
+    const needHookEnv = !!opts.yieldControl ||
+        acquisitionMode === AcquisitionModeHooks ||
+        !!c.hookDrain;
     let launchEnv = needHookEnv
         ? hookEnv(env, hookSpoolDir, opts.workingDir ?? "", opts.yieldControl ?? null)
         : env;
@@ -1583,7 +1631,9 @@ async function openWithSession(ctx, opts, session, persist) {
                 if (rawCapture) {
                     void c
                         .captureRawSessionID(line)
-                        .then(() => streamTap.backfill())
+                        .then(() => {
+                        streamTap.backfill();
+                    })
                         .catch(() => { });
                 }
             }
@@ -1711,7 +1761,7 @@ export function adapterResumeForks(adapter) {
     const a = adapter;
     if (typeof a.resumeForksSessionID !== "function")
         return false;
-    return a.resumeForksSessionID() === true;
+    return a.resumeForksSessionID();
 }
 function wrapInvalid(msg) {
     return wrap(`chat: invalid options: ${msg}`, ErrInvalidOptions);

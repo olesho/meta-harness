@@ -2,13 +2,24 @@
 // implementation for Tier-3 in-guest e2e testing. Uses plain docker run/exec/cp
 // over node:child_process (no SDK, hermetic, suitable for CI).
 
-import { execSync, spawn, type ChildProcess } from "node:child_process"
-import { copyFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
-import { tmpdir } from "node:os"
-import { basename, join } from "node:path"
+import { execSync, spawn, type ChildProcess } from "node:child_process";
+import {
+  copyFileSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { basename, join } from "node:path";
 
-import type { Context } from "../internal/async/index.ts"
-import type { ExecOpts, ExecResult, Workspace, WorkspaceSpec } from "./types.ts"
+import type { Context } from "../internal/async/index.ts";
+import type {
+  ExecOpts,
+  ExecResult,
+  Workspace,
+  WorkspaceSpec,
+} from "./types.ts";
 
 /**
  * Check if docker or podman is available on the system.
@@ -16,14 +27,14 @@ import type { ExecOpts, ExecResult, Workspace, WorkspaceSpec } from "./types.ts"
  */
 export function detectContainerRuntime(): "docker" | "podman" | null {
   try {
-    execSync("docker --version", { stdio: ["pipe", "pipe", "pipe"] })
-    return "docker"
+    execSync("docker --version", { stdio: ["pipe", "pipe", "pipe"] });
+    return "docker";
   } catch {
     try {
-      execSync("podman --version", { stdio: ["pipe", "pipe", "pipe"] })
-      return "podman"
+      execSync("podman --version", { stdio: ["pipe", "pipe", "pipe"] });
+      return "podman";
     } catch {
-      return null
+      return null;
     }
   }
 }
@@ -33,14 +44,18 @@ export function detectContainerRuntime(): "docker" | "podman" | null {
  * a container via docker run/exec/cp.
  */
 export class ContainerWorkspace implements Workspace {
-  private readonly runtime: "docker" | "podman"
-  private readonly containerId: string
-  private readonly tmpDir: string
+  private readonly runtime: "docker" | "podman";
+  private readonly containerId: string;
+  private readonly tmpDir: string;
 
-  constructor(runtime: "docker" | "podman", containerId: string, tmpDir: string) {
-    this.runtime = runtime
-    this.containerId = containerId
-    this.tmpDir = tmpDir
+  constructor(
+    runtime: "docker" | "podman",
+    containerId: string,
+    tmpDir: string,
+  ) {
+    this.runtime = runtime;
+    this.containerId = containerId;
+    this.tmpDir = tmpDir;
   }
 
   async exec(
@@ -48,41 +63,41 @@ export class ContainerWorkspace implements Workspace {
     argv: string[],
     opts?: ExecOpts,
   ): Promise<ExecResult> {
-    const env = opts?.env || {}
-    const cwd = opts?.cwd || "/repo"
+    const env = opts?.env || {};
+    const cwd = opts?.cwd || "/repo";
 
     // Build the docker/podman exec command with env vars
-    const cmd = [this.runtime, "exec"]
+    const cmd = [this.runtime, "exec"];
 
     // Set working directory
-    cmd.push("-w", cwd)
+    cmd.push("-w", cwd);
 
     // Add environment variables
     for (const [k, v] of Object.entries(env)) {
-      cmd.push("-e", `${k}=${v}`)
+      cmd.push("-e", `${k}=${v}`);
     }
 
-    cmd.push(this.containerId)
-    cmd.push(...argv)
+    cmd.push(this.containerId);
+    cmd.push(...argv);
 
     return new Promise((resolve) => {
-      let stdout = ""
-      let stderr = ""
+      let stdout = "";
+      let stderr = "";
 
       const proc = spawn(cmd[0], cmd.slice(1), {
         stdio: ["ignore", "pipe", "pipe"],
-      })
+      });
 
       if (proc.stdout) {
         proc.stdout.on("data", (chunk) => {
-          stdout += chunk.toString()
-        })
+          stdout += chunk.toString();
+        });
       }
 
       if (proc.stderr) {
         proc.stderr.on("data", (chunk) => {
-          stderr += chunk.toString()
-        })
+          stderr += chunk.toString();
+        });
       }
 
       proc.on("close", (code) => {
@@ -90,67 +105,79 @@ export class ContainerWorkspace implements Workspace {
           code: code ?? 1,
           stdout,
           stderr,
-        })
-      })
-    })
+        });
+      });
+    });
   }
 
-  async upload(_ctx: Context, hostPath: string, guestPath: string): Promise<void> {
+  async upload(
+    _ctx: Context,
+    hostPath: string,
+    guestPath: string,
+  ): Promise<void> {
     // Use docker/podman cp to copy the file
-    execSync(`${this.runtime} cp "${hostPath}" ${this.containerId}:"${guestPath}"`)
+    execSync(
+      `${this.runtime} cp "${hostPath}" ${this.containerId}:"${guestPath}"`,
+    );
   }
 
-  async download(_ctx: Context, guestPath: string, hostPath: string): Promise<void> {
+  async download(
+    _ctx: Context,
+    guestPath: string,
+    hostPath: string,
+  ): Promise<void> {
     // Use docker/podman cp to copy the file back
-    execSync(`${this.runtime} cp ${this.containerId}:"${guestPath}" "${hostPath}"`)
+    execSync(
+      `${this.runtime} cp ${this.containerId}:"${guestPath}" "${hostPath}"`,
+    );
   }
 
   guestPath(kind: "repo" | "home" | "tmp"): string {
     switch (kind) {
       case "repo":
-        return "/repo"
+        return "/repo";
       case "home":
-        return "/home"
+        return "/home";
       case "tmp":
-        return "/tmp"
+        return "/tmp";
     }
   }
 
   hostAlias(hostUrl: string): string {
     // In docker/podman, use host.docker.internal / host.containers.internal
     // For simplicity in tests, just rewrite localhost
-    return hostUrl.replace("localhost", "host.docker.internal")
+    return hostUrl.replace("localhost", "host.docker.internal");
   }
 
   async destroy(_ctx: Context, _outcome?: string): Promise<void> {
     // Stop and remove the container
     try {
-      execSync(`${this.runtime} stop ${this.containerId}`, { stdio: "ignore" })
+      execSync(`${this.runtime} stop ${this.containerId}`, { stdio: "ignore" });
     } catch {
       /* already stopped */
     }
     try {
-      execSync(`${this.runtime} rm ${this.containerId}`, { stdio: "ignore" })
+      execSync(`${this.runtime} rm ${this.containerId}`, { stdio: "ignore" });
     } catch {
       /* already removed */
     }
 
     // Clean up temp dir
     try {
-      rmSync(this.tmpDir, { recursive: true, force: true })
+      rmSync(this.tmpDir, { recursive: true, force: true });
     } catch {
       /* best effort */
     }
   }
 
   static async create(spec: WorkspaceSpec): Promise<ContainerWorkspace> {
-    const runtime = detectContainerRuntime()
+    const runtime = detectContainerRuntime();
     if (!runtime) {
-      throw new Error("container-workspace: docker or podman is not available")
+      throw new Error("container-workspace: docker or podman is not available");
     }
 
-    const tmpDir = mkdtempSync(join(tmpdir(), "mh-container-"))
-    const name = spec.name || "meta-harness-test-" + Date.now()
+    const tmpDir = mkdtempSync(join(tmpdir(), "mh-container-"));
+    const name = spec.name || "meta-harness-test-" + Date.now();
 
     // Run the container
     const cmd = [
@@ -165,11 +192,11 @@ export class ContainerWorkspace implements Workspace {
       "tail",
       "-f",
       "/dev/null",
-    ]
+    ];
 
-    const output = execSync(cmd.join(" ")).toString().trim()
-    const containerId = output.split("\n")[0]
+    const output = execSync(cmd.join(" ")).toString().trim();
+    const containerId = output.split("\n")[0];
 
-    return new ContainerWorkspace(runtime, containerId, tmpDir)
+    return new ContainerWorkspace(runtime, containerId, tmpDir);
   }
 }

@@ -8,7 +8,7 @@
 // the wrapper's cause-chain sentinels through isBinaryNotFound and the exported
 // ErrInvalidConfig / ErrBinaryNotFound objects.
 
-export * from "./api.ts"
+export * from "./api.ts";
 
 // Diagnostic trace vocabulary.
-export * as trace from "./trace.ts"
+export * as trace from "./trace.ts";

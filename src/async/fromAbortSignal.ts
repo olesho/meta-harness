@@ -8,7 +8,7 @@
 // wins, and the cause is what lets a caller tell a real timeout (→ exit 124)
 // apart from an abort.
 
-import { Context, ctxCanceled } from "../internal/async/context.ts"
+import { Context, ctxCanceled } from "../internal/async/context.ts";
 
 /**
  * Build a Context cancelled by `signal` (cause ctxCanceled) and, when
@@ -21,21 +21,25 @@ export function fromAbortSignal(
   signal: AbortSignal,
   deadlineMs?: number,
 ): Context {
-  const parent = Context.background()
+  const parent = Context.background();
   const { ctx, cancel } =
     deadlineMs !== undefined && deadlineMs > 0
       ? Context.withDeadline(parent, deadlineMs)
-      : Context.withCancel(parent)
+      : Context.withCancel(parent);
 
   if (signal.aborted) {
-    cancel(ctxCanceled)
-    return ctx
+    cancel(ctxCanceled);
+    return ctx;
   }
 
-  const onAbort = () => cancel(ctxCanceled)
-  signal.addEventListener("abort", onAbort, { once: true })
+  const onAbort = () => {
+    cancel(ctxCanceled);
+  };
+  signal.addEventListener("abort", onAbort, { once: true });
   // Drop the listener once the Context finishes for any reason (e.g. deadline).
-  void ctx.done().then(() => signal.removeEventListener("abort", onAbort))
+  void ctx.done().then(() => {
+    signal.removeEventListener("abort", onAbort);
+  });
 
-  return ctx
+  return ctx;
 }

@@ -23,7 +23,7 @@
 //     authoritative SourceFile text event lands alongside it and supersedes it
 //     downstream. We never synthesize a competing SourceFile-identity text event,
 //     and textNativeID is left untouched.
-import { SourceFile, SourceHook, SourceLive, eventID } from "./event.js";
+import { SourceFile, SourceHook, SourceLive, eventID, } from "./event.js";
 // sourceAuthority ranks provenance for dedup collisions: the higher rank wins
 // when two events share an eventID. SourceFile (durable, parser-owned) outranks
 // SourceHook (provisional, real-time). SourceLive is never produced, so it only
@@ -44,7 +44,8 @@ function sourceAuthority(source) {
 // eventID. Strictly-higher authority wins; ties keep the incumbent (first-seen),
 // which for equal sources preserves reader order.
 function wins(candidate, incumbent) {
-    return sourceAuthority(candidate.event.source) > sourceAuthority(incumbent.event.source);
+    return (sourceAuthority(candidate.event.source) >
+        sourceAuthority(incumbent.event.source));
 }
 // orderKey sorts the merged set the way every other event is ordered: by seq,
 // then timestamp, as a stable tie-break. Missing seq/timestamp sort first.

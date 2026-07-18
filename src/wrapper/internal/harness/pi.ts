@@ -5,7 +5,7 @@
 // single anchored API-error format to key on, so apiError is left null and the
 // Cost/Retry string lists carry conservative cross-provider hints.
 
-import { type Patterns as PatternSet } from "../detector/detector.ts"
+import { type Patterns as PatternSet } from "../detector/detector.ts";
 
 /** pi harness fingerprint set. */
 export const Patterns: PatternSet = {
@@ -46,4 +46,4 @@ export const Patterns: PatternSet = {
     "do you want to proceed?",
     "approve?",
   ],
-}
+};

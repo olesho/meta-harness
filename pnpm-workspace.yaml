@@ -1,0 +1,13 @@
+allowBuilds:
+  node-pty: set this to true or false
+  protobufjs: set this to true or false
+# pnpm 11 reads settings from here (no longer from the "pnpm" field in
+# package.json). By default pnpm treats any dependency whose install/build script
+# it skipped as a hard error (ERR_PNPM_IGNORED_BUILDS), which would fail every
+# `pnpm install` / `pnpm exec` on a fresh checkout. strictDepBuilds:false makes
+# that a warning instead — build scripts stay *skipped* (the safe direction; no
+# arbitrary postinstall runs), and tools like esbuild still work because their
+# platform binary ships as an optional dependency, not a build step. Approve a
+# specific dependency's build explicitly with `pnpm approve-builds` if one ever
+# genuinely needs it.
+strictDepBuilds: false

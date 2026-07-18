@@ -3,7 +3,7 @@
   "version": "0.1.6",
   "private": true,
   "type": "module",
-  "packageManager": "npm@11.12.1",
+  "packageManager": "pnpm@11.13.0",
   "engines": {
     "node": ">=18"
   },
@@ -97,8 +97,13 @@
   },
   "devDependencies": {
     "@daytonaio/sdk": "^0.196.0",
+    "@eslint/js": "^10.0.1",
     "@types/node": "^22",
+    "@vitest/coverage-v8": "^4.1.10",
+    "eslint": "^10.7.0",
+    "prettier": "^3.9.5",
     "typescript": "^5",
+    "typescript-eslint": "^8.64.0",
     "vitest": "^4.1.10"
   },
   "dependencies": {

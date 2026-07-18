@@ -18,5 +18,5 @@ export declare class TeardownError extends Error {
 }
 /** Run every cleanup thunk in order, collecting (never re-throwing) failures.
  *  Returns the collected errors so the caller decides how to surface them. */
-export declare function runAll(thunks: Array<() => Promise<void>>): Promise<unknown[]>;
+export declare function runAll(thunks: (() => Promise<void>)[]): Promise<unknown[]>;
 //# sourceMappingURL=retention.d.ts.map

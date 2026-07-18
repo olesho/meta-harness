@@ -19,32 +19,32 @@
 //   - A network/parse failure is a DISTINCT outcome (errFetch / errParse),
 //     never collapsed into `match` or `drift`.
 
-import { all } from "../versions/index.ts"
-import { defineSentinel, wrap } from "../internal/async/index.ts"
+import { all } from "../versions/index.ts";
+import { defineSentinel, wrap } from "../internal/async/index.ts";
 
 /** Network / fetch failure reaching the npm registry. */
-export const errFetch = defineSentinel("drift/fetch", "drift: fetch")
+export const errFetch = defineSentinel("drift/fetch", "drift: fetch");
 /** Response body could not be parsed / lacked the expected version field. */
-export const errParse = defineSentinel("drift/parse", "drift: parse")
+export const errParse = defineSentinel("drift/parse", "drift: parse");
 
 /** Three-state registry-drift status for one harness. */
-export type Status = "match" | "drift" | "unpinned"
+export type Status = "match" | "drift" | "unpinned";
 
 /** One row of the registry-drift report. */
 export interface Row {
   /** Harness name (versions.json key), e.g. "codex". */
-  name: string
+  name: string;
   /** npm package name, e.g. "@openai/codex". */
-  package: string
+  package: string;
   /** The version pinned in versions.json ("" when unpinned). */
-  pinned: string
+  pinned: string;
   /** npm registry `latest` — undefined for `unpinned` rows (never fetched). */
-  latest?: string
+  latest?: string;
   /** match | drift | unpinned. */
-  status: Status
+  status: Status;
 }
 
-const REGISTRY = "https://registry.npmjs.org"
+const REGISTRY = "https://registry.npmjs.org";
 
 /**
  * Fetch the npm registry `latest` version for a package. Uses ONE code path for
@@ -60,41 +60,43 @@ const REGISTRY = "https://registry.npmjs.org"
  * `errParse` when neither response shape yields a usable version string.
  */
 export async function fetchLatest(pkg: string): Promise<string> {
-  const enc = encodeURIComponent(pkg)
+  const enc = encodeURIComponent(pkg);
 
   // PRIMARY: abbreviated packument — latest lives under dist-tags.
-  const primary = await fetchJson(`${REGISTRY}/${enc}`)
-  const distTags = (primary as { "dist-tags"?: { latest?: unknown } })["dist-tags"]
-  const primaryLatest = distTags?.latest
+  const primary = await fetchJson(`${REGISTRY}/${enc}`);
+  const distTags = (primary as { "dist-tags"?: { latest?: unknown } })[
+    "dist-tags"
+  ];
+  const primaryLatest = distTags?.latest;
   if (typeof primaryLatest === "string" && primaryLatest !== "") {
-    return primaryLatest
+    return primaryLatest;
   }
 
   // FALLBACK: the /latest document — version lives at body.version (NOT dist-tags).
-  const fallback = await fetchJson(`${REGISTRY}/${enc}/latest`)
-  const fallbackVersion = (fallback as { version?: unknown }).version
+  const fallback = await fetchJson(`${REGISTRY}/${enc}/latest`);
+  const fallbackVersion = (fallback as { version?: unknown }).version;
   if (typeof fallbackVersion === "string" && fallbackVersion !== "") {
-    return fallbackVersion
+    return fallbackVersion;
   }
 
-  throw wrap(`drift: parse: no latest version for ${pkg}`, errParse)
+  throw wrap(`drift: parse: no latest version for ${pkg}`, errParse);
 }
 
 /** GET a URL and parse JSON, mapping transport vs body failures to sentinels. */
 async function fetchJson(url: string): Promise<unknown> {
-  let res: Response
+  let res: Response;
   try {
-    res = await fetch(url)
+    res = await fetch(url);
   } catch (err) {
-    throw wrap(`drift: fetch ${url}: ${String(err)}`, errFetch)
+    throw wrap(`drift: fetch ${url}: ${String(err)}`, errFetch);
   }
   if (!res.ok) {
-    throw wrap(`drift: fetch ${url}: status ${res.status}`, errFetch)
+    throw wrap(`drift: fetch ${url}: status ${res.status}`, errFetch);
   }
   try {
-    return await res.json()
+    return await res.json();
   } catch (err) {
-    throw wrap(`drift: parse ${url}: ${String(err)}`, errParse)
+    throw wrap(`drift: parse ${url}: ${String(err)}`, errParse);
   }
 }
 
@@ -108,12 +110,12 @@ export async function checkEntry(
   pinned: string,
 ): Promise<Row> {
   if (pinned === "") {
-    return { name, package: pkg, pinned, status: "unpinned" }
+    return { name, package: pkg, pinned, status: "unpinned" };
   }
-  const latest = await fetchLatest(pkg)
+  const latest = await fetchLatest(pkg);
   // EXACT string equality, exactly as discovery.ts:334 (version === entry.pinned).
-  const status: Status = latest === pinned ? "match" : "drift"
-  return { name, package: pkg, pinned, latest, status }
+  const status: Status = latest === pinned ? "match" : "drift";
+  return { name, package: pkg, pinned, latest, status };
 }
 
 /**
@@ -124,14 +126,14 @@ export async function checkEntry(
  * exit 1, so a registry outage can never silently read as all-match.
  */
 export async function checkAll(): Promise<Row[]> {
-  const rows: Row[] = []
+  const rows: Row[] = [];
   for (const [name, entry] of all()) {
-    rows.push(await checkEntry(name, entry.package, entry.pinned))
+    rows.push(await checkEntry(name, entry.package, entry.pinned));
   }
-  return rows
+  return rows;
 }
 
 /** True when any row is in the `drift` state. */
 export function hasDrift(rows: Row[]): boolean {
-  return rows.some((r) => r.status === "drift")
+  return rows.some((r) => r.status === "drift");
 }

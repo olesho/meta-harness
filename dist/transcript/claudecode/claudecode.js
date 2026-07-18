@@ -6,7 +6,7 @@ import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
 import { wrap } from "../../internal/async/index.js";
-import { ErrEmptySessionID, ErrEmptyWorkingDir, ErrSessionNotFound } from "../errors.js";
+import { ErrEmptySessionID, ErrEmptyWorkingDir, ErrSessionNotFound, } from "../errors.js";
 import { usageFromClaudeJSONL } from "../usage.js";
 import { events } from "./parseClaude.js";
 // claudeCWDSanitize matches every character Claude Code rewrites when naming a

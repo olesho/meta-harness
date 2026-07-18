@@ -10,7 +10,7 @@
 // a JSON OBJECT — tolerating leading noise, a non-JSON tail, a truncated tail,
 // and (by taking the last object) multiple JSON lines. Zero JSON ⇒ null.
 
-import type { StructuredTurnResult } from "./protocol.ts"
+import type { StructuredTurnResult } from "./protocol.ts";
 
 /**
  * parseLastJSONLine returns the LAST line of `stdout` that parses as a JSON
@@ -18,21 +18,21 @@ import type { StructuredTurnResult } from "./protocol.ts"
  * protocol payload is always an object.
  */
 export function parseLastJSONLine(stdout: string): StructuredTurnResult | null {
-  const lines = stdout.split("\n")
+  const lines = stdout.split("\n");
   for (let i = lines.length - 1; i >= 0; i--) {
-    const line = lines[i]!.trim()
-    if (line === "") continue
-    let val: unknown
+    const line = lines[i].trim();
+    if (line === "") continue;
+    let val: unknown;
     try {
-      val = JSON.parse(line)
+      val = JSON.parse(line);
     } catch {
       // Non-JSON tail or a truncated final line — keep scanning backward.
-      continue
+      continue;
     }
     if (val !== null && typeof val === "object" && !Array.isArray(val)) {
-      return val as StructuredTurnResult
+      return val as StructuredTurnResult;
     }
     // A bare scalar/array line is not the payload; keep scanning.
   }
-  return null
+  return null;
 }

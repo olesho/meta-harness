@@ -2,7 +2,7 @@
 // don't leak into rendered transcripts. Ported from harness-wrapper's
 // strip_tags.go (originally entireio/cli textutil/ide_tags.go).
 
-const ideContextTagRegex = /<ide_[^>]*>[\s\S]*?<\/ide_[^>]*>/g
+const ideContextTagRegex = /<ide_[^>]*>[\s\S]*?<\/ide_[^>]*>/g;
 
 const systemTagRegexes: RegExp[] = [
   /<local-command-caveat[^>]*>[\s\S]*?<\/local-command-caveat>/g,
@@ -12,12 +12,12 @@ const systemTagRegexes: RegExp[] = [
   /<command-args[^>]*>[\s\S]*?<\/command-args>/g,
   /<local-command-stdout[^>]*>[\s\S]*?<\/local-command-stdout>/g,
   /<\/?user_query>/g,
-]
+];
 
 export function stripIDEContextTags(text: string): string {
-  let result = text.replace(ideContextTagRegex, "")
+  let result = text.replace(ideContextTagRegex, "");
   for (const re of systemTagRegexes) {
-    result = result.replace(re, "")
+    result = result.replace(re, "");
   }
-  return result.trim()
+  return result.trim();
 }

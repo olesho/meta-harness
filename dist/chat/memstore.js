@@ -8,7 +8,11 @@ function copySession(s) {
     return { ...s, createdAt: new Date(s.createdAt) };
 }
 function copyTurn(t) {
-    return { ...t, startedAt: new Date(t.startedAt), completedAt: new Date(t.completedAt) };
+    return {
+        ...t,
+        startedAt: new Date(t.startedAt),
+        completedAt: new Date(t.completedAt),
+    };
 }
 /** The in-memory implementation of chat.Store. */
 export class MemStore {

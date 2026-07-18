@@ -11,19 +11,19 @@ import {
   AcquisitionModeHooks,
   AcquisitionModeStream,
   type AcquisitionMode,
-} from "../../turns/index.ts"
+} from "../../turns/index.ts";
 import {
   EventText,
   EventToolResult,
   EventToolUse,
   SourceFile,
   SourceLive,
-} from "../../transcript/index.ts"
+} from "../../transcript/index.ts";
 
 // EventOutputChunk names the streamed output-chunk kind — a parent CONVERSATION
 // kind alongside text/tool_use/tool_result. Defined locally until the canonical
 // transcript event vocabulary grows a constant for it.
-export const EventOutputChunk = "output-chunk"
+export const EventOutputChunk = "output-chunk";
 
 /**
  * admitParent reports whether an event should be admitted to the event stream.
@@ -51,18 +51,18 @@ export function admitParent(
   isSubagent: boolean,
 ): boolean {
   if (isSubagent) {
-    return true
+    return true;
   }
   switch (effectiveMode) {
     case AcquisitionModeStream:
-      return source === SourceLive
+      return source === SourceLive;
     case AcquisitionModeHooks:
       if (source === SourceFile) {
-        return true
+        return true;
       }
-      return !isParentConversationKind(kind)
+      return !isParentConversationKind(kind);
     default: // Off / unknown
-      return false
+      return false;
   }
 }
 
@@ -79,9 +79,9 @@ export function isParentConversationKind(kind: string): boolean {
     case EventToolUse:
     case EventToolResult:
     case EventOutputChunk:
-      return true
+      return true;
     default:
       // session_meta (session), usage, system, and any unknown kind.
-      return false
+      return false;
   }
 }

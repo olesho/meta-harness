@@ -12,7 +12,7 @@
 // interleaving await. The event pump, the idle-completion loop, and caller
 // methods cooperate on the microtask/timer queue, not on real threads.
 
-import { newScreen, type Screen, type Snapshot } from "../screen/index.ts"
+import { newScreen, type Screen, type Snapshot } from "../screen/index.ts";
 import {
   Watch,
   type Adapter,
@@ -31,12 +31,15 @@ import {
   codex,
   opencode,
   pi,
-} from "../turns/index.ts"
-import { start as wrapperStart, type Session as WrapperSession } from "../wrapper/index.ts"
-import { Context, isSentinel, wrap } from "../internal/async/index.ts"
-import { ErrEmptySessionID, ErrSessionNotFound } from "../transcript/errors.ts"
-import { stripIDEContextTags } from "../transcript/stripTags.ts"
-import type { Store } from "./store.ts"
+} from "../turns/index.ts";
+import {
+  start as wrapperStart,
+  type Session as WrapperSession,
+} from "../wrapper/index.ts";
+import { Context, isSentinel, wrap } from "../internal/async/index.ts";
+import { ErrEmptySessionID, ErrSessionNotFound } from "../transcript/errors.ts";
+import { stripIDEContextTags } from "../transcript/stripTags.ts";
+import type { Store } from "./store.ts";
 import {
   type Session,
   type Turn,
@@ -59,7 +62,7 @@ import {
   HistorySourceTranscript,
   HistorySourceStore,
   newID,
-} from "./types.ts"
+} from "./types.ts";
 import {
   ErrInvalidOptions,
   ErrUnknownHarness,
@@ -74,33 +77,43 @@ import {
   ErrQuitUnsupported,
   ErrResumeUnsupported,
   ErrNoHarnessSession,
-} from "./errors.ts"
-import { ControlQueue, newControlQueue } from "./control.ts"
-import { submitKeyForHarness, requiresPromptReadiness, readyForInput } from "./ready.ts"
-import { cleanHarnessEnv } from "./env.ts"
-import type { AcquisitionMode } from "../turns/index.ts"
-import { AcquisitionModeOff, AcquisitionModeHooks } from "../turns/index.ts"
-import type { EventEnvelope } from "../transcript/index.ts"
-import { StreamTap, adapterStreamParser } from "../acquisition/internal/streamTap.ts"
-import { newDisplaySink } from "../acquisition/internal/display.ts"
-import { hookEnv, type YieldControl } from "../acquisition/internal/yield.ts"
+} from "./errors.ts";
+import { ControlQueue, newControlQueue } from "./control.ts";
+import {
+  submitKeyForHarness,
+  requiresPromptReadiness,
+  readyForInput,
+} from "./ready.ts";
+import { cleanHarnessEnv } from "./env.ts";
+import type { AcquisitionMode } from "../turns/index.ts";
+import { AcquisitionModeOff, AcquisitionModeHooks } from "../turns/index.ts";
+import type { EventEnvelope } from "../transcript/index.ts";
+import {
+  StreamTap,
+  adapterStreamParser,
+} from "../acquisition/internal/streamTap.ts";
+import { newDisplaySink } from "../acquisition/internal/display.ts";
+import { hookEnv, type YieldControl } from "../acquisition/internal/yield.ts";
 import {
   planAcquisition,
   resolveProfile,
   type StreamVersionPredicate,
-} from "../acquisition/internal/planAcquisition.ts"
-import { HookDrain } from "./hookDrain.ts"
-import type { HookProvider } from "../hooks/provider.ts"
-import type { ParsedEvent, Turn as TranscriptTurn } from "../transcript/event.ts"
-import { EnvConfigDir, EnvSessionID } from "../cli/hooks.ts"
+} from "../acquisition/internal/planAcquisition.ts";
+import { HookDrain } from "./hookDrain.ts";
+import type { HookProvider } from "../hooks/provider.ts";
+import type {
+  ParsedEvent,
+  Turn as TranscriptTurn,
+} from "../transcript/event.ts";
+import { EnvConfigDir, EnvSessionID } from "../cli/hooks.ts";
 
 /** Options configures a single Conversation. Mirrors chat.Options. */
 export interface Options {
   /** Per-harness adapter name. Required. */
-  harness: string
+  harness: string;
   /** The harness executable. Required. */
-  binaryPath: string
-  args?: string[]
+  binaryPath: string;
+  args?: string[];
   /**
    * When set, resumes the named *harness* session id (not the chat session id):
    * the resolved adapter must implement SessionResumer, whose resumeArgs are
@@ -108,31 +121,31 @@ export interface Options {
    * is seeded with this value. Open throws ErrResumeUnsupported if the harness
    * cannot resume. Prefer Reopen to derive this from a stored Session.
    */
-  resume?: string
-  workingDir?: string
-  env?: string[]
-  effort?: string
-  model?: string
-  cols?: number
-  rows?: number
+  resume?: string;
+  workingDir?: string;
+  env?: string[];
+  effort?: string;
+  model?: string;
+  cols?: number;
+  rows?: number;
   /** Backs the chat metadata. Required; pass newMemStore() for the default. */
-  store: Store
+  store: Store;
   /** Sizes the events buffer. Defaults to 32. */
-  eventBuffer?: number
+  eventBuffer?: number;
   /** Pre-configures how blocking interactive prompts are resolved. */
-  inputPolicy?: InputPolicy
+  inputPolicy?: InputPolicy;
   /** Turns off the built-in auto-dismissal of Codex startup interstitials. */
-  disableCodexAutoDismiss?: boolean
+  disableCodexAutoDismiss?: boolean;
   /** In-process resolver consulted when InputPolicy did not auto-answer. */
-  onInputRequest?: (req: InputRequest) => [InputAnswer, boolean]
+  onInputRequest?: (req: InputRequest) => [InputAnswer, boolean];
   /** Test-only idle-completion window override (ms). Zero = package default. */
-  idleGap?: number
+  idleGap?: number;
   /** Test-only marker-confirm window override (ms). Zero = package default. */
-  markerGap?: number
+  markerGap?: number;
   /** Test-only session-id prime deadline override (ms). Zero = package default. */
-  primeBound?: number
+  primeBound?: number;
   /** Test-only echo-gated submit deadline override (ms). Zero = package default. */
-  echoBound?: number
+  echoBound?: number;
 
   // ── Acquisition (StreamTap) opt-in ─────────────────────────────────────────
   // The acquisition subsystem attaches as an ADDITIONAL consumer of the SAME
@@ -147,23 +160,23 @@ export interface Options {
    * Off (no live acquisition; the tap is created only if raw session-id capture
    * needs it, exactly as before).
    */
-  acquisitionMode?: AcquisitionMode
+  acquisitionMode?: AcquisitionMode;
   /**
    * The acquisition event bridge. Admitted, stamped EventEnvelopes are delivered
    * here as the run streams. Its presence is the acquisition sink (Go's
    * `haveSink`): with no sink the plan degrades to Off.
    */
-  onAcquisitionEvent?: (env: EventEnvelope) => void
+  onAcquisitionEvent?: (env: EventEnvelope) => void;
   /** Best-effort per-line display callback (bounded, may drop under back-pressure). */
-  onDisplayLine?: (line: string) => void
+  onDisplayLine?: (line: string) => void;
   /**
    * Caller-supplied cooperative-preemption handle. When present its yield-file
    * path is wired into the harness launch env (hookEnv) so a hook-capable harness
    * can be preempted mid-turn.
    */
-  yieldControl?: YieldControl
+  yieldControl?: YieldControl;
   /** Hook spool dir wired into the launch env (HW_EVENT_SPOOL) for Hooks mode. */
-  spoolDir?: string
+  spoolDir?: string;
 
   // ── Hook drain (spool → canonical-Event runtime integration) opt-in ──────────
   // Inert unless onHookEvents is set AND the resolved adapter implements the
@@ -177,181 +190,186 @@ export interface Options {
    * receives freshly-deduped SourceHook ParsedEvents — provenance observable
    * here (the durable-store layer), NEVER on an events() ConversationEvent.
    */
-  onHookEvents?: (events: ParsedEvent[]) => void
+  onHookEvents?: (events: ParsedEvent[]) => void;
   /**
    * Optional SEPARATE chat-surface projection of turn-boundary lifecycle edges,
    * as Turns via turnsFromEvents (which carry no `source`, by construction).
    */
-  onHookBoundaryTurns?: (turns: TranscriptTurn[]) => void
+  onHookBoundaryTurns?: (turns: TranscriptTurn[]) => void;
   /**
    * Overrides the harness config/state dir the spool dir is derived from
    * (HookContext.configDir). Absent ⇒ the provider default (~/.claude). Mainly a
    * test seam so the managed settings.json + spool dir land under a temp dir.
    */
-  hooksConfigDir?: string
+  hooksConfigDir?: string;
   /** Test-only bounded fallback-timer override (ms) for the hook drain loop. */
-  hookDrainFallbackMs?: number
+  hookDrainFallbackMs?: number;
   /**
    * Advanced/testing seam: use this already-resolved turns.Adapter instead of
    * resolving one from `harness`. Lets a test drive Open with a fake adapter that
    * implements StreamParser + interleaves stream-json (the only live exercise of
    * Stream mode in A1). Absent ⇒ resolveAdapter(harness), the normal path.
    */
-  adapter?: Adapter
+  adapter?: Adapter;
   /**
    * Advanced/testing seam: overrides planAcquisition's fact-3 version predicate
    * (does THIS installed binary support stream-json). Absent ⇒ the versions.json
    * default. Injected so a test can make a fake harness Stream-eligible.
    */
-  streamVersionPredicate?: StreamVersionPredicate
+  streamVersionPredicate?: StreamVersionPredicate;
 }
 
-const enc = new TextEncoder()
+const enc = new TextEncoder();
 
 // idleCompletionGap — how long the screen must sit unchanged at the ready prompt
 // before the idle fallback completes an in-flight turn. (ms)
-const idleCompletionGap = 8000
+const idleCompletionGap = 8000;
 // markerConfirmGap — the shorter quiet window used once an end-of-turn marker has
 // been seen. (ms)
-const markerConfirmGap = 2000
+const markerConfirmGap = 2000;
 // primeBoundGap — the overall wall-clock bound on the startup session-id prime,
 // so Open can never hang on the /status scrape. (ms)
-const primeBoundGap = 800
+const primeBoundGap = 800;
 // submitEchoGap — the wall-clock bound on the wait between writing a message's
 // text and writing its submit key, while the composer echoes the text. (ms)
-const submitEchoGap = 1500
+const submitEchoGap = 1500;
 // echoNeedleLen — how much of the message's first line the echo wait matches
 // on. Short enough that the composer cannot soft-wrap it mid-needle at any
 // supported terminal width.
-const echoNeedleLen = 24
+const echoNeedleLen = 24;
 // transcriptFlushRetryGap — the one-shot re-read delay when the swallow-override
 // transcript proof misses in a flush-lag shape (no rollout on disk yet, or the
 // current prompt not yet appended). A genuine swallow writes no rollout, so it
 // pays at most this once. (ms)
-const transcriptFlushRetryGap = 500
+const transcriptFlushRetryGap = 500;
 
 function concat(a: Uint8Array, b: Uint8Array): Uint8Array {
-  const out = new Uint8Array(a.length + b.length)
-  out.set(a, 0)
-  out.set(b, a.length)
-  return out
+  const out = new Uint8Array(a.length + b.length);
+  out.set(a, 0);
+  out.set(b, a.length);
+  return out;
 }
 
 /** A size-1 coalesced wake signal — the Go `chan struct{}` of capacity 1. */
 class Signal {
-  private pending = false
-  private waiter: (() => void) | null = null
+  private pending = false;
+  private waiter: (() => void) | null = null;
   signal(): void {
     if (this.waiter) {
-      const w = this.waiter
-      this.waiter = null
-      w()
-      return
+      const w = this.waiter;
+      this.waiter = null;
+      w();
+      return;
     }
-    this.pending = true
+    this.pending = true;
   }
   receive(): Promise<void> {
     if (this.pending) {
-      this.pending = false
-      return Promise.resolve()
+      this.pending = false;
+      return Promise.resolve();
     }
     return new Promise((resolve) => {
-      this.waiter = resolve
-    })
+      this.waiter = resolve;
+    });
   }
   /** Non-blocking drain — true if a signal was pending (the select default). */
   tryReceive(): boolean {
     if (this.pending) {
-      this.pending = false
-      return true
+      this.pending = false;
+      return true;
     }
-    return false
+    return false;
   }
 }
 
 /** A buffered chat-event channel: emit drops when full; receive/tryReceive read. */
 class EventBus {
-  private readonly buf: ConversationEvent[] = []
-  private readonly recvWaiters: Array<(r: { value?: ConversationEvent; ok: boolean }) => void> = []
-  private _closed = false
+  private readonly buf: ConversationEvent[] = [];
+  private readonly recvWaiters: ((r: {
+    value?: ConversationEvent;
+    ok: boolean;
+  }) => void)[] = [];
+  private _closed = false;
   constructor(private readonly cap: number) {}
 
   /** Non-blocking push; drops the event when the buffer is full (Go's emit). */
   emit(ev: ConversationEvent): void {
-    if (this._closed) return
-    const w = this.recvWaiters.shift()
+    if (this._closed) return;
+    const w = this.recvWaiters.shift();
     if (w) {
-      w({ value: ev, ok: true })
-      return
+      w({ value: ev, ok: true });
+      return;
     }
-    if (this.buf.length >= this.cap) return
-    this.buf.push(ev)
+    if (this.buf.length >= this.cap) return;
+    this.buf.push(ev);
   }
 
   /** Synchronous, non-blocking receive — the Go `select { case <-ch: default }`. */
   tryReceive(): { value?: ConversationEvent; ok: boolean } {
-    if (this.buf.length > 0) return { value: this.buf.shift(), ok: true }
-    return { value: undefined, ok: false }
+    if (this.buf.length > 0) return { value: this.buf.shift(), ok: true };
+    return { value: undefined, ok: false };
   }
 
   receive(): Promise<{ value?: ConversationEvent; ok: boolean }> {
-    if (this.buf.length > 0) return Promise.resolve({ value: this.buf.shift(), ok: true })
-    if (this._closed) return Promise.resolve({ value: undefined, ok: false })
-    return new Promise((resolve) => this.recvWaiters.push(resolve))
+    if (this.buf.length > 0)
+      return Promise.resolve({ value: this.buf.shift(), ok: true });
+    if (this._closed) return Promise.resolve({ value: undefined, ok: false });
+    return new Promise((resolve) => this.recvWaiters.push(resolve));
   }
 
   close(): void {
-    if (this._closed) return
-    this._closed = true
-    for (const w of this.recvWaiters.splice(0)) w({ value: undefined, ok: false })
+    if (this._closed) return;
+    this._closed = true;
+    for (const w of this.recvWaiters.splice(0))
+      w({ value: undefined, ok: false });
   }
 
   async *[Symbol.asyncIterator](): AsyncIterator<ConversationEvent> {
     for (;;) {
-      const { value, ok } = await this.receive()
-      if (!ok) return
-      yield value!
+      const { value, ok } = await this.receive();
+      if (!ok) return;
+      yield value!;
     }
   }
 }
 
 /** Fields a Conversation can be constructed with (the Go struct-literal shape). */
 export interface ConversationInit {
-  opts?: Partial<Options>
-  store?: Store
-  adapter?: Adapter
-  sess?: WrapperSession
-  screen?: Screen
-  watcher?: Watcher
-  queue?: ControlQueue
-  session?: Session
-  eventCh?: EventBus
-  currentTurn?: Turn | null
-  markerArmCh?: Signal
-  inputStateCh?: Signal
-  hookDrainCh?: Signal
-  closed?: boolean
+  opts?: Partial<Options>;
+  store?: Store;
+  adapter?: Adapter;
+  sess?: WrapperSession;
+  screen?: Screen;
+  watcher?: Watcher;
+  queue?: ControlQueue;
+  session?: Session;
+  eventCh?: EventBus;
+  currentTurn?: Turn | null;
+  markerArmCh?: Signal;
+  inputStateCh?: Signal;
+  hookDrainCh?: Signal;
+  closed?: boolean;
   /** Test injection: replaces sess.writeStdin for answer/quit keystrokes. */
-  writeStdin?: (p: Uint8Array) => void
+  writeStdin?: (p: Uint8Array) => void;
 }
 
 export class Conversation {
-  opts: Options
-  store!: Store
-  adapter!: Adapter
-  sess?: WrapperSession
-  screen!: Screen
-  watcher?: Watcher
-  releaseWriter?: () => void
-  queue: ControlQueue
-  session: Session
+  opts: Options;
+  store!: Store;
+  adapter!: Adapter;
+  sess?: WrapperSession;
+  screen!: Screen;
+  watcher?: Watcher;
+  releaseWriter?: () => void;
+  queue: ControlQueue;
+  session: Session;
 
   /**
    * The per-run acquisition tap: a PARALLEL CONSUMER of the same durable PTY line
    * tap `captureRawSessionID` reads from. Set by openWithSession when the plan or
    * a display sink needs it; otherwise undefined. Never drives turn state.
    */
-  streamTap?: StreamTap
+  streamTap?: StreamTap;
 
   /**
    * Resume-only, one-shot latch. Armed by openWithSession ONLY when the session
@@ -363,7 +381,7 @@ export class Conversation {
    * harnesses (Claude Code, Codex per the verified finding), so the general
    * first-write-wins guards remain in force for every other session.
    */
-  harnessSessionIDProvisional = false
+  harnessSessionIDProvisional = false;
 
   /**
    * Diagnostic outcome of the startup session-id prime (primeSessionID). Read by
@@ -376,16 +394,16 @@ export class Conversation {
     | "too_narrow"
     | "not_written"
     | "written_uncaptured"
-    | "persist_failed"
+    | "persist_failed";
 
-  eventCh: EventBus
+  eventCh: EventBus;
 
-  currentTurn: Turn | null = null
-  endMarkerSeen = false
+  currentTurn: Turn | null = null;
+  endMarkerSeen = false;
   /** Rendered screen at the moment send() submitted the in-flight prompt. */
-  private sentScreenText = ""
+  private sentScreenText = "";
   /** Raw prompt text of the in-flight send (transcript swallow-override proof). */
-  private sentPromptText = ""
+  private sentPromptText = "";
   /**
    * Transcript turn count captured just before the in-flight submit, or null
    * when unknown. The swallow-override proof only accepts a prompt match at an
@@ -393,9 +411,9 @@ export class Conversation {
    * can never count as proof of the CURRENT turn (turnsFromEvents carries no
    * turn boundaries). Computed only for transcript-override-eligible adapters.
    */
-  private sentTranscriptWatermark: number | null = null
-  markerArmCh: Signal
-  inputStateCh: Signal
+  private sentTranscriptWatermark: number | null = null;
+  markerArmCh: Signal;
+  inputStateCh: Signal;
 
   /**
    * The hook drain's independent wake Signal (same primitive as markerArmCh).
@@ -404,47 +422,58 @@ export class Conversation {
    * wedge the tail. Distinct from markerArmCh: hook-event latency is NOT coupled
    * to the turn watcher yielding a live/file event.
    */
-  hookDrainCh: Signal
+  hookDrainCh: Signal;
   /** The active hook drain, when the run opted in AND the adapter supports hooks. */
-  hookDrain?: HookDrain
+  hookDrain?: HookDrain;
 
-  currentInput: TurnsInputRequest | null = null
-  inputSurfaced = false
+  currentInput: TurnsInputRequest | null = null;
+  inputSurfaced = false;
 
-  writeStdin?: (p: Uint8Array) => void
+  writeStdin?: (p: Uint8Array) => void;
 
-  private closedFlag = false
-  private closedResolve!: () => void
-  private readonly closedPromise: Promise<void>
-  private closeDone = false
+  private closedFlag = false;
+  private closedResolve!: () => void;
+  private readonly closedPromise: Promise<void>;
+  private closeDone = false;
 
   constructor(init: ConversationInit = {}) {
-    this.opts = { harness: "", binaryPath: "", store: undefined as unknown as Store, ...init.opts } as Options
-    if (init.store) this.store = init.store
-    if (init.adapter) this.adapter = init.adapter
-    if (init.sess) this.sess = init.sess
-    this.screen = init.screen ?? (undefined as unknown as Screen)
-    this.watcher = init.watcher
-    this.queue = init.queue ?? newControlQueue()
+    this.opts = {
+      harness: "",
+      binaryPath: "",
+      store: undefined as unknown as Store,
+      ...init.opts,
+    };
+    if (init.store) this.store = init.store;
+    if (init.adapter) this.adapter = init.adapter;
+    if (init.sess) this.sess = init.sess;
+    this.screen = init.screen ?? (undefined as unknown as Screen);
+    this.watcher = init.watcher;
+    this.queue = init.queue ?? newControlQueue();
     this.session = init.session ?? {
       id: "",
       harness: this.opts.harness,
       workingDir: this.opts.workingDir ?? "",
       createdAt: new Date(),
       harnessSessionID: "",
-    }
-    this.eventCh = init.eventCh ?? new EventBus(this.opts.eventBuffer && this.opts.eventBuffer > 0 ? this.opts.eventBuffer : 32)
-    this.currentTurn = init.currentTurn ?? null
-    this.markerArmCh = init.markerArmCh ?? new Signal()
-    this.inputStateCh = init.inputStateCh ?? new Signal()
-    this.hookDrainCh = init.hookDrainCh ?? new Signal()
-    this.writeStdin = init.writeStdin
+    };
+    this.eventCh =
+      init.eventCh ??
+      new EventBus(
+        this.opts.eventBuffer && this.opts.eventBuffer > 0
+          ? this.opts.eventBuffer
+          : 32,
+      );
+    this.currentTurn = init.currentTurn ?? null;
+    this.markerArmCh = init.markerArmCh ?? new Signal();
+    this.inputStateCh = init.inputStateCh ?? new Signal();
+    this.hookDrainCh = init.hookDrainCh ?? new Signal();
+    this.writeStdin = init.writeStdin;
     this.closedPromise = new Promise<void>((resolve) => {
-      this.closedResolve = resolve
-    })
+      this.closedResolve = resolve;
+    });
     if (init.closed) {
-      this.closedFlag = true
-      this.closedResolve()
+      this.closedFlag = true;
+      this.closedResolve();
     }
   }
 
@@ -452,61 +481,61 @@ export class Conversation {
 
   /** The chat-level session ID. */
   sessionID(): string {
-    return this.session.id
+    return this.session.id;
   }
 
   /** The per-harness turns adapter. */
   getAdapter(): Adapter {
-    return this.adapter
+    return this.adapter;
   }
 
   /** A coherent point-in-time view of the rendered terminal. */
   screenSnapshot(): Snapshot {
-    return this.screen.snapshot()
+    return this.screen.snapshot();
   }
 
   /** The channel of turn-state transitions (async-iterable). */
   events(): EventBus {
-    return this.eventCh
+    return this.eventCh;
   }
 
   /** Block until granted the exclusive control token. FIFO. */
   acquireControl(ctx: Context): Promise<() => void> {
-    return this.queue.acquire(ctx)
+    return this.queue.acquire(ctx);
   }
 
   /** Terminate the harness, release the writer lock, stop the watcher. */
   async close(ctx?: Context): Promise<void> {
-    if (this.closeDone) return
-    this.closeDone = true
-    this.closedFlag = true
-    this.closedResolve()
-    this.queue.close()
-    if (this.releaseWriter) this.releaseWriter()
+    if (this.closeDone) return;
+    this.closeDone = true;
+    this.closedFlag = true;
+    this.closedResolve();
+    this.queue.close();
+    if (this.releaseWriter) this.releaseWriter();
     // Reap the hook drain BEFORE stopping the harness/watcher: close() runs a
     // final flush drain (catching a Stop/idle hook that landed after the last
     // wake) and then reaps the spool dir. Managed settings.json blocks are left
     // installed (idempotent, re-ensured each session) — removal is explicit only.
-    if (this.hookDrain) this.hookDrain.close()
-    if (this.sess) await this.sess.stop(ctx)
-    if (this.watcher) this.watcher.close()
+    if (this.hookDrain) this.hookDrain.close();
+    if (this.sess) await this.sess.stop(ctx);
+    if (this.watcher) this.watcher.close();
   }
 
   isClosed(): boolean {
-    return this.closedFlag
+    return this.closedFlag;
   }
 
   // ── Send / Quit ──────────────────────────────────────────────────────────
 
   /** Transmit a user message; record the user turn and a pending assistant turn. */
   async send(ctx: Context, text: string): Promise<string> {
-    if (this.closedFlag) throw ErrClosed
-    if (!this.queue.held()) throw ErrNoControl
-    if (this.currentTurn !== null) throw ErrTurnInFlight
+    if (this.closedFlag) throw ErrClosed;
+    if (!this.queue.held()) throw ErrNoControl;
+    if (this.currentTurn !== null) throw ErrTurnInFlight;
 
-    await this.waitReadyForSend(ctx)
+    await this.waitReadyForSend(ctx);
 
-    const now = new Date()
+    const now = new Date();
     const userTurn: Turn = {
       id: newID(),
       sessionID: this.session.id,
@@ -518,9 +547,9 @@ export class Conversation {
       completedAt: now,
       httpCode: 0,
       retryAfter: 0,
-    }
-    await this.store.appendTurn(userTurn)
-    this.emit({ type: EventTurn, turn: userTurn })
+    };
+    await this.store.appendTurn(userTurn);
+    this.emit({ type: EventTurn, turn: userTurn });
 
     const assistantTurn: Turn = {
       id: newID(),
@@ -533,93 +562,97 @@ export class Conversation {
       completedAt: new Date(0),
       httpCode: 0,
       retryAfter: 0,
-    }
-    await this.store.appendTurn(assistantTurn)
+    };
+    await this.store.appendTurn(assistantTurn);
 
-    this.currentTurn = { ...assistantTurn }
-    this.endMarkerSeen = false
+    this.currentTurn = { ...assistantTurn };
+    this.endMarkerSeen = false;
 
-    const sentScreen = this.screen.snapshot().text
-    this.sentScreenText = sentScreen
-    this.sentPromptText = text
-    this.sentTranscriptWatermark = this.captureTranscriptWatermark()
-    const submitKey = submitKeyForHarness(this.opts.harness, sentScreen)
+    const sentScreen = this.screen.snapshot().text;
+    this.sentScreenText = sentScreen;
+    this.sentPromptText = text;
+    this.sentTranscriptWatermark = this.captureTranscriptWatermark();
+    const submitKey = submitKeyForHarness(this.opts.harness, sentScreen);
     try {
-      await this.writeMessageAndSubmit(text, sentScreen, submitKey, ctx)
+      await this.writeMessageAndSubmit(text, sentScreen, submitKey, ctx);
     } catch (err) {
-      this.currentTurn = null
-      assistantTurn.state = TurnStateErrored
-      assistantTurn.reason = "WriteStdin: " + String(err)
-      assistantTurn.completedAt = new Date()
-      await this.store.updateTurn(assistantTurn)
-      this.emit({ type: EventTurn, turn: assistantTurn, err })
-      throw err
+      this.currentTurn = null;
+      assistantTurn.state = TurnStateErrored;
+      assistantTurn.reason = "WriteStdin: " + String(err);
+      assistantTurn.completedAt = new Date();
+      await this.store.updateTurn(assistantTurn);
+      this.emit({ type: EventTurn, turn: assistantTurn, err });
+      throw err;
     }
 
-    this.emit({ type: EventTurn, turn: assistantTurn })
-    return assistantTurn.id
+    this.emit({ type: EventTurn, turn: assistantTurn });
+    return assistantTurn.id;
   }
 
   /** The underlying wrapper session, for callers reaching past the chat API. */
   wrapper(): WrapperSession | undefined {
-    return this.sess
+    return this.sess;
   }
 
   /** Ask the harness to exit gracefully via its adapter-defined quit sequence. */
   async quit(ctx: Context): Promise<void> {
-    if (this.closedFlag) throw ErrClosed
-    const seq = this.adapterQuitSequence()
-    if (!seq || seq.length === 0) throw ErrQuitUnsupported
-    const release = await this.queue.acquire(ctx)
+    if (this.closedFlag) throw ErrClosed;
+    const seq = this.adapterQuitSequence();
+    if (!seq || seq.length === 0) throw ErrQuitUnsupported;
+    const release = await this.queue.acquire(ctx);
     try {
-      this.writeKeys(seq)
+      this.writeKeys(seq);
     } finally {
-      release()
+      release();
     }
   }
 
   // ── Interactive input ────────────────────────────────────────────────────
 
   /** Respond to the interactive prompt currently awaiting an answer. */
-  async answer(_ctx: Context, requestID: string, ans: InputAnswer): Promise<void> {
-    if (this.closedFlag) throw ErrClosed
-    if (!this.queue.held()) throw ErrNoControl
-    const req = this.currentInput
-    if (req === null) throw ErrNoInputPending
-    if (requestID !== "" && requestID !== req.id) throw ErrStaleInputRequest
-    await this.writeAnswer(req, ans)
+  async answer(
+    _ctx: Context,
+    requestID: string,
+    ans: InputAnswer,
+  ): Promise<void> {
+    if (this.closedFlag) throw ErrClosed;
+    if (!this.queue.held()) throw ErrNoControl;
+    const req = this.currentInput;
+    if (req === null) throw ErrNoInputPending;
+    if (requestID !== "" && requestID !== req.id) throw ErrStaleInputRequest;
+    await this.writeAnswer(req, ans);
   }
 
   /** Records a pending request and tries policy/handler resolution, else surfaces. */
   handleInputRequested(req: TurnsInputRequest | undefined): void {
-    if (!req) return
-    this.currentInput = req
-    this.inputSurfaced = false
+    if (!req) return;
+    this.currentInput = req;
+    this.inputSurfaced = false;
 
-    if (this.tryAutoDismissCodex(req)) return
-    if (this.tryResolveInput(req)) return
+    if (this.tryAutoDismissCodex(req)) return;
+    if (this.tryResolveInput(req)) return;
 
-    this.inputSurfaced = true
-    this.signalInputState()
-    this.emit({ type: EventInputRequest, input: toClientInputRequest(req) })
+    this.inputSurfaced = true;
+    this.signalInputState();
+    this.emit({ type: EventInputRequest, input: toClientInputRequest(req) });
   }
 
   handleInputResolved(_req: TurnsInputRequest | undefined): void {
-    const had = this.currentInput
-    this.currentInput = null
-    this.inputSurfaced = false
-    this.signalInputState()
-    if (had === null) return
-    this.emit({ type: EventInputResolved, input: toClientInputRequest(had) })
+    const had = this.currentInput;
+    this.currentInput = null;
+    this.inputSurfaced = false;
+    this.signalInputState();
+    if (had === null) return;
+    this.emit({ type: EventInputResolved, input: toClientInputRequest(had) });
   }
 
   private signalInputState(): void {
-    this.inputStateCh.signal()
+    this.inputStateCh.signal();
   }
 
   /** A prompt is pending that no policy/handler is resolving. */
   inputAwaitingClient(): boolean {
-    return this.currentInput !== null && this.inputSurfaced
+    return this.currentInput !== null && this.inputSurfaced;
   }
 
   /**
@@ -629,17 +662,17 @@ export class Conversation {
    * read the pending question and resolve it via answer().
    */
   pendingInput(): InputRequest | null {
-    if (!this.inputAwaitingClient()) return null
-    return toClientInputRequest(this.currentInput!)
+    if (!this.inputAwaitingClient()) return null;
+    return toClientInputRequest(this.currentInput!);
   }
 
   private writeKeys(p: Uint8Array): void {
     if (this.writeStdin) {
-      this.writeStdin(p)
-      return
+      this.writeStdin(p);
+      return;
     }
-    if (!this.sess) throw new Error("chat: no session to write to")
-    this.sess.writeStdin(p)
+    if (!this.sess) throw new Error("chat: no session to write to");
+    this.sess.writeStdin(p);
   }
 
   /**
@@ -663,25 +696,25 @@ export class Conversation {
     ctx?: Context,
   ): Promise<void> {
     if (!requiresPromptReadiness(this.opts.harness)) {
-      this.writeKeys(concat(enc.encode(text), submitKey))
-      return Promise.resolve()
+      this.writeKeys(concat(enc.encode(text), submitKey));
+      return Promise.resolve();
     }
-    this.writeKeys(enc.encode(text))
-    return this.awaitComposerEcho(text, preWriteScreen, ctx).then(() =>
-      this.writeKeys(submitKey),
-    )
+    this.writeKeys(enc.encode(text));
+    return this.awaitComposerEcho(text, preWriteScreen, ctx).then(() => {
+      this.writeKeys(submitKey);
+    });
   }
 
   private echoBoundDur(): number {
     const configured =
       this.opts.echoBound && this.opts.echoBound > 0
         ? this.opts.echoBound
-        : submitEchoGap
+        : submitEchoGap;
     // The submit key must land well inside the idle-completion window: an echo
     // wait outliving it would let the swallowed-prompt check judge (and error)
     // the turn before the submit was even written. Matters when a caller
     // shrinks idleGap (tests) without also shrinking the echo bound.
-    return Math.min(configured, this.idleGapDur() / 2)
+    return Math.min(configured, this.idleGapDur() / 2);
   }
 
   /**
@@ -703,78 +736,86 @@ export class Conversation {
     preWriteScreen: string,
     ctx?: Context,
   ): Promise<void> {
-    const needle = (text.split("\n", 1)[0] ?? "").trim().slice(0, echoNeedleLen)
-    const bound = this.echoBoundDur()
-    const deadline = sleep(bound)
-    const half = sleep(bound / 2)
-    const never = new Promise<void>(() => {})
-    let halfDone = false
-    const [notify, unsubscribe] = this.screen.subscribe()
+    const needle = (text.split("\n", 1)[0] ?? "")
+      .trim()
+      .slice(0, echoNeedleLen);
+    const bound = this.echoBoundDur();
+    const deadline = sleep(bound);
+    const half = sleep(bound / 2);
+    const never = new Promise<void>(() => {});
+    let halfDone = false;
+    const [notify, unsubscribe] = this.screen.subscribe();
     try {
       for (;;) {
-        const cur = this.screen.snapshot().text
-        if (needle !== "" && cur.includes(needle)) return
-        if ((halfDone || needle === "") && cur !== preWriteScreen) return
+        const cur = this.screen.snapshot().text;
+        if (needle !== "" && cur.includes(needle)) return;
+        if ((halfDone || needle === "") && cur !== preWriteScreen) return;
         const which = await Promise.race([
           this.closedPromise.then(() => "closed" as const),
-          notify.receive().then((r) => (r.ok ? ("changed" as const) : ("closed" as const))),
+          notify
+            .receive()
+            .then((r) => (r.ok ? ("changed" as const) : ("closed" as const))),
           (halfDone ? never : half.promise).then(() => "half" as const),
           deadline.promise.then(() => "deadline" as const),
-          ctx ? ctx.done().then(() => "ctx" as const) : never.then(() => "ctx" as const),
-        ])
-        if (which === "ctx") throw (ctx?.err() ?? new Error("chat: context done"))
-        if (which === "closed" || which === "deadline") return
-        if (which === "half") halfDone = true
+          ctx
+            ? ctx.done().then(() => "ctx" as const)
+            : never.then(() => "ctx" as const),
+        ]);
+        if (which === "ctx")
+          throw ctx?.err() ?? new Error("chat: context done");
+        if (which === "closed" || which === "deadline") return;
+        if (which === "half") halfDone = true;
       }
     } finally {
-      deadline.cancel()
-      half.cancel()
-      unsubscribe()
+      deadline.cancel();
+      half.cancel();
+      unsubscribe();
     }
   }
 
   private tryAutoDismissCodex(req: TurnsInputRequest): boolean {
-    if (this.opts.harness !== "codex" || this.opts.disableCodexAutoDismiss) return false
-    const [keys, ok] = codex.AutoDismissKeys(req)
-    if (!ok || !keys) return false
-    this.writeKeys(keys)
-    return true
+    if (this.opts.harness !== "codex" || this.opts.disableCodexAutoDismiss)
+      return false;
+    const [keys, ok] = codex.AutoDismissKeys(req);
+    if (!ok || !keys) return false;
+    this.writeKeys(keys);
+    return true;
   }
 
   private tryResolveInput(req: TurnsInputRequest): boolean {
-    const opt = this.policyOption(req)
+    const opt = this.policyOption(req);
     if (opt) {
-      this.writeKeys(opt.keys)
-      return true
+      this.writeKeys(opt.keys);
+      return true;
     }
     if (this.opts.onInputRequest) {
-      const [ans, ok] = this.opts.onInputRequest(toClientInputRequest(req))
+      const [ans, ok] = this.opts.onInputRequest(toClientInputRequest(req));
       if (ok) {
         try {
           // writeAnswer validates and writes the first keys synchronously, so
           // an unknown option or a dead PTY still falls through to surface.
           // Only the echo-gated submit tail is deferred; a late submit-write
           // failure cannot un-resolve an already-accepted answer.
-          void this.writeAnswer(req, ans).catch(() => {})
-          return true
+          void this.writeAnswer(req, ans).catch(() => {});
+          return true;
         } catch {
           // fall through to surface
         }
       }
     }
-    return false
+    return false;
   }
 
   private policyOption(req: TurnsInputRequest): TurnsInputOption | null {
-    const d = resolvePolicy(this.opts.inputPolicy, req.kind)
-    if (!d) return null
+    const d = resolvePolicy(this.opts.inputPolicy, req.kind);
+    if (!d) return null;
     switch (d.kind) {
       case DispositionAnswer:
-        return findOption(req, d.optionID ?? "")
+        return findOption(req, d.optionID ?? "");
       case DispositionDeny:
-        return findOptionByAlias(req, "deny")
+        return findOptionByAlias(req, "deny");
       default:
-        return null
+        return null;
     }
   }
 
@@ -785,33 +826,35 @@ export class Conversation {
    * the returned promise.
    */
   private writeAnswer(req: TurnsInputRequest, ans: InputAnswer): Promise<void> {
-    const opts = req.options ?? []
+    const opts = req.options ?? [];
     if (opts.length === 0) {
-      const preWriteScreen = this.screen.snapshot().text
-      const submit = submitKeyForHarness(this.opts.harness, preWriteScreen)
-      return this.writeMessageAndSubmit(ans.text ?? "", preWriteScreen, submit)
+      const preWriteScreen = this.screen.snapshot().text;
+      const submit = submitKeyForHarness(this.opts.harness, preWriteScreen);
+      return this.writeMessageAndSubmit(ans.text ?? "", preWriteScreen, submit);
     }
     // Multi-select prompts: toggle every named option, then commit with the
     // request's submit keys (a single optionID answer is normalized into the
     // same toggle-and-commit path — a bare toggle would never resolve the
     // prompt). Validation precedes any write so a bad id surfaces cleanly.
-    const ids = ans.optionIDs && ans.optionIDs.length > 0
-      ? ans.optionIDs
-      : ans.optionID
-        ? [ans.optionID]
-        : []
+    const ids =
+      ans.optionIDs && ans.optionIDs.length > 0
+        ? ans.optionIDs
+        : ans.optionID
+          ? [ans.optionID]
+          : [];
     if (req.multiSelect && req.submitKeys) {
-      const chosen = ids.map((s) => findOption(req, s))
-      if (ids.length === 0 || chosen.some((o) => o === null)) throw ErrUnknownOption
-      for (const o of chosen) this.writeKeys(o!.keys)
-      this.writeKeys(req.submitKeys)
-      return Promise.resolve()
+      const chosen = ids.map((s) => findOption(req, s));
+      if (ids.length === 0 || chosen.some((o) => o === null))
+        throw ErrUnknownOption;
+      for (const o of chosen) this.writeKeys(o!.keys);
+      this.writeKeys(req.submitKeys);
+      return Promise.resolve();
     }
-    if (ids.length > 1) throw ErrNotMultiSelect
-    const opt = findOption(req, ids[0] ?? "")
-    if (!opt) throw ErrUnknownOption
-    this.writeKeys(opt.keys)
-    return Promise.resolve()
+    if (ids.length > 1) throw ErrNotMultiSelect;
+    const opt = findOption(req, ids[0] ?? "");
+    if (!opt) throw ErrUnknownOption;
+    this.writeKeys(opt.keys);
+    return Promise.resolve();
   }
 
   // ── Watcher pump & turn-state machine ────────────────────────────────────
@@ -819,122 +862,128 @@ export class Conversation {
   private async consumeWatcher(): Promise<void> {
     try {
       for await (const ev of this.watcher!.events()) {
-        await this.handleTurnsEvent(ev)
+        await this.handleTurnsEvent(ev);
       }
     } finally {
-      this.eventCh.close()
+      this.eventCh.close();
     }
   }
 
   async handleTurnsEvent(ev: TurnEvent): Promise<void> {
     switch (ev.kind) {
       case InputRequested:
-        this.handleInputRequested(ev.input)
-        return
+        this.handleInputRequested(ev.input);
+        return;
       case InputResolved:
-        this.handleInputResolved(ev.input)
-        return
+        this.handleInputResolved(ev.input);
+        return;
     }
 
     if (ev.kind === TurnComplete) {
-      await this.maybeExtractSessionID()
+      await this.maybeExtractSessionID();
 
       if (this.opts.harness === "claude-code") {
-        const pending = this.currentTurn !== null
+        const pending = this.currentTurn !== null;
         if (pending) {
-          this.endMarkerSeen = true
-          this.markerArmCh.signal()
-          return
+          this.endMarkerSeen = true;
+          this.markerArmCh.signal();
+          return;
         }
       }
     }
 
-    const turn = this.currentTurn
-    this.currentTurn = null
-    if (turn === null) return
+    const turn = this.currentTurn;
+    this.currentTurn = null;
+    if (turn === null) return;
 
     switch (ev.kind) {
       case TurnComplete:
-        turn.state = TurnStateComplete
-        turn.completedAt = ev.at ?? new Date()
-        turn.reason = ev.reason
-        if (ev.snap) turn.text = this.assistantText(ev.snap)
-        break
+        turn.state = TurnStateComplete;
+        turn.completedAt = ev.at ?? new Date();
+        turn.reason = ev.reason;
+        if (ev.snap) turn.text = this.assistantText(ev.snap);
+        break;
       case Blocked:
       case Errored:
-        turn.state = TurnStateErrored
-        turn.completedAt = ev.at ?? new Date()
-        turn.reason = ev.reason
-        turn.httpCode = ev.httpCode ?? 0
-        turn.retryAfter = ev.retryAfter ?? 0
-        break
+        turn.state = TurnStateErrored;
+        turn.completedAt = ev.at ?? new Date();
+        turn.reason = ev.reason;
+        turn.httpCode = ev.httpCode ?? 0;
+        turn.retryAfter = ev.retryAfter ?? 0;
+        break;
       case ToolCall:
-        this.currentTurn = turn
-        return
+        this.currentTurn = turn;
+        return;
       default:
-        this.currentTurn = turn
-        return
+        this.currentTurn = turn;
+        return;
     }
 
     try {
-      await this.store.updateTurn(turn)
+      await this.store.updateTurn(turn);
     } catch (err) {
-      this.emit({ type: EventTurn, turn: { ...turn }, err })
-      return
+      this.emit({ type: EventTurn, turn: { ...turn }, err });
+      return;
     }
-    this.emit({ type: EventTurn, turn: { ...turn } })
+    this.emit({ type: EventTurn, turn: { ...turn } });
   }
 
   private idleGapDur(): number {
-    return this.opts.idleGap && this.opts.idleGap > 0 ? this.opts.idleGap : idleCompletionGap
+    return this.opts.idleGap && this.opts.idleGap > 0
+      ? this.opts.idleGap
+      : idleCompletionGap;
   }
 
   private markerGapDur(): number {
-    return this.opts.markerGap && this.opts.markerGap > 0 ? this.opts.markerGap : markerConfirmGap
+    return this.opts.markerGap && this.opts.markerGap > 0
+      ? this.opts.markerGap
+      : markerConfirmGap;
   }
 
   private async idleCompletionWatcher(): Promise<void> {
-    if (!requiresPromptReadiness(this.opts.harness)) return
-    const [notify, unsubscribe] = this.screen.subscribe()
+    if (!requiresPromptReadiness(this.opts.harness)) return;
+    const [notify, unsubscribe] = this.screen.subscribe();
     try {
-      let notifyP = notify.receive()
-      let markerP = this.markerArmCh.receive()
-      let gap = this.endMarkerSeen ? this.markerGapDur() : this.idleGapDur()
-      let timer = sleep(gap)
+      let notifyP = notify.receive();
+      let markerP = this.markerArmCh.receive();
+      let gap = this.endMarkerSeen ? this.markerGapDur() : this.idleGapDur();
+      let timer = sleep(gap);
       for (;;) {
-        if (this.closedFlag) return
+        if (this.closedFlag) return;
         const which = await Promise.race([
-          notifyP.then((r) => r.ok ? ("notify" as const) : ("closed" as const)),
+          notifyP.then((r) =>
+            r.ok ? ("notify" as const) : ("closed" as const),
+          ),
           markerP.then(() => "marker" as const),
           this.closedPromise.then(() => "closed" as const),
           timer.promise.then(() => "timer" as const),
-        ])
-        if (which === "closed") return
-        if (which === "notify") notifyP = notify.receive()
-        if (which === "marker") markerP = this.markerArmCh.receive()
-        if (which === "timer") await this.maybeIdleComplete()
+        ]);
+        if (which === "closed") return;
+        if (which === "notify") notifyP = notify.receive();
+        if (which === "marker") markerP = this.markerArmCh.receive();
+        if (which === "timer") await this.maybeIdleComplete();
         // Re-arm on every event with the (possibly shortened) gap.
-        timer.cancel()
-        gap = this.endMarkerSeen ? this.markerGapDur() : this.idleGapDur()
-        timer = sleep(gap)
+        timer.cancel();
+        gap = this.endMarkerSeen ? this.markerGapDur() : this.idleGapDur();
+        timer = sleep(gap);
       }
     } finally {
-      unsubscribe()
+      unsubscribe();
     }
   }
 
   async maybeIdleComplete(): Promise<void> {
-    const turn = this.currentTurn
-    if (turn === null) return
-    if (this.inputAwaitingClient()) return
-    const marker = this.endMarkerSeen
-    const snap = this.screen.snapshot()
-    if (!marker && !readyForInput(this.opts.harness, snap.text)) return
-    if (this.adapterBusy(snap)) return
-    const gap = marker ? this.markerGapDur() : this.idleGapDur()
-    if (Date.now() - turn.startedAt.getTime() < gap) return
+    const turn = this.currentTurn;
+    if (turn === null) return;
+    if (this.inputAwaitingClient()) return;
+    const marker = this.endMarkerSeen;
+    const snap = this.screen.snapshot();
+    if (!marker && !readyForInput(this.opts.harness, snap.text)) return;
+    if (this.adapterBusy(snap)) return;
+    const gap = marker ? this.markerGapDur() : this.idleGapDur();
+    if (Date.now() - turn.startedAt.getTime() < gap) return;
 
-    if (this.currentTurn === null || this.currentTurn.id !== turn.id) return
+    if (this.currentTurn === null || this.currentTurn.id !== turn.id) return;
 
     // Kill the false-success path: on the idle-completion fallback (no marker
     // observed), a screen the adapter recognizes as a swallowed prompt — a
@@ -949,56 +998,57 @@ export class Conversation {
       // keeps a new turn from interleaving with the proof reads (including
       // the flush-lag retry sleep). Session-id extraction runs FIRST so an id
       // visible only on this settled swallowed screen is usable by the proof.
-      await this.maybeExtractSessionID()
-      const [proof, diag] = await this.transcriptProofOfCurrentTurn()
-      if (this.closedFlag) return
-      if (this.currentTurn === null || this.currentTurn.id !== turn.id) return
-      this.currentTurn = null
-      this.endMarkerSeen = false
-      turn.completedAt = new Date()
+      await this.maybeExtractSessionID();
+      const [proof, diag] = await this.transcriptProofOfCurrentTurn();
+      if (this.closedFlag) return;
+      if (this.currentTurn === null || this.currentTurn.id !== turn.id) return;
+      this.currentTurn = null;
+      this.endMarkerSeen = false;
+      turn.completedAt = new Date();
       if (proof !== null) {
-        turn.state = TurnStateComplete
+        turn.state = TurnStateComplete;
         turn.reason =
           this.opts.harness +
-          ": transcript-confirmed completion (screen looked swallowed; rollout shows the submitted prompt followed by assistant output)"
+          ": transcript-confirmed completion (screen looked swallowed; rollout shows the submitted prompt followed by assistant output)";
         // The clean transcript reply — NOT assistantText, which for adapters
         // without extractMessage would persist the raw ready screen.
-        turn.text = proof.text
+        turn.text = proof.text;
       } else {
-        turn.state = TurnStateErrored
+        turn.state = TurnStateErrored;
         turn.reason =
           this.opts.harness +
           ": prompt not accepted / no assistant output" +
-          (diag !== "" ? "; " + diag : "")
+          (diag !== "" ? "; " + diag : "");
       }
       try {
-        await this.store.updateTurn(turn)
+        await this.store.updateTurn(turn);
       } catch (err) {
-        this.emit({ type: EventTurn, turn: { ...turn }, err })
-        return
+        this.emit({ type: EventTurn, turn: { ...turn }, err });
+        return;
       }
-      this.emit({ type: EventTurn, turn: { ...turn } })
-      return
+      this.emit({ type: EventTurn, turn: { ...turn } });
+      return;
     }
 
-    this.currentTurn = null
-    this.endMarkerSeen = false
+    this.currentTurn = null;
+    this.endMarkerSeen = false;
 
-    await this.maybeExtractSessionID()
+    await this.maybeExtractSessionID();
 
-    turn.state = TurnStateComplete
-    turn.completedAt = new Date()
+    turn.state = TurnStateComplete;
+    turn.completedAt = new Date();
     turn.reason = marker
       ? this.opts.harness + ": end-of-turn marker confirmed at a settled prompt"
-      : this.opts.harness + ": idle-completion fallback (end-of-turn marker not observed)"
-    turn.text = this.assistantText(snap, /* wholeScreenFallback */ marker)
+      : this.opts.harness +
+        ": idle-completion fallback (end-of-turn marker not observed)";
+    turn.text = this.assistantText(snap, /* wholeScreenFallback */ marker);
     try {
-      await this.store.updateTurn(turn)
+      await this.store.updateTurn(turn);
     } catch (err) {
-      this.emit({ type: EventTurn, turn: { ...turn }, err })
-      return
+      this.emit({ type: EventTurn, turn: { ...turn }, err });
+      return;
     }
-    this.emit({ type: EventTurn, turn: { ...turn } })
+    this.emit({ type: EventTurn, turn: { ...turn } });
   }
 
   // ── Session-id capture ───────────────────────────────────────────────────
@@ -1011,19 +1061,22 @@ export class Conversation {
     // the locator still returns the old id, and we keep retrying. This is the
     // ONLY path that overwrites an already-set harnessSessionID.
     if (this.harnessSessionIDProvisional) {
-      const [id, ok] = this.extractSessionID()
+      const [id, ok] = this.extractSessionID();
       if (ok && id !== "" && id !== this.session.harnessSessionID) {
         // Persist-before-set: on a persist failure keep the latch armed and the
         // old id so the next TurnComplete retries.
-        const done = await this.captureAndPersistSessionID(id, /* replace */ true)
-        if (done) this.harnessSessionIDProvisional = false
+        const done = await this.captureAndPersistSessionID(
+          id,
+          /* replace */ true,
+        );
+        if (done) this.harnessSessionIDProvisional = false;
       }
-      return
+      return;
     }
-    if (this.session.harnessSessionID !== "") return
-    const [id, ok] = this.extractSessionID()
-    if (!ok) return
-    await this.captureAndPersistSessionID(id, /* replace */ false)
+    if (this.session.harnessSessionID !== "") return;
+    const [id, ok] = this.extractSessionID();
+    if (!ok) return;
+    await this.captureAndPersistSessionID(id, /* replace */ false);
   }
 
   /**
@@ -1038,39 +1091,42 @@ export class Conversation {
    * only when `id` genuinely differs. Returns true iff the id was persisted+set.
    * The store rejection is caught here so it can never surface as unhandled.
    */
-  private async captureAndPersistSessionID(id: string, replace: boolean): Promise<boolean> {
-    if (id === "") return false
-    const current = this.session.harnessSessionID
+  private async captureAndPersistSessionID(
+    id: string,
+    replace: boolean,
+  ): Promise<boolean> {
+    if (id === "") return false;
+    const current = this.session.harnessSessionID;
     if (replace) {
-      if (id === current) return false
+      if (id === current) return false;
     } else if (current !== "") {
-      return false
+      return false;
     }
     try {
-      await this.store.updateSession({ ...this.session, harnessSessionID: id })
+      await this.store.updateSession({ ...this.session, harnessSessionID: id });
     } catch {
-      return false // leave in-memory unchanged; retry on the next turn
+      return false; // leave in-memory unchanged; retry on the next turn
     }
-    this.session.harnessSessionID = id
+    this.session.harnessSessionID = id;
     // Backfill any acquisition events emitted before the id was known (a
     // cross-line hazard): the id now exists, so retained envelopes get it
     // stamped in place. StreamTap reads the id here; it never writes the record.
-    this.streamTap?.backfill()
-    return true
+    this.streamTap?.backfill();
+    return true;
   }
 
   /** Extract the id from the current screen and first-write it. True once set. */
   private async captureFromScreen(): Promise<boolean> {
-    if (this.session.harnessSessionID !== "") return true
-    const [id, ok] = this.extractSessionID()
-    if (!ok) return false
-    return this.captureAndPersistSessionID(id, /* replace */ false)
+    if (this.session.harnessSessionID !== "") return true;
+    const [id, ok] = this.extractSessionID();
+    if (!ok) return false;
+    return this.captureAndPersistSessionID(id, /* replace */ false);
   }
 
   private primeBoundDur(): number {
     return this.opts.primeBound && this.opts.primeBound > 0
       ? this.opts.primeBound
-      : primeBoundGap
+      : primeBoundGap;
   }
 
   /**
@@ -1085,154 +1141,169 @@ export class Conversation {
    * openWithSession's cleanup. Records the outcome in primeOutcome for tests.
    */
   private async primeSessionID(ctx: Context): Promise<void> {
-    const a = this.adapter as unknown as { primeSessionIDKeys?: () => Uint8Array }
-    if (typeof a.primeSessionIDKeys !== "function") return
-    if (this.session.harnessSessionID !== "") return
+    const a = this.adapter as unknown as {
+      primeSessionIDKeys?: () => Uint8Array;
+    };
+    if (typeof a.primeSessionIDKeys !== "function") return;
+    if (this.session.harnessSessionID !== "") return;
 
     // The row-anchored /status scrape needs the box to render unwrapped; below
     // the documented minimum width the box wraps and the scrape can't parse it,
     // so skip the write entirely and let the /quit hint backstop.
-    const cols = this.opts.cols && this.opts.cols > 0 ? this.opts.cols : 120
+    const cols = this.opts.cols && this.opts.cols > 0 ? this.opts.cols : 120;
     if (cols < codex.CODEX_STATUS_MIN_COLS) {
-      this.primeOutcome = "too_narrow"
-      return
+      this.primeOutcome = "too_narrow";
+      return;
     }
 
-    const release = await this.queue.acquire(ctx)
-    const bound = this.primeBoundDur()
-    const deadline = sleep(bound)
-    const half = sleep(bound / 2)
-    const never = new Promise<void>(() => {})
-    let wrote = false
+    const release = await this.queue.acquire(ctx);
+    const bound = this.primeBoundDur();
+    const deadline = sleep(bound);
+    const half = sleep(bound / 2);
+    const never = new Promise<void>(() => {});
+    let wrote = false;
     try {
       // Step 3: wait past interstitials/auto-dismiss for a ready prompt.
-      const w0 = await this.awaitPromptReadyUntil(ctx, deadline.promise)
+      const w0 = await this.awaitPromptReadyUntil(ctx, deadline.promise);
       if (w0 === "deadline") {
-        this.primeOutcome = "not_written"
-        return
+        this.primeOutcome = "not_written";
+        return;
       }
 
       // Step 4: surface the id. A writeKeys throw is fatal (writer/PTY dead).
-      this.writeKeys(a.primeSessionIDKeys())
-      wrote = true
+      this.writeKeys(a.primeSessionIDKeys());
+      wrote = true;
 
       // Step 5: check-before-wait (a render landing right after the write, before
       // any subscription delivery, is otherwise missed), then poll under one
       // subscription until captured or the deadline fires.
-      const [notify, unsubscribe] = this.screen.subscribe()
+      const [notify, unsubscribe] = this.screen.subscribe();
       try {
         if (await this.captureFromScreen()) {
-          this.primeOutcome = "captured"
-          return
+          this.primeOutcome = "captured";
+          return;
         }
-        let resent = false
+        let resent = false;
         for (;;) {
           const which = await Promise.race([
             ctx.done().then(() => "ctx" as const),
             this.closedPromise.then(() => "closed" as const),
-            notify.receive().then((r) => (r.ok ? ("changed" as const) : ("closed" as const))),
+            notify
+              .receive()
+              .then((r) => (r.ok ? ("changed" as const) : ("closed" as const))),
             (resent ? never : half.promise).then(() => "half" as const),
             deadline.promise.then(() => "deadline" as const),
-          ])
-          if (which === "ctx") throw ctx.err()
-          if (which === "closed") throw ErrClosed
+          ]);
+          if (which === "ctx") throw ctx.err();
+          if (which === "closed") throw ErrClosed;
           if (which === "changed") {
             if (await this.captureFromScreen()) {
-              this.primeOutcome = "captured"
-              return
+              this.primeOutcome = "captured";
+              return;
             }
-            continue
+            continue;
           }
           if (which === "half") {
             // One-shot resend at the halfway mark: only when still empty and the
             // composer prompt is ready. Consume the latch either way (at most one).
-            resent = true
+            resent = true;
             if (readyForInput(this.opts.harness, this.screen.snapshot().text)) {
-              this.writeKeys(a.primeSessionIDKeys())
+              this.writeKeys(a.primeSessionIDKeys());
             }
-            continue
+            continue;
           }
-          break // deadline
+          break; // deadline
         }
         // Distinguish a persist failure (box rendered + parsed, but the store
         // rejected, so the id is still empty) from a plain poll miss.
-        const [, parsed] = this.extractSessionID()
+        const [, parsed] = this.extractSessionID();
         this.primeOutcome =
           parsed && this.session.harnessSessionID === ""
             ? "persist_failed"
-            : "written_uncaptured"
+            : "written_uncaptured";
       } finally {
-        unsubscribe()
+        unsubscribe();
       }
     } catch (err) {
       // Capture misses are non-fatal; lifecycle/IO failures propagate. A
       // client-facing prompt we can't auto-dismiss is a miss, not a failure.
       if (err === ErrInputPending) {
-        this.primeOutcome = wrote ? "written_uncaptured" : "not_written"
-        return
+        this.primeOutcome = wrote ? "written_uncaptured" : "not_written";
+        return;
       }
-      throw err
+      throw err;
     } finally {
-      deadline.cancel()
-      half.cancel()
-      release()
+      deadline.cancel();
+      half.cancel();
+      release();
     }
   }
 
   private extractSessionID(): [string, boolean] {
-    const a = this.adapter as unknown as Record<string, unknown>
+    const a = this.adapter as unknown as Record<string, unknown>;
     if (typeof a.extractSessionID === "function") {
-      const [id, ok] = (a.extractSessionID as (s: Snapshot) => [string, boolean])(this.screen.snapshot())
-      if (ok) return [id, true]
+      const [id, ok] = (
+        a.extractSessionID as (s: Snapshot) => [string, boolean]
+      )(this.screen.snapshot());
+      if (ok) return [id, true];
     }
     if (typeof a.locateSessionID === "function") {
-      const [id, ok] = (a.locateSessionID as (w: string) => [string, boolean])(this.opts.workingDir ?? "")
-      if (ok) return [id, true]
+      const [id, ok] = (a.locateSessionID as (w: string) => [string, boolean])(
+        this.opts.workingDir ?? "",
+      );
+      if (ok) return [id, true];
     }
-    return ["", false]
+    return ["", false];
   }
 
   async captureRawSessionID(line: string): Promise<void> {
-    if (this.session.harnessSessionID !== "") return
-    const a = this.adapter as unknown as Record<string, unknown>
-    if (typeof a.extractSessionIDFromLine !== "function") return
-    const [id, ok] = (a.extractSessionIDFromLine as (l: string) => [string, boolean])(line)
-    if (!ok) return
+    if (this.session.harnessSessionID !== "") return;
+    const a = this.adapter as unknown as Record<string, unknown>;
+    if (typeof a.extractSessionIDFromLine !== "function") return;
+    const [id, ok] = (
+      a.extractSessionIDFromLine as (l: string) => [string, boolean]
+    )(line);
+    if (!ok) return;
     // Route through the shared persist-before-set path (first-write mode) so raw
     // line capture gets the same correctness as the screen-scrape path.
-    await this.captureAndPersistSessionID(id, /* replace */ false)
+    await this.captureAndPersistSessionID(id, /* replace */ false);
   }
 
   // ── History ──────────────────────────────────────────────────────────────
 
   async history(): Promise<Turn[]> {
-    const [out] = await this.historyWithSource()
-    return out
+    const [out] = await this.historyWithSource();
+    return out;
   }
 
   async historyWithSource(): Promise<[Turn[], HistorySource]> {
-    const sessionCopy = { ...this.session }
-    const a = this.adapter as unknown as Record<string, unknown>
-    const hasReader = typeof a.readTranscript === "function"
+    const sessionCopy = { ...this.session };
+    const a = this.adapter as unknown as Record<string, unknown>;
+    const hasReader = typeof a.readTranscript === "function";
     if (!hasReader || sessionCopy.harnessSessionID === "") {
-      const out = await this.store.listTurns(sessionCopy.id)
-      return [out, HistorySourceStore]
+      const out = await this.store.listTurns(sessionCopy.id);
+      return [out, HistorySourceStore];
     }
-    let tturns: { role: string; text: string; timestamp?: Date }[]
+    let tturns: { role: string; text: string; timestamp?: Date }[];
     try {
-      tturns = (a.readTranscript as (id: string, wd: string) => { role: string; text: string; timestamp?: Date }[])(
-        sessionCopy.harnessSessionID,
-        this.opts.workingDir ?? "",
-      )
+      tturns = (
+        a.readTranscript as (
+          id: string,
+          wd: string,
+        ) => { role: string; text: string; timestamp?: Date }[]
+      )(sessionCopy.harnessSessionID, this.opts.workingDir ?? "");
     } catch (err) {
       // A not-yet-flushed (or lost) transcript degrades to store history,
       // favoring availability. Real reader failures (parse/permission/etc.)
       // rethrow so they are not silently masked.
-      if (isSentinel(err, ErrSessionNotFound) || isSentinel(err, ErrEmptySessionID)) {
-        const out = await this.store.listTurns(sessionCopy.id)
-        return [out, HistorySourceStore]
+      if (
+        isSentinel(err, ErrSessionNotFound) ||
+        isSentinel(err, ErrEmptySessionID)
+      ) {
+        const out = await this.store.listTurns(sessionCopy.id);
+        return [out, HistorySourceStore];
       }
-      throw err
+      throw err;
     }
     const out: Turn[] = tturns.map((tt) => ({
       id: "",
@@ -1245,8 +1316,8 @@ export class Conversation {
       completedAt: tt.timestamp ?? new Date(0),
       httpCode: 0,
       retryAfter: 0,
-    }))
-    return [out, HistorySourceTranscript]
+    }));
+    return [out, HistorySourceTranscript];
   }
 
   // ── Helpers ──────────────────────────────────────────────────────────────
@@ -1259,24 +1330,26 @@ export class Conversation {
    * their only reply-capture mechanism.
    */
   private assistantText(snap: Snapshot, wholeScreenFallback = true): string {
-    const a = this.adapter as unknown as Record<string, unknown>
+    const a = this.adapter as unknown as Record<string, unknown>;
     if (typeof a.extractMessage === "function") {
-      const [msg, ok] = (a.extractMessage as (s: Snapshot) => [string, boolean])(snap)
-      if (ok) return msg
-      if (!wholeScreenFallback) return ""
+      const [msg, ok] = (
+        a.extractMessage as (s: Snapshot) => [string, boolean]
+      )(snap);
+      if (ok) return msg;
+      if (!wholeScreenFallback) return "";
     }
-    return snap.text
+    return snap.text;
   }
 
   private adapterPromptNotAccepted(snap: Snapshot): boolean {
-    const a = this.adapter as unknown as Record<string, unknown>
+    const a = this.adapter as unknown as Record<string, unknown>;
     if (typeof a.promptNotAccepted === "function") {
       return (a.promptNotAccepted as (s: Snapshot, sent: string) => boolean)(
         snap,
         this.sentScreenText,
-      )
+      );
     }
-    return false
+    return false;
   }
 
   /**
@@ -1290,20 +1363,22 @@ export class Conversation {
     // Runs on EVERY send (unlike the other structural probes, which only run
     // once a watcher is pumping), so it must tolerate adapter-less test
     // Conversations constructed directly from ConversationInit.
-    const a = this.adapter as unknown as Record<string, unknown> | undefined
+    const a = this.adapter as unknown as Record<string, unknown> | undefined;
     return (
       a !== undefined &&
       typeof a.readTranscript === "function" &&
       typeof a.extractMessage !== "function"
-    )
+    );
   }
 
   private readTranscriptTurns(id: string): { role: string; text: string }[] {
-    const a = this.adapter as unknown as Record<string, unknown>
-    return (a.readTranscript as (id: string, wd: string) => { role: string; text: string }[])(
-      id,
-      this.opts.workingDir ?? "",
-    )
+    const a = this.adapter as unknown as Record<string, unknown>;
+    return (
+      a.readTranscript as (
+        id: string,
+        wd: string,
+      ) => { role: string; text: string }[]
+    )(id, this.opts.workingDir ?? "");
   }
 
   /**
@@ -1316,13 +1391,17 @@ export class Conversation {
    * rather than guessing a lower bound). Never throws out of send().
    */
   private captureTranscriptWatermark(): number | null {
-    if (!this.transcriptOverrideEligible()) return null
-    if (this.session.harnessSessionID === "") return 0
+    if (!this.transcriptOverrideEligible()) return null;
+    if (this.session.harnessSessionID === "") return 0;
     try {
-      return this.readTranscriptTurns(this.session.harnessSessionID).length
+      return this.readTranscriptTurns(this.session.harnessSessionID).length;
     } catch (err) {
-      if (isSentinel(err, ErrSessionNotFound) || isSentinel(err, ErrEmptySessionID)) return 0
-      return null
+      if (
+        isSentinel(err, ErrSessionNotFound) ||
+        isSentinel(err, ErrEmptySessionID)
+      )
+        return 0;
+      return null;
     }
   }
 
@@ -1352,90 +1431,105 @@ export class Conversation {
    * watermark) retries ONCE after transcriptFlushRetryGap, with the turn
    * still held by the caller. A null watermark never retries.
    */
-  private async transcriptProofOfCurrentTurn(): Promise<[{ text: string } | null, string]> {
-    if (!this.transcriptOverrideEligible()) return [null, ""]
-    if (this.session.harnessSessionID === "") return [null, ""]
-    const watermark = this.sentTranscriptWatermark
-    if (watermark === null) return [null, "pre-send transcript watermark unavailable"]
+  private async transcriptProofOfCurrentTurn(): Promise<
+    [{ text: string } | null, string]
+  > {
+    if (!this.transcriptOverrideEligible()) return [null, ""];
+    if (this.session.harnessSessionID === "") return [null, ""];
+    const watermark = this.sentTranscriptWatermark;
+    if (watermark === null)
+      return [null, "pre-send transcript watermark unavailable"];
 
-    const first = this.tryTranscriptProof(watermark)
-    if (first.proof !== null || !first.retryable) return [first.proof, first.diag]
-    const timer = sleep(transcriptFlushRetryGap)
+    const first = this.tryTranscriptProof(watermark);
+    if (first.proof !== null || !first.retryable)
+      return [first.proof, first.diag];
+    const timer = sleep(transcriptFlushRetryGap);
     try {
-      await Promise.race([timer.promise, this.closedPromise])
+      await Promise.race([timer.promise, this.closedPromise]);
     } finally {
-      timer.cancel()
+      timer.cancel();
     }
-    if (this.closedFlag) return [null, first.diag]
-    const second = this.tryTranscriptProof(watermark)
-    return [second.proof, second.diag]
+    if (this.closedFlag) return [null, first.diag];
+    const second = this.tryTranscriptProof(watermark);
+    return [second.proof, second.diag];
   }
 
   /** One synchronous proof attempt; retryable marks flush-lag-shaped misses. */
   private tryTranscriptProof(watermark: number): {
-    proof: { text: string } | null
-    diag: string
-    retryable: boolean
+    proof: { text: string } | null;
+    diag: string;
+    retryable: boolean;
   } {
-    let turns: { role: string; text: string }[]
+    let turns: { role: string; text: string }[];
     try {
-      turns = this.readTranscriptTurns(this.session.harnessSessionID)
+      turns = this.readTranscriptTurns(this.session.harnessSessionID);
     } catch (err) {
       // No rollout on disk yet is the flush-lag shape worth one retry; an
       // empty-id sentinel is a plain no, and anything else is a real reader
       // failure surfaced as a diagnostic, never as success.
-      if (isSentinel(err, ErrSessionNotFound)) return { proof: null, diag: "", retryable: true }
-      if (isSentinel(err, ErrEmptySessionID)) return { proof: null, diag: "", retryable: false }
-      return { proof: null, diag: "transcript check failed: " + String(err), retryable: false }
+      if (isSentinel(err, ErrSessionNotFound))
+        return { proof: null, diag: "", retryable: true };
+      if (isSentinel(err, ErrEmptySessionID))
+        return { proof: null, diag: "", retryable: false };
+      return {
+        proof: null,
+        diag: "transcript check failed: " + String(err),
+        retryable: false,
+      };
     }
-    const want = stripIDEContextTags(this.sentPromptText)
-    let match = -1
+    const want = stripIDEContextTags(this.sentPromptText);
+    let match = -1;
     for (let i = Math.max(0, watermark); i < turns.length; i++) {
-      const t = turns[i]!
-      if (t.role !== RoleUser) continue
+      const t = turns[i];
+      if (t.role !== RoleUser) continue;
       if (stripIDEContextTags(t.text) === want) {
-        match = i
-        break
+        match = i;
+        break;
       }
     }
-    if (match < 0) return { proof: null, diag: "", retryable: true }
-    const replies: string[] = []
+    if (match < 0) return { proof: null, diag: "", retryable: true };
+    const replies: string[] = [];
     for (let i = match + 1; i < turns.length; i++) {
-      const t = turns[i]!
-      if (t.role === RoleUser) break // stop: a later turn must not contaminate
-      if (t.role !== RoleAssistant) continue // skip RoleSystem between the two
-      if (t.text.trim() === "") continue
-      replies.push(t.text)
+      const t = turns[i];
+      if (t.role === RoleUser) break; // stop: a later turn must not contaminate
+      if (t.role !== RoleAssistant) continue; // skip RoleSystem between the two
+      if (t.text.trim() === "") continue;
+      replies.push(t.text);
     }
-    if (replies.length === 0) return { proof: null, diag: "", retryable: false }
-    return { proof: { text: replies.join("\n\n") }, diag: "", retryable: false }
+    if (replies.length === 0)
+      return { proof: null, diag: "", retryable: false };
+    return {
+      proof: { text: replies.join("\n\n") },
+      diag: "",
+      retryable: false,
+    };
   }
 
   private adapterBusy(snap: Snapshot): boolean {
-    const a = this.adapter as unknown as Record<string, unknown>
+    const a = this.adapter as unknown as Record<string, unknown>;
     if (typeof a.busy === "function") {
-      return (a.busy as (s: Snapshot) => boolean)(snap)
+      return (a.busy as (s: Snapshot) => boolean)(snap);
     }
-    return false
+    return false;
   }
 
   private adapterQuitSequence(): Uint8Array | null {
-    const a = this.adapter as unknown as Record<string, unknown>
+    const a = this.adapter as unknown as Record<string, unknown>;
     if (typeof a.quitSequence === "function") {
-      return (a.quitSequence as () => Uint8Array)()
+      return (a.quitSequence as () => Uint8Array)();
     }
-    return null
+    return null;
   }
 
   private adapterRawSessionID(): boolean {
-    const a = this.adapter as unknown as Record<string, unknown>
-    return typeof a.extractSessionIDFromLine === "function"
+    const a = this.adapter as unknown as Record<string, unknown>;
+    return typeof a.extractSessionIDFromLine === "function";
   }
 
   private async waitReadyForSend(ctx: Context): Promise<void> {
-    if (this.inputAwaitingClient()) throw ErrInputPending
-    if (!requiresPromptReadiness(this.opts.harness)) return
-    return this.awaitPromptReady(ctx)
+    if (this.inputAwaitingClient()) throw ErrInputPending;
+    if (!requiresPromptReadiness(this.opts.harness)) return;
+    return this.awaitPromptReady(ctx);
   }
 
   /**
@@ -1445,24 +1539,29 @@ export class Conversation {
    * Extracted verbatim from waitReadyForSend's loop.
    */
   private async awaitPromptReady(ctx: Context): Promise<void> {
-    const [notify, unsubscribe] = this.screen.subscribe()
+    const [notify, unsubscribe] = this.screen.subscribe();
     try {
-      if (readyForInput(this.opts.harness, this.screen.snapshot().text)) return
+      if (readyForInput(this.opts.harness, this.screen.snapshot().text)) return;
       for (;;) {
         const which = await Promise.race([
           ctx.done().then(() => "ctx" as const),
           this.closedPromise.then(() => "closed" as const),
           this.inputStateCh.receive().then(() => "input" as const),
-          notify.receive().then((r) => r.ok ? ("notify" as const) : ("notifyClosed" as const)),
-        ])
-        if (which === "ctx") throw ctx.err()
-        if (which === "closed") throw ErrClosed
-        if (which === "notifyClosed") throw ErrClosed
-        if (this.inputAwaitingClient()) throw ErrInputPending
-        if (readyForInput(this.opts.harness, this.screen.snapshot().text)) return
+          notify
+            .receive()
+            .then((r) =>
+              r.ok ? ("notify" as const) : ("notifyClosed" as const),
+            ),
+        ]);
+        if (which === "ctx") throw ctx.err();
+        if (which === "closed") throw ErrClosed;
+        if (which === "notifyClosed") throw ErrClosed;
+        if (this.inputAwaitingClient()) throw ErrInputPending;
+        if (readyForInput(this.opts.harness, this.screen.snapshot().text))
+          return;
       }
     } finally {
-      unsubscribe()
+      unsubscribe();
     }
   }
 
@@ -1479,118 +1578,146 @@ export class Conversation {
     ctx: Context,
     deadlinePromise: Promise<void>,
   ): Promise<"ready" | "deadline"> {
-    const [notify, unsubscribe] = this.screen.subscribe()
+    const [notify, unsubscribe] = this.screen.subscribe();
     try {
-      if (readyForInput(this.opts.harness, this.screen.snapshot().text)) return "ready"
+      if (readyForInput(this.opts.harness, this.screen.snapshot().text))
+        return "ready";
       for (;;) {
         const which = await Promise.race([
           ctx.done().then(() => "ctx" as const),
           this.closedPromise.then(() => "closed" as const),
           this.inputStateCh.receive().then(() => "input" as const),
-          notify.receive().then((r) => r.ok ? ("notify" as const) : ("notifyClosed" as const)),
+          notify
+            .receive()
+            .then((r) =>
+              r.ok ? ("notify" as const) : ("notifyClosed" as const),
+            ),
           deadlinePromise.then(() => "deadline" as const),
-        ])
-        if (which === "ctx") throw ctx.err()
-        if (which === "closed") throw ErrClosed
-        if (which === "notifyClosed") throw ErrClosed
-        if (which === "deadline") return "deadline"
-        if (this.inputAwaitingClient()) throw ErrInputPending
-        if (readyForInput(this.opts.harness, this.screen.snapshot().text)) return "ready"
+        ]);
+        if (which === "ctx") throw ctx.err();
+        if (which === "closed") throw ErrClosed;
+        if (which === "notifyClosed") throw ErrClosed;
+        if (which === "deadline") return "deadline";
+        if (this.inputAwaitingClient()) throw ErrInputPending;
+        if (readyForInput(this.opts.harness, this.screen.snapshot().text))
+          return "ready";
       }
     } finally {
-      unsubscribe()
+      unsubscribe();
     }
   }
 
   emit(ev: ConversationEvent): void {
-    this.eventCh.emit(ev)
+    this.eventCh.emit(ev);
   }
 
   /** Internal: start the watcher + idle pumps. Used by Open. */
   startPumps(): void {
-    void this.consumeWatcher()
-    void this.idleCompletionWatcher()
+    void this.consumeWatcher();
+    void this.idleCompletionWatcher();
     // The hook drain runs its OWN loop (spool watch + bounded fallback timer),
     // deliberately NOT hung off consumeWatcher — so a SessionStart-before-any-
     // file-change or an idle-period Stop drains promptly regardless of turn
     // activity. Inert unless the run opted in and the adapter supports hooks.
-    if (this.hookDrain) this.hookDrain.start()
+    if (this.hookDrain) this.hookDrain.start();
   }
 }
 
 function sleep(ms: number): { promise: Promise<void>; cancel: () => void } {
-  let timeout: ReturnType<typeof setTimeout>
+  let timeout: ReturnType<typeof setTimeout>;
   const promise = new Promise<void>((resolve) => {
-    timeout = setTimeout(resolve, ms)
-  })
-  return { promise, cancel: () => clearTimeout(timeout) }
+    timeout = setTimeout(resolve, ms);
+  });
+  return {
+    promise,
+    cancel: () => {
+      clearTimeout(timeout);
+    },
+  };
 }
 
-function resolvePolicy(p: InputPolicy | undefined, kind: string): Disposition | null {
-  if (!p) return null
-  const d = p.byKind?.[kind]
-  if (d && d.kind) return d
-  if (p.default) return { kind: p.default }
-  return null
+function resolvePolicy(
+  p: InputPolicy | undefined,
+  kind: string,
+): Disposition | null {
+  if (!p) return null;
+  const d = p.byKind?.[kind];
+  if (d?.kind) return d;
+  if (p.default) return { kind: p.default };
+  return null;
 }
 
 function toClientInputRequest(req: TurnsInputRequest): InputRequest {
-  const out: InputRequest = { id: req.id, kind: req.kind, prompt: req.prompt }
+  const out: InputRequest = { id: req.id, kind: req.kind, prompt: req.prompt };
   if (req.options && req.options.length > 0) {
     out.options = req.options.map((o) => ({
       id: o.id,
       alias: o.alias,
       label: o.label,
       ...(o.description !== undefined ? { description: o.description } : {}),
-    }))
+    }));
   }
-  if (req.header !== undefined) out.header = req.header
-  if (req.multiSelect) out.multiSelect = true
-  return out
+  if (req.header !== undefined) out.header = req.header;
+  if (req.multiSelect) out.multiSelect = true;
+  return out;
 }
 
-function findOption(req: TurnsInputRequest, s: string): TurnsInputOption | null {
-  if (s === "") return null
-  const ls = s.toLowerCase()
+function findOption(
+  req: TurnsInputRequest,
+  s: string,
+): TurnsInputOption | null {
+  if (s === "") return null;
+  const ls = s.toLowerCase();
   for (const o of req.options ?? []) {
-    if (o.id === s || o.alias.toLowerCase() === ls || o.label.toLowerCase() === ls) return o
+    if (
+      o.id === s ||
+      o.alias.toLowerCase() === ls ||
+      o.label.toLowerCase() === ls
+    )
+      return o;
   }
-  return null
+  return null;
 }
 
-function findOptionByAlias(req: TurnsInputRequest, alias: string): TurnsInputOption | null {
+function findOptionByAlias(
+  req: TurnsInputRequest,
+  alias: string,
+): TurnsInputOption | null {
   for (const o of req.options ?? []) {
-    if (o.alias === alias) return o
+    if (o.alias === alias) return o;
   }
-  return null
+  return null;
 }
 
 /** resolveAdapter maps a harness name to a concrete turns.Adapter. */
 export function resolveAdapter(name: string): Adapter {
   switch (name) {
     case "codex":
-      return codex.New()
+      return codex.New();
     case "claude-code":
-      return claudecode.New()
+      return claudecode.New();
     case "opencode":
-      return opencode.New()
+      return opencode.New();
     case "pi":
-      return pi.New()
+      return pi.New();
     case "generic":
     case "":
-      return generic.New()
+      return generic.New();
     default:
-      throw wrap(`chat: unknown harness: ${name}`, ErrUnknownHarness)
+      throw wrap(`chat: unknown harness: ${name}`, ErrUnknownHarness);
   }
 }
 
 /** Open starts a harness, wires the screen + turn watcher, returns a Conversation. */
-export async function Open(ctx: Context | undefined, opts: Options): Promise<Conversation> {
+export async function Open(
+  ctx: Context | undefined,
+  opts: Options,
+): Promise<Conversation> {
   if (!opts.harness || !opts.binaryPath) {
-    throw wrapInvalid("Harness and BinaryPath are required")
+    throw wrapInvalid("Harness and BinaryPath are required");
   }
   if (!opts.store) {
-    throw wrapInvalid("Store is required (pass newMemStore() for the default)")
+    throw wrapInvalid("Store is required (pass newMemStore() for the default)");
   }
   const session: Session = {
     id: newID(),
@@ -1600,8 +1727,8 @@ export async function Open(ctx: Context | undefined, opts: Options): Promise<Con
     // When resuming, seed with the harness session id so history/session-id
     // capture reflect the resumed session immediately rather than starting empty.
     harnessSessionID: opts.resume ?? "",
-  }
-  return openWithSession(ctx, opts, session, /* persist */ true)
+  };
+  return openWithSession(ctx, opts, session, /* persist */ true);
 }
 
 /**
@@ -1616,57 +1743,52 @@ async function openWithSession(
   session: Session,
   persist: boolean,
 ): Promise<Conversation> {
-  const cols = opts.cols && opts.cols > 0 ? opts.cols : 120
-  const rows = opts.rows && opts.rows > 0 ? opts.rows : 40
+  const cols = opts.cols && opts.cols > 0 ? opts.cols : 120;
+  const rows = opts.rows && opts.rows > 0 ? opts.rows : 40;
 
-  let adapter: Adapter
-  try {
-    // The advanced/testing seam wins: a caller-supplied adapter drives Open
-    // directly (used to exercise Stream mode with a fake interleaved adapter).
-    adapter = opts.adapter ?? resolveAdapter(opts.harness)
-  } catch (err) {
-    throw err
-  }
+  // The advanced/testing seam wins: a caller-supplied adapter drives Open
+  // directly (used to exercise Stream mode with a fake interleaved adapter).
+  const adapter: Adapter = opts.adapter ?? resolveAdapter(opts.harness);
 
   // Resolve resume args up front so an unsupported harness fails before launch.
-  let resumeArgs: string[] = []
+  let resumeArgs: string[] = [];
   if (opts.resume) {
-    const ra = adapterResumeArgs(adapter, opts.resume)
+    const ra = adapterResumeArgs(adapter, opts.resume);
     if (ra === null) {
       throw wrap(
         `chat: harness ${opts.harness} cannot resume`,
         ErrResumeUnsupported,
-      )
+      );
     }
-    resumeArgs = ra
+    resumeArgs = ra;
   }
 
   // On the create path (NOT resuming), let the adapter mint its own session id
   // and the launch args that pin it, seeding harnessSessionID before persistence.
-  let initArgs: string[] = []
+  let initArgs: string[] = [];
   if (!opts.resume) {
-    const init = adapterInitSession(adapter)
+    const init = adapterInitSession(adapter);
     if (init) {
-      initArgs = init[0]
-      session.harnessSessionID = init[1]
+      initArgs = init[0];
+      session.harnessSessionID = init[1];
     }
   }
 
   // Whenever chat injects a session prefix (init OR resume), the caller must not
   // also pass raw session-control flags in opts.args — they would diverge the
   // real transcript from the persisted harnessSessionID. Reject before launch.
-  const prefix = resumeArgs.length > 0 ? resumeArgs : initArgs
+  const prefix = resumeArgs.length > 0 ? resumeArgs : initArgs;
   if (prefix.length > 0) {
-    const banned = adapterSessionControlFlags(adapter)
-    const bad = firstSessionControlConflict(opts.args ?? [], banned)
+    const banned = adapterSessionControlFlags(adapter);
+    const bad = firstSessionControlConflict(opts.args ?? [], banned);
     if (bad) {
       throw wrapInvalid(
         `argument ${bad} conflicts with chat-managed session control; use Options.resume / Reopen`,
-      )
+      );
     }
   }
 
-  const scr = newScreen(cols, rows)
+  const scr = newScreen(cols, rows);
 
   const c = new Conversation({
     opts: { ...opts, cols, rows },
@@ -1674,13 +1796,13 @@ async function openWithSession(
     adapter,
     screen: scr,
     session,
-  })
+  });
 
   // Arm the one-shot resume-fork latch only when we seeded from a resume id AND
   // the adapter reports that `resume` forks (mints a new id). Non-forking
   // harnesses leave it disarmed, preserving strict first-write-wins.
   if (opts.resume && adapterResumeForks(adapter)) {
-    c.harnessSessionIDProvisional = true
+    c.harnessSessionIDProvisional = true;
   }
 
   // ── Hook drain (spool → canonical-Event) ─────────────────────────────────────
@@ -1691,7 +1813,7 @@ async function openWithSession(
   // wires HW_EVENT_SPOOL into the launch env below so out-of-process hook fires
   // land where the drain reads. Inert otherwise — existing runs are unchanged.
   if (opts.onHookEvents) {
-    const provider = adapterHookProvider(adapter)
+    const provider = adapterHookProvider(adapter);
     if (provider) {
       const drain = new HookDrain({
         provider,
@@ -1704,21 +1826,23 @@ async function openWithSession(
         onEvents: opts.onHookEvents,
         onBoundaryTurns: opts.onHookBoundaryTurns,
         fallbackMs: opts.hookDrainFallbackMs,
-      })
+      });
       // Create the spool dir + install the managed hook block before launch.
-      drain.ensureConfig()
-      c.hookDrain = drain
+      drain.ensureConfig();
+      c.hookDrain = drain;
     }
   }
 
-  const runCtx = ctx ? { done: () => ctx.done(), err: () => ctx.err() } : undefined
+  const runCtx = ctx
+    ? { done: () => ctx.done(), err: () => ctx.err() }
+    : undefined;
 
   // ── Acquisition plan (StreamTap) ───────────────────────────────────────────
   // Resolve the LATCHED acquisition mode for the run, then build StreamTap as an
   // ADDITIONAL consumer of the SAME durable onLine tap chat uses for raw
   // session-id capture — no second launch, no second PTY reader. The rendered
   // Screen + turn watcher (below) stay the sole turn-state authority.
-  const haveSink = typeof opts.onAcquisitionEvent === "function"
+  const haveSink = typeof opts.onAcquisitionEvent === "function";
   const profile = resolveProfile({
     info: {
       harness: opts.harness,
@@ -1729,17 +1853,22 @@ async function openWithSession(
     },
     adapter,
     streamVersionPredicate: opts.streamVersionPredicate,
-  })
-  const acquisitionMode = planAcquisition(opts.acquisitionMode ?? AcquisitionModeOff, {
-    profile,
-    haveSink,
-    // Hooks side-channel delivery is a later subtask; not viable in A1, so the
-    // Hooks rung falls back to Stream (when eligible) or Off.
-    hooksViable: false,
-  })
+  });
+  const acquisitionMode = planAcquisition(
+    opts.acquisitionMode ?? AcquisitionModeOff,
+    {
+      profile,
+      haveSink,
+      // Hooks side-channel delivery is a later subtask; not viable in A1, so the
+      // Hooks rung falls back to Stream (when eligible) or Off.
+      hooksViable: false,
+    },
+  );
 
-  const streamParser = adapterStreamParser(adapter)
-  const displaySink = opts.onDisplayLine ? newDisplaySink(opts.onDisplayLine) : null
+  const streamParser = adapterStreamParser(adapter);
+  const displaySink = opts.onDisplayLine
+    ? newDisplaySink(opts.onDisplayLine)
+    : null;
   const streamTap = new StreamTap({
     harness: opts.harness,
     runID: session.id,
@@ -1749,28 +1878,39 @@ async function openWithSession(
     display: displaySink,
     // StreamTap READS the chat-captured id (never writes the session record).
     sessionID: () => c.session.harnessSessionID,
-  })
-  c.streamTap = streamTap
+  });
+  c.streamTap = streamTap;
 
   // Compute the child env ONCE, before binding, so the exact array handed to the
   // wrapper is the one the adapter parses its session dir from — binding against
   // a different env than the child receives is thus impossible.
-  const env = cleanHarnessEnv(opts.env)
-  ;(adapter as unknown as {
-    bindLaunchEnv?: (env: string[], workingDir: string) => void
-  }).bindLaunchEnv?.(env, opts.workingDir ?? "")
+  const env = cleanHarnessEnv(opts.env);
+  (
+    adapter as unknown as {
+      bindLaunchEnv?: (env: string[], workingDir: string) => void;
+    }
+  ).bindLaunchEnv?.(env, opts.workingDir ?? "");
 
   // Wire the HW_* hook env (spool dir, cwd, home, yield file) into the launch env
   // for Hooks mode, whenever a caller supplied a YieldControl handle, or when the
   // hook drain is active. The active drain's own spool dir wins so out-of-process
   // hook fires land where the drain reads (its ensureConfig already created it);
   // otherwise fall back to the raw opts.spoolDir (Hooks-mode/yield callers).
-  const hookSpoolDir = c.hookDrain ? c.hookDrain.spoolDir() : (opts.spoolDir ?? "")
+  const hookSpoolDir = c.hookDrain
+    ? c.hookDrain.spoolDir()
+    : (opts.spoolDir ?? "");
   const needHookEnv =
-    !!opts.yieldControl || acquisitionMode === AcquisitionModeHooks || !!c.hookDrain
+    !!opts.yieldControl ||
+    acquisitionMode === AcquisitionModeHooks ||
+    !!c.hookDrain;
   let launchEnv = needHookEnv
-    ? hookEnv(env, hookSpoolDir, opts.workingDir ?? "", opts.yieldControl ?? null)
-    : env
+    ? hookEnv(
+        env,
+        hookSpoolDir,
+        opts.workingDir ?? "",
+        opts.yieldControl ?? null,
+      )
+    : env;
   // The out-of-process hook CLI keys its session-mismatch guard and config dir off
   // these; set them so a stray hook from an unrelated session is dropped and the
   // CLI resolves the same config dir the drain installed the managed block under.
@@ -1779,7 +1919,7 @@ async function openWithSession(
       ...launchEnv,
       `${EnvConfigDir}=${c.hookDrain.hookContext().configDir}`,
       `${EnvSessionID}=${session.harnessSessionID}`,
-    ]
+    ];
   }
 
   // Widen the tap-instantiation gate (critique (a)): the durable LineSplitter tap
@@ -1787,8 +1927,8 @@ async function openWithSession(
   // StreamTap (a StreamParser under a sink, or a display sink). This lets the tap
   // exist for adapters that implement StreamParser but NOT extractSessionIDFromLine
   // (codex/opencode/pi), where the old adapterRawSessionID()-only gate was a no-op.
-  const rawCapture = c["adapterRawSessionID"]()
-  const needsTap = rawCapture || streamTap.installs()
+  const rawCapture = c["adapterRawSessionID"]();
+  const needsTap = rawCapture || streamTap.installs();
 
   const cfg = {
     binaryPath: opts.binaryPath,
@@ -1809,49 +1949,55 @@ async function openWithSession(
     // stream event ships with an empty id and is BACKFILLED once capture lands.
     onLine: needsTap
       ? (line: string) => {
-          streamTap.onLine(line)
+          streamTap.onLine(line);
           if (rawCapture) {
             void c
               .captureRawSessionID(line)
-              .then(() => streamTap.backfill())
-              .catch(() => {})
+              .then(() => {
+                streamTap.backfill();
+              })
+              .catch(() => {});
           }
         }
       : undefined,
-  }
+  };
 
-  const sess = await wrapperStart(runCtx, cfg)
-  c.sess = sess
+  const sess = await wrapperStart(runCtx, cfg);
+  c.sess = sess;
 
-  const { release, ok } = sess.acquireWriter()
+  const { release, ok } = sess.acquireWriter();
   if (!ok) {
-    await sess.stop()
-    throw new Error("chat: failed to acquire wrapper writer lock")
+    await sess.stop();
+    throw new Error("chat: failed to acquire wrapper writer lock");
   }
-  c.releaseWriter = release
+  c.releaseWriter = release;
 
-  sess.resize(cols, rows)
+  sess.resize(cols, rows);
 
-  if (persist) await opts.store.createSession({ ...c.session })
+  if (persist) await opts.store.createSession({ ...c.session });
 
-  c.watcher = Watch(sess as unknown as Parameters<typeof Watch>[0], scr, adapter)
-  c.startPumps()
+  c.watcher = Watch(
+    sess as unknown as Parameters<typeof Watch>[0],
+    scr,
+    adapter,
+  );
+  c.startPumps();
 
   // Prime the harness session id before returning the handle (Codex /status
   // scrape). Suppressed on resume (the id is already seeded). A capture miss is
   // non-fatal; a fatal lifecycle/IO failure tears the half-built session down.
   if (!opts.resume) {
     try {
-      await c["primeSessionID"](ctx ?? Context.background())
+      await c["primeSessionID"](ctx ?? Context.background());
     } catch (err) {
       // ctx-less close awaits actual termination (Session.stop with the cancelled
       // Open ctx would return before the process exits and leak it).
-      await c.close()
-      throw err
+      await c.close();
+      throw err;
     }
   }
 
-  return c
+  return c;
 }
 
 /**
@@ -1862,10 +2008,13 @@ async function openWithSession(
  * supplied by the caller — the stored Session persists ONLY harness, workingDir,
  * and harnessSessionID, so it cannot reconstruct them.
  */
-export type ReopenOptions = Omit<Options, "harness" | "workingDir" | "resume"> & {
+export type ReopenOptions = Omit<
+  Options,
+  "harness" | "workingDir" | "resume"
+> & {
   /** The chat session id (as returned by Conversation.sessionID()) to reopen. */
-  sessionID: string
-}
+  sessionID: string;
+};
 
 /**
  * Reopen loads a stored chat Session by id and relaunches its harness in resume
@@ -1886,22 +2035,22 @@ export async function Reopen(
   opts: ReopenOptions,
 ): Promise<Conversation> {
   if (!opts.store) {
-    throw wrapInvalid("Store is required (pass newMemStore() for the default)")
+    throw wrapInvalid("Store is required (pass newMemStore() for the default)");
   }
-  const stored = await opts.store.getSession(opts.sessionID)
+  const stored = await opts.store.getSession(opts.sessionID);
   if (stored.harnessSessionID === "") {
     throw wrap(
       `chat: session ${opts.sessionID} has no harness session id`,
       ErrNoHarnessSession,
-    )
+    );
   }
   const launch: Options = {
     ...opts,
     harness: stored.harness,
     workingDir: stored.workingDir,
     resume: stored.harnessSessionID,
-  }
-  return openWithSession(ctx, launch, { ...stored }, /* persist */ false)
+  };
+  return openWithSession(ctx, launch, { ...stored }, /* persist */ false);
 }
 
 /**
@@ -1910,30 +2059,33 @@ export async function Reopen(
  * Returns the HookProvider when present (Claude Code), else null.
  */
 function adapterHookProvider(adapter: Adapter): HookProvider | null {
-  const a = adapter as unknown as Record<string, unknown>
-  if (typeof a.hookProvider !== "function") return null
-  return (a.hookProvider as () => HookProvider)()
+  const a = adapter as unknown as Record<string, unknown>;
+  if (typeof a.hookProvider !== "function") return null;
+  return (a.hookProvider as () => HookProvider)();
 }
 
 /** Structurally probes an adapter for SessionResumer; null when unsupported. */
-function adapterResumeArgs(adapter: Adapter, harnessSessionID: string): string[] | null {
-  const a = adapter as unknown as Record<string, unknown>
-  if (typeof a.resumeArgs !== "function") return null
-  return (a.resumeArgs as (id: string) => string[])(harnessSessionID)
+function adapterResumeArgs(
+  adapter: Adapter,
+  harnessSessionID: string,
+): string[] | null {
+  const a = adapter as unknown as Record<string, unknown>;
+  if (typeof a.resumeArgs !== "function") return null;
+  return (a.resumeArgs as (id: string) => string[])(harnessSessionID);
 }
 
 /** Structurally probes an adapter for SessionInitializer; null when unsupported. */
 function adapterInitSession(adapter: Adapter): [string[], string] | null {
-  const a = adapter as unknown as Record<string, unknown>
-  if (typeof a.initSession !== "function") return null
-  return (a.initSession as () => [string[], string])()
+  const a = adapter as unknown as Record<string, unknown>;
+  if (typeof a.initSession !== "function") return null;
+  return (a.initSession as () => [string[], string])();
 }
 
 /** Structurally probes an adapter for SessionControlFlags; [] when unsupported. */
 function adapterSessionControlFlags(adapter: Adapter): string[] {
-  const a = adapter as unknown as Record<string, unknown>
-  if (typeof a.sessionControlFlags !== "function") return []
-  return (a.sessionControlFlags as () => string[])()
+  const a = adapter as unknown as Record<string, unknown>;
+  if (typeof a.sessionControlFlags !== "function") return [];
+  return (a.sessionControlFlags as () => string[])();
 }
 
 /**
@@ -1946,16 +2098,16 @@ function firstSessionControlConflict(
   args: string[],
   banned: string[],
 ): string | undefined {
-  const set = new Set(banned)
-  const longFlags = banned.filter((f) => f.startsWith("--"))
+  const set = new Set(banned);
+  const longFlags = banned.filter((f) => f.startsWith("--"));
   for (const tok of args) {
-    if (tok === "--") break // positionals follow; never flags
-    if (set.has(tok)) return tok
+    if (tok === "--") break; // positionals follow; never flags
+    if (set.has(tok)) return tok;
     for (const f of longFlags) {
-      if (tok.startsWith(f + "=")) return tok
+      if (tok.startsWith(f + "=")) return tok;
     }
   }
-  return undefined
+  return undefined;
 }
 
 /**
@@ -1965,13 +2117,13 @@ function firstSessionControlConflict(
  * Code, and Codex per the verified finding — default to no-fork.
  */
 export function adapterResumeForks(adapter: Adapter): boolean {
-  const a = adapter as unknown as Record<string, unknown>
-  if (typeof a.resumeForksSessionID !== "function") return false
-  return (a.resumeForksSessionID as () => boolean)() === true
+  const a = adapter as unknown as Record<string, unknown>;
+  if (typeof a.resumeForksSessionID !== "function") return false;
+  return (a.resumeForksSessionID as () => boolean)();
 }
 
 function wrapInvalid(msg: string): Error {
-  return wrap(`chat: invalid options: ${msg}`, ErrInvalidOptions)
+  return wrap(`chat: invalid options: ${msg}`, ErrInvalidOptions);
 }
 
-export { EventBus, Signal }
+export { EventBus, Signal };

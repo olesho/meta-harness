@@ -61,7 +61,11 @@ export function turnsFromEvents(events) {
     for (const e of events) {
         if (!e.text)
             continue;
-        out.push({ role: e.role || RoleSystem, text: e.text, timestamp: e.timestamp });
+        out.push({
+            role: e.role || RoleSystem,
+            text: e.text,
+            timestamp: e.timestamp,
+        });
     }
     return out;
 }

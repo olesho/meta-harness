@@ -11,8 +11,8 @@
 // and this daemon runs no compression middleware, so there is nothing to
 // reproduce from Go's `flusher.Flush()` calls.
 
-import type { ConversationEvent } from "../chat/types.ts"
-import type { Subscription } from "./fanout.ts"
+import type { ConversationEvent } from "../chat/types.ts";
+import type { Subscription } from "./fanout.ts";
 
 /**
  * Abstract cancellation, so the daemon-core subtask can wire its request
@@ -23,27 +23,25 @@ import type { Subscription } from "./fanout.ts"
  *  - a register-callback `(onStop) => void` (calls `onStop` when cancelled).
  */
 export type StopSignal =
-  | AbortSignal
-  | Promise<void>
-  | ((onStop: () => void) => void)
+  AbortSignal | Promise<void> | ((onStop: () => void) => void);
 
 /** Registers `cb` to run once when `sig` fires. No-op if `sig` is undefined. */
 export function onStop(sig: StopSignal | undefined, cb: () => void): void {
-  if (!sig) return
+  if (!sig) return;
   if (typeof sig === "function") {
-    sig(cb)
-    return
+    sig(cb);
+    return;
   }
   if (typeof (sig as Promise<void>).then === "function") {
-    ;(sig as Promise<void>).then(cb, cb)
-    return
+    (sig as Promise<void>).then(cb, cb);
+    return;
   }
-  const signal = sig as AbortSignal
+  const signal = sig as AbortSignal;
   if (signal.aborted) {
-    cb()
-    return
+    cb();
+    return;
   }
-  signal.addEventListener("abort", cb, { once: true })
+  signal.addEventListener("abort", cb, { once: true });
 }
 
 /**
@@ -52,15 +50,15 @@ export function onStop(sig: StopSignal | undefined, cb: () => void): void {
  * it.
  */
 export interface ServerResponseLike {
-  writeHead(status: number, headers: Record<string, string>): unknown
-  write(chunk: string): boolean
-  end?(): void
-  on(event: "close", listener: () => void): unknown
+  writeHead(status: number, headers: Record<string, string>): unknown;
+  write(chunk: string): boolean;
+  end?(): void;
+  on(event: "close", listener: () => void): unknown;
 }
 
 /** The subset of Node's `http.IncomingMessage` used to detect client aborts. */
 export interface RequestLike {
-  on(event: "close", listener: () => void): unknown
+  on(event: "close", listener: () => void): unknown;
 }
 
 export interface StreamSSEOptions {
@@ -68,16 +66,16 @@ export interface StreamSSEOptions {
    * Frame-body encoder. Parameterized so the daemon-core subtask can swap in a
    * DTO mapper; defaults to serializing the raw `ConversationEvent`.
    */
-  encode?: (ev: ConversationEvent) => string
+  encode?: (ev: ConversationEvent) => string;
   /** Heartbeat period in ms (injectable for tests); defaults to 15000. */
-  heartbeatMs?: number
+  heartbeatMs?: number;
   /** Cancellation signal (see {@link StopSignal}). */
-  signal?: StopSignal
+  signal?: StopSignal;
   /** The originating request, to also tear down on its `close`. */
-  req?: RequestLike
+  req?: RequestLike;
 }
 
-const DEFAULT_HEARTBEAT_MS = 15_000
+const DEFAULT_HEARTBEAT_MS = 15_000;
 
 const SSE_HEADERS: Record<string, string> = {
   "Content-Type": "text/event-stream",
@@ -85,7 +83,7 @@ const SSE_HEADERS: Record<string, string> = {
   Connection: "keep-alive",
   // Defeat proxy buffering (e.g. nginx) so frames flush immediately.
   "X-Accel-Buffering": "no",
-}
+};
 
 /**
  * Stream a Fanout subscription to an SSE response until the subscription ends
@@ -100,49 +98,49 @@ export async function streamSSE(
   sub: Subscription,
   opts: StreamSSEOptions = {},
 ): Promise<void> {
-  const encode = opts.encode ?? ((ev: ConversationEvent) => JSON.stringify(ev))
-  const heartbeatMs = opts.heartbeatMs ?? DEFAULT_HEARTBEAT_MS
+  const encode = opts.encode ?? ((ev: ConversationEvent) => JSON.stringify(ev));
+  const heartbeatMs = opts.heartbeatMs ?? DEFAULT_HEARTBEAT_MS;
 
-  res.writeHead(200, SSE_HEADERS)
+  res.writeHead(200, SSE_HEADERS);
 
-  let stopped = false
-  let heartbeat: ReturnType<typeof setInterval> | undefined
+  let stopped = false;
+  let heartbeat: ReturnType<typeof setInterval> | undefined;
 
   const teardown = (): void => {
-    if (stopped) return
-    stopped = true
-    if (heartbeat !== undefined) clearInterval(heartbeat)
+    if (stopped) return;
+    stopped = true;
+    if (heartbeat !== undefined) clearInterval(heartbeat);
     // Ends the subscription's async iterator, which unblocks the loop below.
-    sub.unsubscribe()
-  }
+    sub.unsubscribe();
+  };
 
-  res.on("close", teardown)
-  if (opts.req) opts.req.on("close", teardown)
-  onStop(opts.signal, teardown)
+  res.on("close", teardown);
+  if (opts.req) opts.req.on("close", teardown);
+  onStop(opts.signal, teardown);
 
   heartbeat = setInterval(() => {
-    if (stopped) return
+    if (stopped) return;
     try {
-      res.write(": ping\n\n")
+      res.write(": ping\n\n");
     } catch {
-      teardown()
+      teardown();
     }
-  }, heartbeatMs)
+  }, heartbeatMs);
   // Don't let the heartbeat timer keep the process alive on its own.
-  ;(heartbeat as { unref?: () => void }).unref?.()
+  (heartbeat as { unref?: () => void }).unref?.();
 
   try {
     for (;;) {
-      const { value, ok } = await sub.receive()
-      if (!ok) break
-      if (stopped) break
+      const { value, ok } = await sub.receive();
+      if (!ok) break;
+      if (stopped) break;
       try {
-        res.write(`data: ${encode(value!)}\n\n`)
+        res.write(`data: ${encode(value!)}\n\n`);
       } catch {
-        break
+        break;
       }
     }
   } finally {
-    teardown()
+    teardown();
   }
 }

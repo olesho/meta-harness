@@ -1,6 +1,6 @@
 # `meta-harness/discovery`
 
-Answers one question: *"is harness X's CLI installed on `PATH`, and at what version?"* It
+Answers one question: _"is harness X's CLI installed on `PATH`, and at what version?"_ It
 probes installed harnesses (by default, running `X --version` and extracting a semver),
 caches the result by binary path + mtime, and never touches the filesystem beyond reading.
 It is the single source of truth for harness availability and drift against the
@@ -13,10 +13,18 @@ It is also the **single source of truth for harness-binary path resolution**: th
 
 ```ts
 import {
-  lookup, resolvePath, discover, registerProbe, resetCache, defaultProbeTimeoutMs,
-  SemverDashVProbe, semverRe, WELL_KNOWN_DIRS,
-  type Info, type Probe,
-} from "meta-harness/discovery"
+  lookup,
+  resolvePath,
+  discover,
+  registerProbe,
+  resetCache,
+  defaultProbeTimeoutMs,
+  SemverDashVProbe,
+  semverRe,
+  WELL_KNOWN_DIRS,
+  type Info,
+  type Probe,
+} from "meta-harness/discovery";
 ```
 
 Importing the module registers default probes as a side effect (the Go `init()` analogue):
@@ -29,6 +37,7 @@ Importing the module registers default probes as a side effect (the Go `init()` 
 ```ts
 lookup(name: string): Info
 ```
+
 Resolve a `name` (a canonical harness key, a registered binary name, or any other binary)
 to an [`Info`](#info). A binary simply not on `PATH` is a **normal result**
 (`installed: false`), not an error — `lookup` throws only on internal failures (e.g. an
@@ -37,33 +46,36 @@ unreadable `versions.json`).
 ```ts
 discover(): Info[]
 ```
+
 `Info` for every harness declared in [`versions.json`](versions.md). Order is not
 guaranteed.
 
 ```ts
-import { lookup } from "meta-harness/discovery"
+import { lookup } from "meta-harness/discovery";
 
-const info = lookup("claude-code")
-if (!info.installed) console.error(info.installHint)
+const info = lookup("claude-code");
+if (!info.installed) console.error(info.installHint);
 else if (!info.versionMatchesPin)
-  console.warn(`drift: pinned ${info.pinnedVersion}, found ${info.detectedVersion}`)
+  console.warn(
+    `drift: pinned ${info.pinnedVersion}, found ${info.detectedVersion}`,
+  );
 ```
 
 ### `Info`
 
 ```ts
 interface Info {
-  name: string               // the lookup name you passed
-  harness: string            // canonical key from versions.json ("" if unknown)
-  binary: string             // the executable name probed
-  path: string               // absolute path on PATH ("" if not installed)
-  installed: boolean
-  installHint: string        // one-liner shown when not installed
-  pinnedVersion: string      // from versions.json ("" if unpinned/unknown)
-  detectedVersion: string    // parsed from --version
-  versionMatchesPin: boolean // false ONLY on explicit drift (true if either side is empty)
-  versionProbeError: string  // why the probe failed, if it did
-  npmPackage: string         // from versions.json
+  name: string; // the lookup name you passed
+  harness: string; // canonical key from versions.json ("" if unknown)
+  binary: string; // the executable name probed
+  path: string; // absolute path on PATH ("" if not installed)
+  installed: boolean;
+  installHint: string; // one-liner shown when not installed
+  pinnedVersion: string; // from versions.json ("" if unpinned/unknown)
+  detectedVersion: string; // parsed from --version
+  versionMatchesPin: boolean; // false ONLY on explicit drift (true if either side is empty)
+  versionProbeError: string; // why the probe failed, if it did
+  npmPackage: string; // from versions.json
 }
 ```
 
@@ -88,7 +100,7 @@ path, or `null` when nothing is found. It is the resolution SSOT the
 
 0. A **path-bearing `name`** (absolute, or containing `/`) is checked directly.
 1. An **env override** — `HARNESS_BINARY_<NAME>` (e.g. `HARNESS_BINARY_CLAUDE_CODE`)
-   then `HARNESS_BINARY`. An *absolute* override is verified directly and does **not**
+   then `HARNESS_BINARY`. An _absolute_ override is verified directly and does **not**
    fall through on a miss; a bare-name override is searched on `PATH` only.
 2. The live **`PATH`**.
 3. The **`WELL_KNOWN_DIRS`** fallback — common install locations probed even when the
@@ -120,8 +132,8 @@ spend a second or two just starting up to print `--version`.
 ### `SemverDashVProbe`
 
 ```ts
-class SemverDashVProbe implements Probe {}   // runs `<bin> --version`, extracts the first semver
-semverRe: RegExp                              // /\d+\.\d+\.\d+(?:[-+][\w.]+)?/
+class SemverDashVProbe implements Probe {} // runs `<bin> --version`, extracts the first semver
+semverRe: RegExp; // /\d+\.\d+\.\d+(?:[-+][\w.]+)?/
 ```
 
 The default probe: it runs `<binary> --version`, scans combined stdout+stderr for the
@@ -132,7 +144,9 @@ To support a harness whose `--version` output needs custom parsing, implement `P
 register it before calling `lookup`/`discover`:
 
 ```ts
-registerProbe("myharness", { detect: (bin) => /* run bin, return version */ "" })
+registerProbe("myharness", {
+  detect: (bin) => /* run bin, return version */ "",
+});
 ```
 
 ---
@@ -140,6 +154,6 @@ registerProbe("myharness", { detect: (bin) => /* run bin, return version */ "" }
 ## Relationship to `versions`
 
 `discovery` reads the [`versions`](versions.md) catalog to know which harnesses exist,
-their canonical binary names, and their pins — then reports the *live* reality (installed?
+their canonical binary names, and their pins — then reports the _live_ reality (installed?
 which version? matches the pin?). `versions` is the static declaration; `discovery` is the
 runtime check.

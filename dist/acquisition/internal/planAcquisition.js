@@ -56,9 +56,14 @@ export function probeAdapter(adapter) {
     const hasTranscriptReader = typeof a.readTranscript === "function";
     let streamInterleaved = false;
     if (typeof a.streamInterleaved === "function") {
-        streamInterleaved = a.streamInterleaved() === true;
+        streamInterleaved = a.streamInterleaved();
     }
-    return { hasStreamParser, hasSessionResumer, hasTranscriptReader, streamInterleaved };
+    return {
+        hasStreamParser,
+        hasSessionResumer,
+        hasTranscriptReader,
+        streamInterleaved,
+    };
 }
 /**
  * defaultStreamVersionPredicate ties fact 3 to versions.ts exactly as described:

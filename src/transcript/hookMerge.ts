@@ -24,7 +24,13 @@
 //     downstream. We never synthesize a competing SourceFile-identity text event,
 //     and textNativeID is left untouched.
 
-import { SourceFile, SourceHook, SourceLive, eventID, type ParsedEvent } from "./event.ts"
+import {
+  SourceFile,
+  SourceHook,
+  SourceLive,
+  eventID,
+  type ParsedEvent,
+} from "./event.ts";
 
 // sourceAuthority ranks provenance for dedup collisions: the higher rank wins
 // when two events share an eventID. SourceFile (durable, parser-owned) outranks
@@ -33,13 +39,13 @@ import { SourceFile, SourceHook, SourceLive, eventID, type ParsedEvent } from ".
 function sourceAuthority(source: string | undefined): number {
   switch (source) {
     case SourceFile:
-      return 2
+      return 2;
     case SourceHook:
-      return 1
+      return 1;
     case SourceLive:
-      return 0
+      return 0;
     default:
-      return 0
+      return 0;
   }
 }
 
@@ -47,18 +53,21 @@ function sourceAuthority(source: string | undefined): number {
 // eventID. Strictly-higher authority wins; ties keep the incumbent (first-seen),
 // which for equal sources preserves reader order.
 function wins(candidate: ParsedEvent, incumbent: ParsedEvent): boolean {
-  return sourceAuthority(candidate.event.source) > sourceAuthority(incumbent.event.source)
+  return (
+    sourceAuthority(candidate.event.source) >
+    sourceAuthority(incumbent.event.source)
+  );
 }
 
 // orderKey sorts the merged set the way every other event is ordered: by seq,
 // then timestamp, as a stable tie-break. Missing seq/timestamp sort first.
 function compareOrder(a: ParsedEvent, b: ParsedEvent): number {
-  const sa = a.event.seq ?? 0
-  const sb = b.event.seq ?? 0
-  if (sa !== sb) return sa - sb
-  const ta = a.event.timestamp ? a.event.timestamp.getTime() : 0
-  const tb = b.event.timestamp ? b.event.timestamp.getTime() : 0
-  return ta - tb
+  const sa = a.event.seq ?? 0;
+  const sb = b.event.seq ?? 0;
+  if (sa !== sb) return sa - sb;
+  const ta = a.event.timestamp ? a.event.timestamp.getTime() : 0;
+  const tb = b.event.timestamp ? b.event.timestamp.getTime() : 0;
+  return ta - tb;
 }
 
 // mergeHookEvents merges an incoming hook batch (source: SourceHook) into the
@@ -75,34 +84,34 @@ export function mergeHookEvents(
   existing: ParsedEvent[],
   hookBatch: ParsedEvent[],
 ): ParsedEvent[] {
-  const byID = new Map<string, ParsedEvent>()
-  const order: string[] = []
+  const byID = new Map<string, ParsedEvent>();
+  const order: string[] = [];
 
   // Existing events first so, on an authority tie, the reader's event is the
   // first-seen incumbent that hook events must strictly outrank to replace.
   for (const pe of existing) {
-    const id = eventID(pe.event)
-    const incumbent = byID.get(id)
+    const id = eventID(pe.event);
+    const incumbent = byID.get(id);
     if (incumbent === undefined) {
-      byID.set(id, pe)
-      order.push(id)
+      byID.set(id, pe);
+      order.push(id);
     } else if (wins(pe, incumbent)) {
-      byID.set(id, pe)
+      byID.set(id, pe);
     }
   }
 
   for (const pe of hookBatch) {
-    const id = eventID(pe.event)
-    const incumbent = byID.get(id)
+    const id = eventID(pe.event);
+    const incumbent = byID.get(id);
     if (incumbent === undefined) {
-      byID.set(id, pe)
-      order.push(id)
+      byID.set(id, pe);
+      order.push(id);
     } else if (wins(pe, incumbent)) {
-      byID.set(id, pe)
+      byID.set(id, pe);
     }
   }
 
-  const merged = order.map((id) => byID.get(id)!)
-  merged.sort(compareOrder)
-  return merged
+  const merged = order.map((id) => byID.get(id)!);
+  merged.sort(compareOrder);
+  return merged;
 }

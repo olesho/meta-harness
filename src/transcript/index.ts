@@ -26,13 +26,13 @@ export {
   type Turn,
   type ParsedEvent,
   type EventEnvelope,
-} from "./event.ts"
+} from "./event.ts";
 
 // Durable wire codec.
-export { marshalParsedEvents, unmarshalParsedEvents } from "./eventWire.ts"
+export { marshalParsedEvents, unmarshalParsedEvents } from "./eventWire.ts";
 
 // Hook-sourced event dedup consumer (eventID-based).
-export { mergeHookEvents } from "./hookMerge.ts"
+export { mergeHookEvents } from "./hookMerge.ts";
 
 // Token-usage extraction (separate from the Event DTO, which carries no token
 // fields by contract).
@@ -41,18 +41,22 @@ export {
   usageFromCodexJSONL,
   usageToPublicJSON,
   type Usage,
-} from "./usage.ts"
+} from "./usage.ts";
 
 // Reader interface.
-export type { Reader } from "./reader.ts"
+export type { Reader } from "./reader.ts";
 
 // Error sentinels.
-export { ErrEmptySessionID, ErrEmptyWorkingDir, ErrSessionNotFound } from "./errors.ts"
+export {
+  ErrEmptySessionID,
+  ErrEmptyWorkingDir,
+  ErrSessionNotFound,
+} from "./errors.ts";
 
 // Per-harness readers.
-export { PiReader, slugForCwd } from "./pi/pi.ts"
-export { CodexReader } from "./codex/codex.ts"
-export { events as codexEvents, parseRollout } from "./codex/parseCodex.ts"
-export { locateLatestSession, readSessionMeta } from "./codex/locate.ts"
-export { ClaudeCodeReader, encodedCWD } from "./claudecode/claudecode.ts"
-export { events as claudecodeEvents } from "./claudecode/parseClaude.ts"
+export { PiReader, slugForCwd } from "./pi/pi.ts";
+export { CodexReader } from "./codex/codex.ts";
+export { events as codexEvents, parseRollout } from "./codex/parseCodex.ts";
+export { locateLatestSession, readSessionMeta } from "./codex/locate.ts";
+export { ClaudeCodeReader, encodedCWD } from "./claudecode/claudecode.ts";
+export { events as claudecodeEvents } from "./claudecode/parseClaude.ts";

@@ -1,4 +1,4 @@
-import { describe, expect, test } from "vitest"
+import { describe, expect, test } from "vitest";
 import {
   EventText,
   EventToolResult,
@@ -12,18 +12,18 @@ import {
   mergeHookEvents,
   type Event,
   type ParsedEvent,
-} from "../../src/transcript/index.ts"
+} from "../../src/transcript/index.ts";
 
 // textNativeID mirrors parseClaude.ts's per-source-stable text identity. It is
 // asserted here (not imported — it's a private parser helper) to freeze the fact
 // that it embeds the literal SourceFile string, which is exactly why hook text
 // cannot collapse against it.
 function claudeTextNativeID(lineUUID: string, seq: number): string {
-  return `${SourceFile}:text:${lineUUID}:${seq}`
+  return `${SourceFile}:text:${lineUUID}:${seq}`;
 }
 
 function pe(event: Event, harnessSessionID = "s1"): ParsedEvent {
-  return { harnessSessionID, event }
+  return { harnessSessionID, event };
 }
 
 describe("mergeHookEvents — tool events dedup cross-source", () => {
@@ -36,7 +36,7 @@ describe("mergeHookEvents — tool events dedup cross-source", () => {
       toolUseID: "call-1",
       source: SourceHook,
       nativeID: "tool-use:call-1",
-    }
+    };
     const file: Event = {
       seq: 4,
       role: RoleAssistant,
@@ -45,16 +45,16 @@ describe("mergeHookEvents — tool events dedup cross-source", () => {
       toolUseID: "call-1",
       source: SourceFile,
       nativeID: "tool-use:call-1",
-    }
+    };
     // Same source-independent id → same dedup key.
-    expect(eventID(hook)).toBe(eventID(file))
+    expect(eventID(hook)).toBe(eventID(file));
 
-    const merged = mergeHookEvents([pe(file)], [pe(hook)])
-    expect(merged).toHaveLength(1)
+    const merged = mergeHookEvents([pe(file)], [pe(hook)]);
+    expect(merged).toHaveLength(1);
     // Authority resolves to the SourceFile event.
-    expect(merged[0]!.event.source).toBe(SourceFile)
-    expect(merged[0]!.event.seq).toBe(4)
-  })
+    expect(merged[0].event.source).toBe(SourceFile);
+    expect(merged[0].event.seq).toBe(4);
+  });
 
   test("SourceHook tool-result collapses against the SourceFile tool-result", () => {
     const hook: Event = {
@@ -64,7 +64,7 @@ describe("mergeHookEvents — tool events dedup cross-source", () => {
       output: "provisional",
       source: SourceHook,
       nativeID: "tool-result:call-9",
-    }
+    };
     const file: Event = {
       role: RoleTool,
       type: EventToolResult,
@@ -72,12 +72,12 @@ describe("mergeHookEvents — tool events dedup cross-source", () => {
       output: "authoritative",
       source: SourceFile,
       nativeID: "tool-result:call-9",
-    }
-    const merged = mergeHookEvents([pe(file)], [pe(hook)])
-    expect(merged).toHaveLength(1)
-    expect(merged[0]!.event.source).toBe(SourceFile)
-    expect(merged[0]!.event.output).toBe("authoritative")
-  })
+    };
+    const merged = mergeHookEvents([pe(file)], [pe(hook)]);
+    expect(merged).toHaveLength(1);
+    expect(merged[0].event.source).toBe(SourceFile);
+    expect(merged[0].event.output).toBe("authoritative");
+  });
 
   test("a hook-only tool event with no file counterpart is preserved", () => {
     const hook: Event = {
@@ -85,12 +85,12 @@ describe("mergeHookEvents — tool events dedup cross-source", () => {
       toolUseID: "call-solo",
       source: SourceHook,
       nativeID: "tool-use:call-solo",
-    }
-    const merged = mergeHookEvents([], [pe(hook)])
-    expect(merged).toHaveLength(1)
-    expect(merged[0]!.event.source).toBe(SourceHook)
-  })
-})
+    };
+    const merged = mergeHookEvents([], [pe(hook)]);
+    expect(merged).toHaveLength(1);
+    expect(merged[0].event.source).toBe(SourceHook);
+  });
+});
 
 describe("mergeHookEvents — text is NOT file-identity deduped", () => {
   test("hook text stays SourceHook, SourceFile text is preserved, no dup synthesized", () => {
@@ -102,7 +102,7 @@ describe("mergeHookEvents — text is NOT file-identity deduped", () => {
       uuid: "line-uuid",
       source: SourceFile,
       nativeID: claudeTextNativeID("line-uuid", 1),
-    }
+    };
     // Hook text is provisional and tagged SourceHook. It cannot reproduce the
     // file's seq/lineUUID identity, so its eventID necessarily differs.
     const hookText: Event = {
@@ -112,36 +112,38 @@ describe("mergeHookEvents — text is NOT file-identity deduped", () => {
       text: "hello world",
       source: SourceHook,
       nativeID: "hook:text:hello world",
-    }
-    expect(eventID(hookText)).not.toBe(eventID(fileText))
+    };
+    expect(eventID(hookText)).not.toBe(eventID(fileText));
 
-    const merged = mergeHookEvents([pe(fileText)], [pe(hookText)])
+    const merged = mergeHookEvents([pe(fileText)], [pe(hookText)]);
     // Both survive: no file-identity dedup was attempted for text.
-    expect(merged).toHaveLength(2)
+    expect(merged).toHaveLength(2);
 
-    const bySource = merged.map((m) => m.event.source)
-    expect(bySource).toContain(SourceHook)
-    expect(bySource).toContain(SourceFile)
+    const bySource = merged.map((m) => m.event.source);
+    expect(bySource).toContain(SourceHook);
+    expect(bySource).toContain(SourceFile);
 
     // The authoritative SourceFile text event is preserved unchanged.
-    const file = merged.find((m) => m.event.source === SourceFile)!
-    expect(file.event.nativeID).toBe(claudeTextNativeID("line-uuid", 1))
+    const file = merged.find((m) => m.event.source === SourceFile)!;
+    expect(file.event.nativeID).toBe(claudeTextNativeID("line-uuid", 1));
 
     // No competing SourceFile-identity text was synthesized: exactly one event
     // carries a SourceFile-identity text id.
     const fileIdentityTexts = merged.filter(
-      (m) => m.event.type === EventText && m.event.nativeID?.startsWith(`${SourceFile}:text:`),
-    )
-    expect(fileIdentityTexts).toHaveLength(1)
-  })
+      (m) =>
+        m.event.type === EventText &&
+        m.event.nativeID?.startsWith(`${SourceFile}:text:`),
+    );
+    expect(fileIdentityTexts).toHaveLength(1);
+  });
 
   test("textNativeID identity is unchanged (still embeds the SourceFile string)", () => {
     // Guards deliverable: textNativeID must stay source-DEPENDENT — making it
     // source-independent is explicitly rejected.
-    expect(claudeTextNativeID("u", 3)).toBe("file:text:u:3")
-    expect(claudeTextNativeID("u", 3).startsWith(`${SourceFile}:`)).toBe(true)
-  })
-})
+    expect(claudeTextNativeID("u", 3)).toBe("file:text:u:3");
+    expect(claudeTextNativeID("u", 3).startsWith(`${SourceFile}:`)).toBe(true);
+  });
+});
 
 describe("mergeHookEvents — provenance & ordering", () => {
   test("SourceLive is never produced; hook is the second emitted provenance after file", () => {
@@ -154,22 +156,22 @@ describe("mergeHookEvents — provenance & ordering", () => {
       toolUseID: "a",
       source: SourceFile,
       nativeID: "tool-use:a",
-    }
+    };
     const hook: Event = {
       seq: 2,
       type: EventToolUse,
       toolUseID: "b",
       source: SourceHook,
       nativeID: "tool-use:b",
-    }
-    const merged = mergeHookEvents([pe(file)], [pe(hook)])
-    const sources = new Set(merged.map((m) => m.event.source))
-    expect(sources).toEqual(new Set([SourceFile, SourceHook]))
-    expect(sources.has(SourceLive)).toBe(false)
-  })
+    };
+    const merged = mergeHookEvents([pe(file)], [pe(hook)]);
+    const sources = new Set(merged.map((m) => m.event.source));
+    expect(sources).toEqual(new Set([SourceFile, SourceHook]));
+    expect(sources.has(SourceLive)).toBe(false);
+  });
 
   test("merged set is ordered by seq then timestamp", () => {
-    const t = (ms: number) => new Date(Date.UTC(2026, 0, 1, 0, 0, 0, ms))
+    const t = (ms: number) => new Date(Date.UTC(2026, 0, 1, 0, 0, 0, ms));
     const file: Event = {
       seq: 5,
       type: EventToolUse,
@@ -177,7 +179,7 @@ describe("mergeHookEvents — provenance & ordering", () => {
       timestamp: t(500),
       source: SourceFile,
       nativeID: "tool-use:late",
-    }
+    };
     const hookEarly: Event = {
       seq: 1,
       type: EventToolUse,
@@ -185,7 +187,7 @@ describe("mergeHookEvents — provenance & ordering", () => {
       timestamp: t(100),
       source: SourceHook,
       nativeID: "tool-use:early",
-    }
+    };
     const hookMid: Event = {
       seq: 3,
       type: EventToolUse,
@@ -193,16 +195,30 @@ describe("mergeHookEvents — provenance & ordering", () => {
       timestamp: t(300),
       source: SourceHook,
       nativeID: "tool-use:mid",
-    }
-    const merged = mergeHookEvents([pe(file)], [pe(hookEarly), pe(hookMid)])
-    expect(merged.map((m) => m.event.seq)).toEqual([1, 3, 5])
-  })
+    };
+    const merged = mergeHookEvents([pe(file)], [pe(hookEarly), pe(hookMid)]);
+    expect(merged.map((m) => m.event.seq)).toEqual([1, 3, 5]);
+  });
 
   test("neither input array is mutated", () => {
-    const existing = [pe({ type: EventToolUse, toolUseID: "x", source: SourceFile, nativeID: "tool-use:x" })]
-    const batch = [pe({ type: EventToolUse, toolUseID: "x", source: SourceHook, nativeID: "tool-use:x" })]
-    mergeHookEvents(existing, batch)
-    expect(existing).toHaveLength(1)
-    expect(batch).toHaveLength(1)
-  })
-})
+    const existing = [
+      pe({
+        type: EventToolUse,
+        toolUseID: "x",
+        source: SourceFile,
+        nativeID: "tool-use:x",
+      }),
+    ];
+    const batch = [
+      pe({
+        type: EventToolUse,
+        toolUseID: "x",
+        source: SourceHook,
+        nativeID: "tool-use:x",
+      }),
+    ];
+    mergeHookEvents(existing, batch);
+    expect(existing).toHaveLength(1);
+    expect(batch).toHaveLength(1);
+  });
+});

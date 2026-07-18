@@ -55,7 +55,13 @@ export function classFromHTTPCode(code) {
 }
 // billingHints distinguish a billing/quota failure (fatal) from a usage/rate
 // limit (transient) among cost-pattern hits.
-const billingHints = ["payment", "insufficient", "credit", "billing", "quota exceeded"];
+const billingHints = [
+    "payment",
+    "insufficient",
+    "credit",
+    "billing",
+    "quota exceeded",
+];
 /**
  * Disambiguate a cost/quota pattern hit: billing-flavored phrases are
  * ErrBilling (fatal); everything else is ErrRateLimited (transient).

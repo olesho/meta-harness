@@ -24,10 +24,14 @@ export function fromAbortSignal(signal, deadlineMs) {
         cancel(ctxCanceled);
         return ctx;
     }
-    const onAbort = () => cancel(ctxCanceled);
+    const onAbort = () => {
+        cancel(ctxCanceled);
+    };
     signal.addEventListener("abort", onAbort, { once: true });
     // Drop the listener once the Context finishes for any reason (e.g. deadline).
-    void ctx.done().then(() => signal.removeEventListener("abort", onAbort));
+    void ctx.done().then(() => {
+        signal.removeEventListener("abort", onAbort);
+    });
     return ctx;
 }
 //# sourceMappingURL=fromAbortSignal.js.map

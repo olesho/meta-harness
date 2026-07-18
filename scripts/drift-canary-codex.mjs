@@ -68,7 +68,9 @@ async function main() {
       return ExitError;
     }
     process.stderr.write(
-      "drift-canary: " + (err instanceof Error ? err.message : String(err)) + "\n",
+      "drift-canary: " +
+        (err instanceof Error ? err.message : String(err)) +
+        "\n",
     );
     return ExitError;
   }

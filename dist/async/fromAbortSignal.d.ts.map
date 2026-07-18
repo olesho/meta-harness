@@ -1,1 +1,1 @@
-{"version":3,"file":"fromAbortSignal.d.ts","sourceRoot":"","sources":["../../src/async/fromAbortSignal.ts"],"names":[],"mappings":"AAUA,OAAO,EAAE,OAAO,EAAe,MAAM,8BAA8B,CAAA;AAEnE;;;;;;GAMG;AACH,wBAAgB,eAAe,CAC7B,MAAM,EAAE,WAAW,EACnB,UAAU,CAAC,EAAE,MAAM,GAClB,OAAO,CAkBT"}
+{"version":3,"file":"fromAbortSignal.d.ts","sourceRoot":"","sources":["../../src/async/fromAbortSignal.ts"],"names":[],"mappings":"AAUA,OAAO,EAAE,OAAO,EAAe,MAAM,8BAA8B,CAAC;AAEpE;;;;;;GAMG;AACH,wBAAgB,eAAe,CAC7B,MAAM,EAAE,WAAW,EACnB,UAAU,CAAC,EAAE,MAAM,GAClB,OAAO,CAsBT"}

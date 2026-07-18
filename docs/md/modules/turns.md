@@ -6,7 +6,7 @@ Interprets a harness's low-level signals — [screen](screen.md) snapshots and
 that does the pattern-matching, a generic fallback, and a **[`Watcher`](#the-watcher)**
 that merges the two signal sources into one ordered event stream.
 
-This layer is *stateless interpretation*: it doesn't own the process (that's
+This layer is _stateless interpretation_: it doesn't own the process (that's
 [`wrapper`](wrapper.md)) or the conversation (that's [`chat`](chat.md)). It answers one
 question continuously — "given what's on screen and the wrapper's status, what just
 happened in the conversation?"
@@ -29,24 +29,24 @@ import {
 `Kind` is a deliberately small set; adapters attach detail via `reason`/`snap`/`input`
 rather than growing it. Each name is a **string constant** you compare against `ev.kind`:
 
-| Constant | Value | Meaning |
-| --- | --- | --- |
-| `TurnComplete` | `"turn_complete"` | Assistant finished; you may send the next message. |
-| `ToolCall` | `"tool_call"` | Harness is invoking a tool. Informational; turn continues. |
-| `Blocked` | `"blocked"` | Transient block (cost/quota/rate-limit); back off and retry. |
-| `Errored` | `"errored"` | Terminal failure; the turn won't complete. |
-| `InputRequested` | `"input_requested"` | Blocked on an interactive prompt — see `ev.input`. |
-| `InputResolved` | `"input_resolved"` | A prompt is no longer on screen. |
+| Constant         | Value               | Meaning                                                      |
+| ---------------- | ------------------- | ------------------------------------------------------------ |
+| `TurnComplete`   | `"turn_complete"`   | Assistant finished; you may send the next message.           |
+| `ToolCall`       | `"tool_call"`       | Harness is invoking a tool. Informational; turn continues.   |
+| `Blocked`        | `"blocked"`         | Transient block (cost/quota/rate-limit); back off and retry. |
+| `Errored`        | `"errored"`         | Terminal failure; the turn won't complete.                   |
+| `InputRequested` | `"input_requested"` | Blocked on an interactive prompt — see `ev.input`.           |
+| `InputResolved`  | `"input_resolved"`  | A prompt is no longer on screen.                             |
 
 ```ts
 interface Event {
-  kind: Kind
-  reason: string          // human-readable; not for parsing
-  at?: Date               // Watcher backfills from the source event
-  snap?: Snapshot         // present for screen-derived events
-  httpCode?: number       // copied from the SessionEvent (api_error)
-  retryAfter?: number     // parsed retry hint (ms)
-  input?: InputRequest    // for input_requested / input_resolved
+  kind: Kind;
+  reason: string; // human-readable; not for parsing
+  at?: Date; // Watcher backfills from the source event
+  snap?: Snapshot; // present for screen-derived events
+  httpCode?: number; // copied from the SessionEvent (api_error)
+  retryAfter?: number; // parsed retry hint (ms)
+  input?: InputRequest; // for input_requested / input_resolved
 }
 ```
 
@@ -54,22 +54,22 @@ interface Event {
 
 ```ts
 interface InputRequest {
-  id: string              // stable across redraws of the SAME prompt; changes for a new one
-  kind: string            // "trust_prompt" | "menu_select" | "confirm" | "text_input"
-                          //   | "question" | "question_review" | "approval_prompt"
-  prompt: string
-  options?: InputOption[] // undefined for free-text prompts
-  header?: string         // kind "question": the dialog's tab label
-  multiSelect?: boolean   // kind "question": options TOGGLE; commit with submitKeys
-  submitKeys?: Uint8Array // bytes committing a multi-select answer after toggles
+  id: string; // stable across redraws of the SAME prompt; changes for a new one
+  kind: string; // "trust_prompt" | "menu_select" | "confirm" | "text_input"
+  //   | "question" | "question_review" | "approval_prompt"
+  prompt: string;
+  options?: InputOption[]; // undefined for free-text prompts
+  header?: string; // kind "question": the dialog's tab label
+  multiSelect?: boolean; // kind "question": options TOGGLE; commit with submitKeys
+  submitKeys?: Uint8Array; // bytes committing a multi-select answer after toggles
 }
 
 interface InputOption {
-  id: string              // the answer references this (e.g. "1")
-  alias: string           // portable intent: "proceed" | "deny" | "yes" | "no" | "other" | ""
-  label: string
-  keys: Uint8Array        // bytes to write to the PTY to choose this option
-  description?: string    // explanatory text rendered under the label, when shown
+  id: string; // the answer references this (e.g. "1")
+  alias: string; // portable intent: "proceed" | "deny" | "yes" | "no" | "other" | ""
+  label: string;
+  keys: Uint8Array; // bytes to write to the PTY to choose this option
+  description?: string; // explanatory text rendered under the label, when shown
 }
 ```
 
@@ -89,14 +89,18 @@ the screen is neither busy nor a ready composer, so no other signal ever fires.
 `"approval_prompt"` carries Codex's mid-turn **command / apply-patch approval** dialog
 ("Would you like to run the following command?" / "Would you like to make the following
 edits?"): the numbered menu rows become options with `proceed`/`deny` aliases. The codex
-adapter checks for it *before* its startup-interstitial anchors, so an approval dialog
+adapter checks for it _before_ its startup-interstitial anchors, so an approval dialog
 whose body quotes an interstitial phrase is never auto-dismissed — which would press
 Enter on the highlighted "Yes" and silently auto-approve.
 
 ### `Turn`
 
 ```ts
-interface Turn { role: string; text: string; timestamp?: Date }
+interface Turn {
+  role: string;
+  text: string;
+  timestamp?: Date;
+}
 ```
 
 The lossy transcript view returned by a [`TranscriptReader`](#optional-capabilities)
@@ -110,9 +114,9 @@ Every adapter implements a tiny required core:
 
 ```ts
 interface Adapter {
-  name(): string                                             // "generic", "codex", …
-  onScreen(snap: Snapshot): Event[]                          // after each screen write
-  onWrapperStatus(status: Status, reason: string): Event[]   // on each wrapper status event
+  name(): string; // "generic", "codex", …
+  onScreen(snap: Snapshot): Event[]; // after each screen write
+  onWrapperStatus(status: Status, reason: string): Event[]; // on each wrapper status event
 }
 ```
 
@@ -127,20 +131,20 @@ not implement. The chat layer probes for each structurally (`typeof adapter.meth
 "function"`), the TypeScript analogue of a Go optional-interface assertion. Implement a
 subset; each one lights up a feature.
 
-| Interface | Method | Enables |
-| --- | --- | --- |
-| `SessionIDExtractor` | `extractSessionID(snap): [string, boolean]` | Scrape the harness id from the screen. |
-| `RawSessionIDExtractor` | `extractSessionIDFromLine(line): [string, boolean]` | Recover the id from a raw PTY line. |
-| `SessionIDLocator` | `locateSessionID(workingDir): [string, boolean]` | Recover the id from on-disk state. |
-| `SessionIDPrimer` | `primeSessionIDKeys(): Uint8Array` | Keystrokes that surface the id on screen. |
-| `SessionInitializer` | `initSession(): [string[], string]` | Mint a fresh id + the launch args pinning it. |
-| `SessionResumer` | `resumeArgs(id): string[]` | Argv that resumes a prior session. |
-| `SessionForkResumer` | `resumeForksSessionID(): boolean` | Report whether resume mints a *new* id. |
-| `SessionControlFlags` | `sessionControlFlags(): string[]` | Flags chat manages (banned from user args). |
-| `BusyDetector` | `busy(snap): boolean` | Whether the harness is still working. |
-| `MessageExtractor` | `extractMessage(snap): [string, boolean]` | Isolate the clean reply text. |
-| `Quitter` | `quitSequence(): Uint8Array` | Graceful-exit keystrokes. |
-| `TranscriptReader` | `readTranscript(id, workingDir): Turn[]` | Read the harness's own session log. |
+| Interface               | Method                                              | Enables                                       |
+| ----------------------- | --------------------------------------------------- | --------------------------------------------- |
+| `SessionIDExtractor`    | `extractSessionID(snap): [string, boolean]`         | Scrape the harness id from the screen.        |
+| `RawSessionIDExtractor` | `extractSessionIDFromLine(line): [string, boolean]` | Recover the id from a raw PTY line.           |
+| `SessionIDLocator`      | `locateSessionID(workingDir): [string, boolean]`    | Recover the id from on-disk state.            |
+| `SessionIDPrimer`       | `primeSessionIDKeys(): Uint8Array`                  | Keystrokes that surface the id on screen.     |
+| `SessionInitializer`    | `initSession(): [string[], string]`                 | Mint a fresh id + the launch args pinning it. |
+| `SessionResumer`        | `resumeArgs(id): string[]`                          | Argv that resumes a prior session.            |
+| `SessionForkResumer`    | `resumeForksSessionID(): boolean`                   | Report whether resume mints a _new_ id.       |
+| `SessionControlFlags`   | `sessionControlFlags(): string[]`                   | Flags chat manages (banned from user args).   |
+| `BusyDetector`          | `busy(snap): boolean`                               | Whether the harness is still working.         |
+| `MessageExtractor`      | `extractMessage(snap): [string, boolean]`           | Isolate the clean reply text.                 |
+| `Quitter`               | `quitSequence(): Uint8Array`                        | Graceful-exit keystrokes.                     |
+| `TranscriptReader`      | `readTranscript(id, workingDir): Turn[]`            | Read the harness's own session log.           |
 
 `[string, boolean]` returns are the Go `(value, ok)` idiom: the boolean says whether the
 value is valid. Which harness implements which is tabulated in
@@ -174,20 +178,30 @@ iterating `events()` to exhaustion does not by itself stop the screen subscripti
 ### Session types
 
 ```ts
-interface SessionLike { events(): AsyncIterable<SessionEvent> }   // the minimal wrapper surface the Watcher needs
+interface SessionLike {
+  events(): AsyncIterable<SessionEvent>;
+} // the minimal wrapper surface the Watcher needs
 
 interface SessionEvent {
-  at?: Date
-  status: Status
-  reason: string
-  terminated: boolean
-  httpCode?: number
-  retryAfter?: number
+  at?: Date;
+  status: Status;
+  reason: string;
+  terminated: boolean;
+  httpCode?: number;
+  retryAfter?: number;
 }
 
 type Status =
-  | "idle" | "failed" | "blocked_by_cost" | "retry_later" | "api_error"
-  | "waiting_for_input" | "stale" | "interrupted" | "unknown" | "binary_not_found"
+  | "idle"
+  | "failed"
+  | "blocked_by_cost"
+  | "retry_later"
+  | "api_error"
+  | "waiting_for_input"
+  | "stale"
+  | "interrupted"
+  | "unknown"
+  | "binary_not_found";
 ```
 
 `Status` is re-exported here with constants (`StatusIdle`, `StatusWaitingForInput`,
@@ -201,12 +215,12 @@ adapter maps them straight to events (see below).
 Five adapters, each a namespace exposing `New()` (mirroring the Go per-package layout):
 
 ```ts
-const a = claudecode.New()   // also: generic.New(), codex.New(), opencode.New(), pi.New()
+const a = claudecode.New(); // also: generic.New(), codex.New(), opencode.New(), pi.New()
 ```
 
 - **`generic`** — the fallback. No screen scraping; `onWrapperStatus` maps status → event
   (`waiting_for_input → TurnComplete`, `blocked_by_cost`/`retry_later`/`api_error →
-  Blocked`, `failed`/`interrupted`/`idle → Errored`). Every other adapter extends it.
+Blocked`, `failed`/`interrupted`/`idle → Errored`). Every other adapter extends it.
 - **`claudecode`** — thinking-marker turn completion, interrupt detection, trust-prompt
   detection, AskUserQuestion detection (`question`/`question_review` requests); implements
   `MessageExtractor`, `BusyDetector`, `Quitter`, `SessionResumer`,

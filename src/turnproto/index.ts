@@ -11,6 +11,6 @@ export {
   DeadlineLine,
   type TurnStatus,
   type StructuredTurnResult,
-} from "./protocol.ts"
+} from "./protocol.ts";
 
-export { parseLastJSONLine } from "./parse.ts"
+export { parseLastJSONLine } from "./parse.ts";

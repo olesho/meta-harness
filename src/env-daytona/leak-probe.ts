@@ -8,7 +8,7 @@
 // between codebases: the Go env.go list was manually synced with the TS probe
 // and diverged (CLAUDE_CODE_OAUTH_TOKEN is in Go but was missing from TS).
 
-import { shQuote } from "../env/argv.ts"
+import { shQuote } from "../env/argv.ts";
 
 export const CREDENTIAL_SENSITIVE_ENV_NAMES = [
   "DAYTONA_API_KEY",
@@ -25,7 +25,7 @@ export const CREDENTIAL_SENSITIVE_ENV_NAMES = [
   "GOOGLE_APPLICATION_CREDENTIALS",
   "CURSOR_API_KEY",
   "CLAUDE_CODE_OAUTH_TOKEN",
-]
+];
 
 /**
  * Generate a shell command that probes for credential leaks in the current
@@ -41,7 +41,7 @@ export const CREDENTIAL_SENSITIVE_ENV_NAMES = [
 export function credentialLeakProbe(): string {
   const nameArrays = CREDENTIAL_SENSITIVE_ENV_NAMES.map(
     (name) => `['${name}']`,
-  )
+  );
   const code = [
     "const names=[",
     ...nameArrays.map((arr) => arr + ","),
@@ -49,8 +49,8 @@ export function credentialLeakProbe(): string {
     "let count=0;",
     "for (const name of names) if (process.env[name]) count++;",
     "console.log(count);",
-  ].join("")
+  ].join("");
 
   // Shell-quote the entire node -e argument
-  return "node -e " + shQuote(code)
+  return "node -e " + shQuote(code);
 }

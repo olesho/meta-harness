@@ -18,7 +18,7 @@ export interface StructuredArgs {
  */
 export declare function parseStructuredArgs(argv: string[]): StructuredArgs;
 /** readTranscript reads the harness's on-disk session and maps to the public DTO. */
-export declare function readTranscript(harness: string, harnessSessionID: string, workingDir: string): Array<Record<string, unknown>>;
+export declare function readTranscript(harness: string, harnessSessionID: string, workingDir: string): Record<string, unknown>[];
 /** readUsage reads the session's token totals; null when none recorded. */
 export declare function readUsage(harness: string, harnessSessionID: string, workingDir: string): Record<string, number> | null;
 export declare function main(argv: string[]): Promise<number>;

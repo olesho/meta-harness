@@ -38,4 +38,6 @@ if (!matches) {
   process.exit(1);
 }
 
-console.log(`check-deps: runtime dependencies are exactly ${JSON.stringify(expected)}`);
+console.log(
+  `check-deps: runtime dependencies are exactly ${JSON.stringify(expected)}`,
+);

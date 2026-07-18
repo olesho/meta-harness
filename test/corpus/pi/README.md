@@ -5,11 +5,11 @@ recorded live while implementing the pi adapter/profile. They document the real
 on-the-wire shapes the code keys on; they are NOT yet wired into an automated
 replay test (that is the remaining corpus work — see below).
 
-| File | What it is | Used to validate |
-|---|---|---|
-| `headless-json-simple.jsonl` | `pi -p --mode json` for a no-tool turn | session header → `pkg/harness/pi` SessionID; `message_end` vs `turn_end` de-dup → StreamParser |
-| `headless-json-toolcall.jsonl` | `pi -p --mode json --tools read` (a `read` tool call) | `toolCall` block + `toolResult` message (with `toolCallId`) → StreamParser tool events |
-| `tui-turn-raw.bin` | raw PTY bytes of one interactive turn | submit key (`\r`), `Working...`/`Thinking...` busy spinner, idle status line, OSC 133 markers |
+| File                           | What it is                                            | Used to validate                                                                               |
+| ------------------------------ | ----------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `headless-json-simple.jsonl`   | `pi -p --mode json` for a no-tool turn                | session header → `pkg/harness/pi` SessionID; `message_end` vs `turn_end` de-dup → StreamParser |
+| `headless-json-toolcall.jsonl` | `pi -p --mode json --tools read` (a `read` tool call) | `toolCall` block + `toolResult` message (with `toolCallId`) → StreamParser tool events         |
+| `tui-turn-raw.bin`             | raw PTY bytes of one interactive turn                 | submit key (`\r`), `Working...`/`Thinking...` busy spinner, idle status line, OSC 133 markers  |
 
 ## Key shapes (quick reference)
 

@@ -26,7 +26,7 @@ export type {
   StreamParser,
   TranscriptReader,
   Turn,
-} from "./types.ts"
+} from "./types.ts";
 
 export {
   AcquisitionModeHooks,
@@ -39,9 +39,9 @@ export {
   InputResolved,
   ToolCall,
   TurnComplete,
-} from "./types.ts"
+} from "./types.ts";
 
-export type { SessionEvent, SessionLike, Status } from "./wrapper.ts"
+export type { SessionEvent, SessionLike, Status } from "./wrapper.ts";
 export {
   StatusAPIError,
   StatusBinaryNotFound,
@@ -53,15 +53,15 @@ export {
   StatusStale,
   StatusUnknown,
   StatusWaitingForInput,
-} from "./wrapper.ts"
+} from "./wrapper.ts";
 
-export { Watch, Watcher } from "./watcher.ts"
+export { Watch, Watcher } from "./watcher.ts";
 
 // Generic fallback adapter and the five per-harness adapters, exposed as
 // namespaces so callers write `generic.New()`, `claudecode.New()`, etc.,
 // mirroring the Go package layout. Internals are not part of the surface.
-export * as generic from "./generic.ts"
-export * as claudecode from "./harness/claudecode.ts"
-export * as codex from "./harness/codex.ts"
-export * as opencode from "./harness/opencode.ts"
-export * as pi from "./harness/pi.ts"
+export * as generic from "./generic.ts";
+export * as claudecode from "./harness/claudecode.ts";
+export * as codex from "./harness/codex.ts";
+export * as opencode from "./harness/opencode.ts";
+export * as pi from "./harness/pi.ts";

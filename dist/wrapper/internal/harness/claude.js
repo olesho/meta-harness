@@ -24,9 +24,7 @@ export function matchAPIError(stripped) {
     if (m[1]) {
         hit.code = parseInt(m[1], 10);
     }
-    else if (message.length > 0 &&
-        message[0] >= "0" &&
-        message[0] <= "9") {
+    else if (message.length > 0 && message[0] >= "0" && message[0] <= "9") {
         return null;
     }
     hit.retryAfter = parseRetryAfter(message);

@@ -34,7 +34,7 @@ export function envPrefixedShell(env, argv) {
     for (const a of argv)
         parts.push(shQuote(a));
     // "env" with no assignments is a harmless no-op prefix; drop it when unused.
-    return (env && Object.keys(env).length > 0)
+    return env && Object.keys(env).length > 0
         ? parts.join(" ")
         : argv.map(shQuote).join(" ");
 }

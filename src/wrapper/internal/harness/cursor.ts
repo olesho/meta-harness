@@ -2,7 +2,7 @@
 // free prose without an anchored "API Error: <code>" line, so this pack ships
 // only the idle-gated Cost/Retry/Prompt fingerprints (no APIError matcher).
 
-import { type Patterns as PatternSet } from "../detector/detector.ts"
+import { type Patterns as PatternSet } from "../detector/detector.ts";
 
 /** Cursor harness fingerprint set. */
 export const Patterns: PatternSet = {
@@ -28,4 +28,4 @@ export const Patterns: PatternSet = {
     "econnreset",
   ],
   prompt: ["(y/n)", "(yes/no)", "[y/n]", "continue?", "proceed?"],
-}
+};

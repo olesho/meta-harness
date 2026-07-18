@@ -3,7 +3,7 @@
 // Each is a stable, identity-comparable Sentinel carrying a unique code. Tests
 // assert membership with `isSentinel(err, ErrX)`, mirroring Go's
 // errors.Is(err, ErrX): it walks the Error `cause` chain matching by code.
-import { defineSentinel, isSentinel } from "../internal/async/index.js";
+import { defineSentinel, isSentinel, } from "../internal/async/index.js";
 /** Returned by Open when Options is incomplete or inconsistent. */
 export const ErrInvalidOptions = defineSentinel("chat/invalid-options", "chat: invalid options");
 /** Returned by Open when Options.Harness names no registered adapter. */

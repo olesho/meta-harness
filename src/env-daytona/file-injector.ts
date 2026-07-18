@@ -4,18 +4,18 @@
 // for redaction, and removed on cleanup. Generalizes loomcli's Part C/D
 // credential contract.
 
-import type { Context } from "../async/index.ts"
+import type { Context } from "../async/index.ts";
 import type {
   Capability,
   CredentialInjector,
   Workspace,
-} from "../env/types.ts"
+} from "../env/types.ts";
 
 export interface FileCredentialInjectorConfig {
   /** The secret token to write. Registered for redaction before apply. */
-  token: string
+  token: string;
   /** Guest filesystem path where the token is written (e.g., ~/.tokens/daytona). */
-  guestPath: string
+  guestPath: string;
 }
 
 /**
@@ -28,34 +28,34 @@ export interface FileCredentialInjectorConfig {
 export function fileCredentialInjector(
   config: FileCredentialInjectorConfig,
 ): CredentialInjector {
-  return new FileInjector(config)
+  return new FileInjector(config);
 }
 
 class FileInjector implements CredentialInjector {
   constructor(private config: FileCredentialInjectorConfig) {}
 
   requires(): Capability[] {
-    return []
+    return [];
   }
 
   redactions(): string[] {
-    return [this.config.token]
+    return [this.config.token];
   }
 
   async apply(ctx: Context, ws: Workspace): Promise<void> {
-    const guestPath = this.config.guestPath
-    const hostTemp = `/tmp/daytona-token-${Date.now()}`
+    const guestPath = this.config.guestPath;
+    const hostTemp = `/tmp/daytona-token-${Date.now()}`;
 
     // Write the token to a temporary host file
-    const fs = await import("node:fs/promises")
-    await fs.writeFile(hostTemp, this.config.token, "utf8")
+    const fs = await import("node:fs/promises");
+    await fs.writeFile(hostTemp, this.config.token, "utf8");
 
     try {
       // Upload to guest
-      await ws.upload(ctx, hostTemp, guestPath)
+      await ws.upload(ctx, hostTemp, guestPath);
     } finally {
       // Clean up the temporary host file
-      await fs.unlink(hostTemp).catch(() => {})
+      await fs.unlink(hostTemp).catch(() => {});
     }
   }
 
@@ -63,8 +63,8 @@ class FileInjector implements CredentialInjector {
     // Idempotently remove the credential file from the guest.
     // Use rm -f to suppress errors if the file doesn't exist.
     try {
-      const guestPath = this.config.guestPath
-      await ws.exec(ctx, ["rm", "-f", guestPath])
+      const guestPath = this.config.guestPath;
+      await ws.exec(ctx, ["rm", "-f", guestPath]);
     } catch {
       // Idempotent: cleanup swallows errors
     }

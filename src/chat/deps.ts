@@ -8,40 +8,40 @@
 // methods — the analogue of Go's optional-interface type assertions
 // (turns.Quitter, turns.BusyDetector, turns.RawSessionIDExtractor, …).
 
-import type { Snapshot, Screen } from "../screen/index.ts"
-import type { Context } from "../internal/async/index.ts"
-import type { ParsedEvent } from "../transcript/event.ts"
-import type { HookProvider } from "../hooks/provider.ts"
+import type { Snapshot, Screen } from "../screen/index.ts";
+import type { Context } from "../internal/async/index.ts";
+import type { ParsedEvent } from "../transcript/event.ts";
+import type { HookProvider } from "../hooks/provider.ts";
 
 /** A blocking interactive prompt as the turns layer reports it (with keystrokes). */
 export interface TurnsInputOption {
-  id: string
-  alias?: string
-  label: string
-  keys: Uint8Array
+  id: string;
+  alias?: string;
+  label: string;
+  keys: Uint8Array;
   /** Explanatory text rendered under the label, when the dialog shows one. */
-  description?: string
+  description?: string;
 }
 
 export interface TurnsInputRequest {
-  id: string
-  kind: string
-  prompt: string
-  options: TurnsInputOption[]
+  id: string;
+  kind: string;
+  prompt: string;
+  options: TurnsInputOption[];
   /** For kind "question": the dialog's header/tab label, when rendered. */
-  header?: string
+  header?: string;
   /** True when the prompt accepts multiple selections (each keys toggles). */
-  multiSelect?: boolean
+  multiSelect?: boolean;
   /** Bytes that commit a multi-select answer after the toggles. */
-  submitKeys?: Uint8Array
+  submitKeys?: Uint8Array;
 }
 
 /** One transcript entry read from the harness's own session log. */
 export interface TranscriptTurn {
-  role: string
-  text: string
+  role: string;
+  text: string;
   /** undefined if the log had no timestamp. */
-  timestamp?: Date
+  timestamp?: Date;
 }
 
 /** The kind of a low-level turn-state transition reported by the watcher. */
@@ -51,28 +51,28 @@ export type TurnEventKind =
   | "errored"
   | "tool_call"
   | "input_requested"
-  | "input_resolved"
+  | "input_resolved";
 
 /** A low-level turn-state transition from turns.Watcher. */
 export interface TurnEvent {
-  kind: TurnEventKind
-  at: Date
-  reason?: string
-  snap?: Snapshot
-  httpCode?: number
-  retryAfter?: number
-  input?: TurnsInputRequest
+  kind: TurnEventKind;
+  at: Date;
+  reason?: string;
+  snap?: Snapshot;
+  httpCode?: number;
+  retryAfter?: number;
+  input?: TurnsInputRequest;
 }
 
 /** A receive-only stream of values (the Channel<T> read surface). */
 export interface EventStream<T> {
-  receive(): Promise<{ value: T | undefined; ok: boolean }>
+  receive(): Promise<{ value: T | undefined; ok: boolean }>;
 }
 
 /** turns.Watcher: an ordered stream of turn events plus a Close. */
 export interface Watcher {
-  events(): EventStream<TurnEvent>
-  close(): Promise<void>
+  events(): EventStream<TurnEvent>;
+  close(): Promise<void>;
 }
 
 /**
@@ -82,28 +82,28 @@ export interface Watcher {
  */
 export interface WrapperSession {
   /** Write keystrokes to the harness PTY. Returns bytes written; throws on error. */
-  writeStdin(p: Uint8Array): number
+  writeStdin(p: Uint8Array): number;
   /** Acquire the exclusive stdin-writer lock: [release, ok]. */
-  acquireWriter(): [() => void, boolean]
+  acquireWriter(): [() => void, boolean];
   /** Match the PTY size to the virtual screen. */
-  resize(cols: number, rows: number): void
+  resize(cols: number, rows: number): void;
   /** Terminate the harness process. */
-  stop(ctx: Context): Promise<void>
+  stop(ctx: Context): Promise<void>;
 }
 
 /** wrapper.Config subset the chat layer fills in at Open. */
 export interface StartConfig {
-  binaryPath: string
-  args?: string[]
-  workingDir?: string
-  env?: string[]
+  binaryPath: string;
+  args?: string[];
+  workingDir?: string;
+  env?: string[];
   /** The screen the PTY read loop writes rendered bytes into. */
-  stdout: Screen
-  harness: string
-  effort?: string
-  model?: string
+  stdout: Screen;
+  harness: string;
+  effort?: string;
+  model?: string;
   /** Durable, no-drop per-line tap (wired only for RawSessionIDExtractor adapters). */
-  onLine?: (line: string) => void
+  onLine?: (line: string) => void;
 }
 
 /**
@@ -114,63 +114,66 @@ export interface StartConfig {
  */
 export interface Adapter {
   /** turns.RawSessionIDExtractor — recover the harness id from a raw output line. */
-  extractSessionIDFromLine?(line: string): [string, boolean]
+  extractSessionIDFromLine?(line: string): [string, boolean];
   /**
    * turns.StreamParser — parse zero or more live transcript events from a raw
    * stream-json line. Stateless/idempotent per line; tolerates non-event lines
    * by returning []. Omitted by adapters with no interleaved stream-json.
    */
-  parseStreamLine?(line: string): ParsedEvent[]
+  parseStreamLine?(line: string): ParsedEvent[];
   /**
    * turns.StreamInterleaved — reports whether stream-json is emitted interleaved
    * with the interactive TUI (Stream-eligible). Omitted => not interleaved.
    */
-  streamInterleaved?(): boolean
+  streamInterleaved?(): boolean;
   /** turns.SessionIDExtractor — scrape the id from the rendered screen. */
-  extractSessionID?(snap: Snapshot): [string, boolean]
+  extractSessionID?(snap: Snapshot): [string, boolean];
   /** turns.SessionIDLocator — locate the id from the on-disk session log. */
-  locateSessionID?(workingDir: string): [string, boolean]
+  locateSessionID?(workingDir: string): [string, boolean];
   /** turns.SessionIDPrimer — keystrokes that surface the session id on screen. */
-  primeSessionIDKeys?(): Uint8Array
+  primeSessionIDKeys?(): Uint8Array;
   /** turns.TranscriptReader — read the harness's own JSONL session log. */
-  readTranscript?(harnessSessionID: string, workingDir: string): TranscriptTurn[]
+  readTranscript?(
+    harnessSessionID: string,
+    workingDir: string,
+  ): TranscriptTurn[];
   /** turns.MessageExtractor — isolate the clean assistant reply from the TUI. */
-  extractMessage?(snap: Snapshot): [string, boolean]
+  extractMessage?(snap: Snapshot): [string, boolean];
   /** turns.BusyDetector — report whether the harness is still working. */
-  busy?(snap: Snapshot): boolean
+  busy?(snap: Snapshot): boolean;
   /**
    * turns.SwallowedPromptDetector — report whether a settled screen shows no
    * assistant output for the in-flight turn (the prompt was never accepted).
    * Consulted only on the idle-completion fallback path; omitted => never.
    */
-  promptNotAccepted?(snap: Snapshot, sentScreenText: string): boolean
+  promptNotAccepted?(snap: Snapshot, sentScreenText: string): boolean;
   /** turns.Quitter — the graceful-exit keystroke sequence. */
-  quitSequence?(): Uint8Array
+  quitSequence?(): Uint8Array;
   /**
    * turns.SessionForkResumer — reports whether `resume` mints a NEW harness
    * session id (forks) rather than continuing the old one. When true, the chat
    * layer arms a one-shot provisional refresh of the seeded id. Omitted =>
    * no-fork (Claude Code; Codex, per the empirically-verified 0.142 finding).
    */
-  resumeForksSessionID?(): boolean
+  resumeForksSessionID?(): boolean;
   /** turns.SessionResumer — argv fragment that resumes a prior harness session. */
-  resumeArgs?(harnessSessionID: string): string[]
+  resumeArgs?(harnessSessionID: string): string[];
   /** turns.SessionInitializer — mint a fresh session id + the argv that pins it. */
-  initSession?(): [string[], string]
+  initSession?(): [string[], string];
   /** turns.SessionControlFlags — flags chat manages, banned from Options.args. */
-  sessionControlFlags?(): string[]
+  sessionControlFlags?(): string[];
   /**
    * Pi-style capability: chat calls this once at Open with the effective child
    * env and cwd so an adapter can pin where it reads its session log from.
    */
-  bindLaunchEnv?(env: string[], workingDir: string): void
+  bindLaunchEnv?(env: string[], workingDir: string): void;
   /**
    * turns.HookProviderCapability — surface the harness's HookProvider, whose
    * ensureConfig installs/rewrites the managed on-disk hook block and whose
    * parsePayload parses native hook payloads into canonical Events. Probed
    * structurally, like readTranscript; omitted => no managed-hook integration.
    */
-  hookProvider?(): HookProvider
+  hookProvider?(): HookProvider;
 }
 
 /**
@@ -181,9 +184,9 @@ export interface Adapter {
  */
 export interface Backend {
   /** Map Options.harness to a turns.Adapter; throws ErrUnknownHarness if unknown. */
-  resolveAdapter(name: string): Adapter
+  resolveAdapter(name: string): Adapter;
   /** wrapper.Start: launch the harness and return its supervised session. */
-  start(cfg: StartConfig): Promise<WrapperSession>
+  start(cfg: StartConfig): Promise<WrapperSession>;
   /** turns.Watch: build the turn-state watcher over (session, screen, adapter). */
-  watch(sess: WrapperSession, screen: Screen, adapter: Adapter): Watcher
+  watch(sess: WrapperSession, screen: Screen, adapter: Adapter): Watcher;
 }

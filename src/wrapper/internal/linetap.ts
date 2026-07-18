@@ -6,15 +6,15 @@
 // onLine runs synchronously, so delivery is ordered and non-lossy: a slow
 // callback back-pressures the caller rather than dropping a line.
 
-const NL = 0x0a // '\n'
-const CR = 0x0d // '\r'
+const NL = 0x0a; // '\n'
+const CR = 0x0d; // '\r'
 
 export class LineSplitter {
-  private readonly onLine: (line: string) => void
-  private buf: Uint8Array = new Uint8Array(0)
+  private readonly onLine: (line: string) => void;
+  private buf: Uint8Array = new Uint8Array(0);
 
   constructor(onLine: (line: string) => void) {
-    this.onLine = onLine
+    this.onLine = onLine;
   }
 
   /**
@@ -25,33 +25,33 @@ export class LineSplitter {
   write(p: Uint8Array): void {
     // Concatenate the carried remainder with the new chunk.
     if (this.buf.length === 0) {
-      this.buf = p
+      this.buf = p;
     } else {
-      const merged = new Uint8Array(this.buf.length + p.length)
-      merged.set(this.buf, 0)
-      merged.set(p, this.buf.length)
-      this.buf = merged
+      const merged = new Uint8Array(this.buf.length + p.length);
+      merged.set(this.buf, 0);
+      merged.set(p, this.buf.length);
+      this.buf = merged;
     }
 
-    let start = 0
-    let consumed = false
+    let start = 0;
+    let consumed = false;
     for (;;) {
-      const i = this.buf.indexOf(NL, start)
-      if (i < 0) break
-      let end = i
-      if (end > start && this.buf[end - 1] === CR) end--
-      this.onLine(decode(this.buf, start, end))
-      start = i + 1
-      consumed = true
+      const i = this.buf.indexOf(NL, start);
+      if (i < 0) break;
+      let end = i;
+      if (end > start && this.buf[end - 1] === CR) end--;
+      this.onLine(decode(this.buf, start, end));
+      start = i + 1;
+      consumed = true;
     }
 
     // Reclaim the consumed prefix so the backing array doesn't grow unbounded.
     if (!consumed) {
       // partial line still accumulating — keep buf as-is.
     } else if (start === this.buf.length) {
-      this.buf = new Uint8Array(0)
+      this.buf = new Uint8Array(0);
     } else {
-      this.buf = this.buf.slice(start)
+      this.buf = this.buf.slice(start);
     }
   }
 
@@ -60,16 +60,16 @@ export class LineSplitter {
    * harness that exits without a trailing newline still delivers its last line.
    */
   flush(): void {
-    if (this.buf.length === 0) return
-    let end = this.buf.length
-    if (end > 0 && this.buf[end - 1] === CR) end--
-    this.onLine(decode(this.buf, 0, end))
-    this.buf = new Uint8Array(0)
+    if (this.buf.length === 0) return;
+    let end = this.buf.length;
+    if (end > 0 && this.buf[end - 1] === CR) end--;
+    this.onLine(decode(this.buf, 0, end));
+    this.buf = new Uint8Array(0);
   }
 }
 
 function decode(buf: Uint8Array, start: number, end: number): string {
-  return new TextDecoder().decode(buf.subarray(start, end))
+  return new TextDecoder().decode(buf.subarray(start, end));
 }
 
 /**
@@ -80,6 +80,6 @@ function decode(buf: Uint8Array, start: number, end: number): string {
 export function newLineSplitter(
   onLine: ((line: string) => void) | null,
 ): LineSplitter | null {
-  if (onLine === null) return null
-  return new LineSplitter(onLine)
+  if (onLine === null) return null;
+  return new LineSplitter(onLine);
 }

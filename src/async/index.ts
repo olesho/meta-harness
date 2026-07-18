@@ -22,6 +22,6 @@ export {
   ctxCanceled,
   ctxDeadlineExceeded,
   type CancelFn,
-} from "../internal/async/context.ts"
+} from "../internal/async/context.ts";
 
-export { fromAbortSignal } from "./fromAbortSignal.ts"
+export { fromAbortSignal } from "./fromAbortSignal.ts";

@@ -13,14 +13,14 @@ is the ground truth for "what works with which."
 
 ## Support matrix
 
-| Harness | name | binary | npm package | pinned¹ | chat adapter² | effort / model | transcript history³ |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| **Claude Code** | `claude-code` | `claude` | `@anthropic-ai/claude-code` | 2.1.201 | ✓ full | ✓ / ✓ | ✓ `ClaudeCodeReader` |
-| **Codex** | `codex` | `codex` | `@openai/codex` | 0.142.5 | ✓ full | ✓ / ✓ | ✓ `CodexReader` |
-| **pi** | `pi` | `pi` | `@earendil-works/pi-coding-agent` | 0.76.0 | ✓ full | ✗ / ✗ | ✓ `PiReader`⁴ |
-| **OpenCode** | `opencode` | `opencode` | `opencode-ai` | *(unpinned)* | ◑ stub | ✗ / ✗ | ✗ store only |
-| **Cursor** | `cursor` | — | — | — | ✗ wrapper-only | ✗ / ✗ | ✗ n/a |
-| *(fallback)* | `generic` / `""` | any | — | — | ◑ status-only | ✗ / ✗ | ✗ store only |
+| Harness         | name             | binary     | npm package                       | pinned¹      | chat adapter²  | effort / model | transcript history³  |
+| --------------- | ---------------- | ---------- | --------------------------------- | ------------ | -------------- | -------------- | -------------------- |
+| **Claude Code** | `claude-code`    | `claude`   | `@anthropic-ai/claude-code`       | 2.1.201      | ✓ full         | ✓ / ✓          | ✓ `ClaudeCodeReader` |
+| **Codex**       | `codex`          | `codex`    | `@openai/codex`                   | 0.142.5      | ✓ full         | ✓ / ✓          | ✓ `CodexReader`      |
+| **pi**          | `pi`             | `pi`       | `@earendil-works/pi-coding-agent` | 0.76.0       | ✓ full         | ✗ / ✗          | ✓ `PiReader`⁴        |
+| **OpenCode**    | `opencode`       | `opencode` | `opencode-ai`                     | _(unpinned)_ | ◑ stub         | ✗ / ✗          | ✗ store only         |
+| **Cursor**      | `cursor`         | —          | —                                 | —            | ✗ wrapper-only | ✗ / ✗          | ✗ n/a                |
+| _(fallback)_    | `generic` / `""` | any        | —                                 | —            | ◑ status-only  | ✗ / ✗          | ✗ store only         |
 
 ¹ From [`versions.json`](modules/versions.md); the upstream release each adapter is
 verified against. ² Whether [`chat.resolveAdapter`](modules/chat.md#opening-a-conversation) maps the
@@ -31,26 +31,26 @@ returns the lossy `Turn[]` view directly, not `Event[]` like the other two reade
 
 ### Capability detail (chat adapters)
 
-| Capability | Claude Code | Codex | pi | OpenCode | generic |
-| --- | :---: | :---: | :---: | :---: | :---: |
-| Turn-complete from screen | ✓ marker | ✓ (legacy)⁵ | — | — | — |
-| `BusyDetector` | ✓ | — | ✓ | — | — |
-| `MessageExtractor` | ✓ | — | — | — | — |
-| `Quitter` | ✓ | — | ✓ | — | — |
-| session id: from screen (`SessionIDExtractor`) | — | ✓ | — | — | — |
-| session id: from raw line (`RawSessionIDExtractor`) | ✓ | ✓ | — | — | — |
-| session id: prime (`SessionIDPrimer`) | — | ✓ | — | — | — |
-| `SessionInitializer` (mint id at launch) | — | — | ✓ | — | — |
-| `SessionResumer` (resume args) | ✓ | ✓ | ✓ | — | — |
-| `SessionForkResumer` | no-fork | ✓ (false)⁶ | no-fork | — | — |
-| `TranscriptReader` | ✓ | ✓ | ✓ | — | — |
-| Startup interstitial auto-dismiss | — | ✓⁷ | — | — | — |
-| Input requests detected | ✓ `trust_prompt` · `question` · `question_review` | ✓ `approval_prompt`⁸ | — | — | — |
+| Capability                                          |                    Claude Code                    |        Codex         |   pi    | OpenCode | generic |
+| --------------------------------------------------- | :-----------------------------------------------: | :------------------: | :-----: | :------: | :-----: |
+| Turn-complete from screen                           |                     ✓ marker                      |     ✓ (legacy)⁵      |    —    |    —     |    —    |
+| `BusyDetector`                                      |                         ✓                         |          —           |    ✓    |    —     |    —    |
+| `MessageExtractor`                                  |                         ✓                         |          —           |    —    |    —     |    —    |
+| `Quitter`                                           |                         ✓                         |          —           |    ✓    |    —     |    —    |
+| session id: from screen (`SessionIDExtractor`)      |                         —                         |          ✓           |    —    |    —     |    —    |
+| session id: from raw line (`RawSessionIDExtractor`) |                         ✓                         |          ✓           |    —    |    —     |    —    |
+| session id: prime (`SessionIDPrimer`)               |                         —                         |          ✓           |    —    |    —     |    —    |
+| `SessionInitializer` (mint id at launch)            |                         —                         |          —           |    ✓    |    —     |    —    |
+| `SessionResumer` (resume args)                      |                         ✓                         |          ✓           |    ✓    |    —     |    —    |
+| `SessionForkResumer`                                |                      no-fork                      |      ✓ (false)⁶      | no-fork |    —     |    —    |
+| `TranscriptReader`                                  |                         ✓                         |          ✓           |    ✓    |    —     |    —    |
+| Startup interstitial auto-dismiss                   |                         —                         |          ✓⁷          |    —    |    —     |    —    |
+| Input requests detected                             | ✓ `trust_prompt` · `question` · `question_review` | ✓ `approval_prompt`⁸ |    —    |    —     |    —    |
 
 ⁵ Codex ≤ 0.141 emitted a "Token usage:" footer chat could scrape; 0.142+ has no screen
 signal, so completion falls back to [status-driven mapping](#the-generic-fallback).
 ⁶ Codex explicitly reports `resumeForksSessionID() === false` — verified against
-codex-cli 0.142.5, resume continues the *same* id. ⁷ Codex's "Update available!",
+codex-cli 0.142.5, resume continues the _same_ id. ⁷ Codex's "Update available!",
 model-migration, and "Press enter to continue" interstitials are auto-dismissed at
 startup unless [`disableCodexAutoDismiss`](modules/chat.md#options) is set.
 ⁸ Codex's command / apply-patch approval dialogs surface as `approval_prompt`
@@ -104,7 +104,7 @@ Name `codex`, binary `codex`.
   ≤ 0.141 "Token usage:" footer is still recognized for older builds.)
 - **Session id.** Two paths: scraped from the `│ Session: <uuid> │` row of the `/status`
   box (`SessionIDExtractor`, gated on the box header to resist spoofing), and from a
-  `codex resume <uuid>` hint (`RawSessionIDExtractor`). chat *primes* the id at startup by
+  `codex resume <uuid>` hint (`RawSessionIDExtractor`). chat _primes_ the id at startup by
   writing `/status` (`SessionIDPrimer`) — this needs a terminal ≥ ~60 columns.
 - **Resume.** `resume <uuid>`; reports `resumeForksSessionID() === false`.
 - **History.** [`CodexReader`](modules/transcript.md#codexreader) reads
@@ -115,7 +115,7 @@ Name `codex`, binary `codex`.
 - **Interactive prompts.** The command / apply-patch approval dialogs ("Would you like
   to run the following command?" / "Would you like to make the following edits?") are
   detected as `approval_prompt` input requests — numbered options with `proceed`/`deny`
-  aliases, so a policy or client can approve or reject. Detection is checked *before*
+  aliases, so a policy or client can approve or reject. Detection is checked _before_
   the interstitial anchors, so an approval dialog whose body quotes an interstitial
   phrase is never auto-dismissed (auto-approved) by mistake. The [one-shot
   loop](modules/oneshot.md) ships no policy for these — see its caveat. See
@@ -189,14 +189,14 @@ Use [`discovery`](modules/discovery.md) to see what's installed and whether it m
 the pin:
 
 ```ts
-import { lookup, discover } from "meta-harness/discovery"
+import { lookup, discover } from "meta-harness/discovery";
 
-lookup("claude-code")
+lookup("claude-code");
 // → { installed: true, path: "/usr/local/bin/claude",
 //     pinnedVersion: "2.1.201", detectedVersion: "2.1.201",
 //     versionMatchesPin: true, … }
 
-discover()   // Info[] for every harness in versions.json
+discover(); // Info[] for every harness in versions.json
 ```
 
 Default version probes are registered for `codex`, `claude-code`, `opencode`, and `pi`.

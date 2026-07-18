@@ -11,4 +11,4 @@ export {
   errVerifiedAtWithoutPinned,
   errParse,
   errRead,
-} from "./versions.ts"
+} from "./versions.ts";

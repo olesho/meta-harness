@@ -32,6 +32,9 @@ export const errRead = defineSentinel("versions/read", "versions: read");
 const embeddedPath = join(dirname(fileURLToPath(import.meta.url)), "versions.json");
 const embedded = readFileSync(embeddedPath, "utf8");
 function parse(data) {
+    // JSON.parse yields `unknown`: keep the shape honest so the runtime guards
+    // below (non-null object, per-entry field types) stay load-bearing rather
+    // than being cast away as "provably unnecessary".
     let raw;
     try {
         raw = JSON.parse(data);
@@ -43,6 +46,7 @@ function parse(data) {
         throw wrap("versions: parse", errParse);
     }
     const out = new Map();
+    // Entry values may be null/non-object in malformed input, hence `e?.`.
     for (const [name, e] of Object.entries(raw)) {
         const pkg = typeof e?.package === "string" ? e.package : "";
         const binary = typeof e?.binary === "string" ? e.binary : "";

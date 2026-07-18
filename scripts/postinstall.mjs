@@ -10,7 +10,12 @@ import { dirname, join } from "node:path";
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const prebuilds = join(root, "node_modules", "node-pty", "prebuilds");
 
-for (const platform of ["darwin-arm64", "darwin-x64", "linux-x64", "linux-arm64"]) {
+for (const platform of [
+  "darwin-arm64",
+  "darwin-x64",
+  "linux-x64",
+  "linux-arm64",
+]) {
   const helper = join(prebuilds, platform, "spawn-helper");
   if (!existsSync(helper)) continue;
   const mode = statSync(helper).mode;

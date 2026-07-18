@@ -4,7 +4,7 @@
 //
 // Importing "./probes.ts" for its side effect registers the default semver
 // probes for every harness, the analogue of Go's package init().
-import "./probes.ts"
+import "./probes.ts";
 
 export {
   type Info,
@@ -16,8 +16,8 @@ export {
   resetCache,
   defaultProbeTimeoutMs,
   WELL_KNOWN_DIRS,
-} from "./discovery.ts"
-export { SemverDashVProbe, semverRe } from "./probes.ts"
+} from "./discovery.ts";
+export { SemverDashVProbe, semverRe } from "./probes.ts";
 export {
   type ModelInfo,
   type DiscoverModelsOptions,
@@ -26,4 +26,4 @@ export {
   defaultModel,
   isKnownModel,
   discoverModels,
-} from "./models.ts"
+} from "./models.ts";

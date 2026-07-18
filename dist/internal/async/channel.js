@@ -34,7 +34,12 @@ export class Channel {
         }
         // Full buffer (or unbuffered with no receiver): block until drained.
         await new Promise((resolve, reject) => {
-            this._sendWaiters.push({ value, resolve: () => resolve() });
+            this._sendWaiters.push({
+                value,
+                resolve: () => {
+                    resolve();
+                },
+            });
             // If closed while waiting, the close() call rejects below.
             this._rejectOnClose.push(reject);
         });

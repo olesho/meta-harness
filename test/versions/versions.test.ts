@@ -1,7 +1,7 @@
-import { describe, expect, test } from "vitest"
-import { mkdtempSync, writeFileSync } from "node:fs"
-import { tmpdir } from "node:os"
-import { join } from "node:path"
+import { describe, expect, test } from "vitest";
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   all,
   pinned,
@@ -11,82 +11,86 @@ import {
   errVerifiedAtWithoutPinned,
   errParse,
   errRead,
-} from "../../src/versions/index.ts"
-import { isSentinel, type Sentinel } from "../../src/internal/async/index.ts"
+} from "../../src/versions/index.ts";
+import { isSentinel, type Sentinel } from "../../src/internal/async/index.ts";
 
 function tmpVersions(body: string): string {
-  const dir = mkdtempSync(join(tmpdir(), "versions-"))
-  const path = join(dir, "versions.json")
-  writeFileSync(path, body)
-  return path
+  const dir = mkdtempSync(join(tmpdir(), "versions-"));
+  const path = join(dir, "versions.json");
+  writeFileSync(path, body);
+  return path;
 }
 
 function expectSentinel(fn: () => unknown, sentinel: Sentinel): void {
-  let thrown: unknown
+  let thrown: unknown;
   try {
-    fn()
+    fn();
   } catch (err) {
-    thrown = err
+    thrown = err;
   }
-  expect(thrown).toBeDefined()
-  expect(isSentinel(thrown, sentinel)).toBe(true)
+  expect(thrown).toBeDefined();
+  expect(isSentinel(thrown, sentinel)).toBe(true);
 }
 
 describe("versions", () => {
   test("all and pinned against the embedded repo file", () => {
-    const entries = all()
+    const entries = all();
     for (const want of ["codex", "claude-code", "opencode", "pi"]) {
-      const entry = entries.get(want)
-      expect(entry).toBeDefined()
-      expect(entry!.binary).not.toBe("")
+      const entry = entries.get(want);
+      expect(entry).toBeDefined();
+      expect(entry!.binary).not.toBe("");
     }
 
     {
-      const [got, ok] = pinned("codex")
-      expect(ok).toBe(true)
-      expect(got).not.toBe("")
+      const [got, ok] = pinned("codex");
+      expect(ok).toBe(true);
+      expect(got).not.toBe("");
     }
     {
-      const [, ok] = pinned("nonexistent")
-      expect(ok).toBe(false)
+      const [, ok] = pinned("nonexistent");
+      expect(ok).toBe(false);
     }
     // OpenCode is intentionally unpinned until a corpus pins its version.
-    expect(pinned("opencode")[1]).toBe(false)
+    expect(pinned("opencode")[1]).toBe(false);
     // pi is pinned: its adapter/profile are verified against a committed corpus.
     {
-      const [got, ok] = pinned("pi")
-      expect(ok).toBe(true)
-      expect(got).not.toBe("")
+      const [got, ok] = pinned("pi");
+      expect(ok).toBe(true);
+      expect(got).not.toBe("");
     }
     // claude-code's harness key differs from its on-PATH binary name; the
     // binary field is what discovery probes against.
-    expect(all().get("claude-code")!.binary).toBe("claude")
-  })
+    expect(all().get("claude-code")!.binary).toBe("claude");
+  });
 
   test("readFrom rejects empty package", () => {
-    const path = tmpVersions(`{"foo":{"package":"","binary":"foo","pinned":"1.0.0"}}`)
-    expectSentinel(() => readFrom(path), errEmptyPackage)
-  })
+    const path = tmpVersions(
+      `{"foo":{"package":"","binary":"foo","pinned":"1.0.0"}}`,
+    );
+    expectSentinel(() => readFrom(path), errEmptyPackage);
+  });
 
   test("readFrom rejects empty binary", () => {
-    const path = tmpVersions(`{"foo":{"package":"pkg","binary":"","pinned":"1.0.0"}}`)
-    expectSentinel(() => readFrom(path), errEmptyBinary)
-  })
+    const path = tmpVersions(
+      `{"foo":{"package":"pkg","binary":"","pinned":"1.0.0"}}`,
+    );
+    expectSentinel(() => readFrom(path), errEmptyBinary);
+  });
 
   test("readFrom rejects verified_at without pinned", () => {
     const path = tmpVersions(
       `{"foo":{"package":"pkg","binary":"foo","pinned":"","verified_at":"2026-05-15"}}`,
-    )
-    expectSentinel(() => readFrom(path), errVerifiedAtWithoutPinned)
-  })
+    );
+    expectSentinel(() => readFrom(path), errVerifiedAtWithoutPinned);
+  });
 
   test("readFrom on a missing file", () => {
-    const path = join(mkdtempSync(join(tmpdir(), "versions-")), "nope.json")
-    expectSentinel(() => readFrom(path), errRead)
-  })
+    const path = join(mkdtempSync(join(tmpdir(), "versions-")), "nope.json");
+    expectSentinel(() => readFrom(path), errRead);
+  });
 
   test("readFrom on malformed JSON", () => {
-    const path = tmpVersions(`not json`)
-    expectSentinel(() => readFrom(path), errParse)
-  })
-})
+    const path = tmpVersions(`not json`);
+    expectSentinel(() => readFrom(path), errParse);
+  });
+});

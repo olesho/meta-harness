@@ -145,9 +145,19 @@ export async function runOneShotDetailed(ctx, cfg) {
         const turn = await waitForTerminalTurn(ctx, conv);
         const harnessSessionID = conv.session.harnessSessionID;
         if (turn.state === TurnStateErrored) {
-            return { status: "errored", reason: turn.reason, harnessSessionID, workingDir };
+            return {
+                status: "errored",
+                reason: turn.reason,
+                harnessSessionID,
+                workingDir,
+            };
         }
-        return { status: "completed", reply: turn.text, harnessSessionID, workingDir };
+        return {
+            status: "completed",
+            reply: turn.text,
+            harnessSessionID,
+            workingDir,
+        };
     }
     catch (err) {
         // A session may or may not have been established before the failure. Read the
@@ -157,10 +167,19 @@ export async function runOneShotDetailed(ctx, cfg) {
         if (isDeadline(ctx, err)) {
             return harnessSessionID
                 ? { status: "deadline", harnessSessionID, workingDir }
-                : { status: "startup_error", reason: "context deadline exceeded", workingDir };
+                : {
+                    status: "startup_error",
+                    reason: "context deadline exceeded",
+                    workingDir,
+                };
         }
         return harnessSessionID
-            ? { status: "errored", reason: errReason(err), harnessSessionID, workingDir }
+            ? {
+                status: "errored",
+                reason: errReason(err),
+                harnessSessionID,
+                workingDir,
+            }
             : { status: "startup_error", reason: errReason(err), workingDir };
     }
     finally {
@@ -183,7 +202,8 @@ async function waitForTerminalTurn(ctx, conv) {
         const ev = value;
         if (ev.type === EventTurn &&
             ev.turn?.role === RoleAssistant &&
-            (ev.turn.state === TurnStateComplete || ev.turn.state === TurnStateErrored)) {
+            (ev.turn.state === TurnStateComplete ||
+                ev.turn.state === TurnStateErrored)) {
             return ev.turn;
         }
     }

@@ -10,7 +10,7 @@ import { accessSync, constants, readdirSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { delimiter, dirname, isAbsolute, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { defineSentinel, wrap } from "../../internal/async/errors.js";
+import { defineSentinel, wrap, } from "../../internal/async/errors.js";
 import { ErrBinaryNotFound } from "./config.js";
 /** PTY allocation failed (bridge could not be spawned or the harness PTY died on open). */
 export const ErrPTYAllocation = defineSentinel("wrapper:pty-allocation", "wrapper: pty allocation failed");
@@ -109,8 +109,14 @@ function nvmDefaultNode() {
 }
 /** Descending semver-ish compare of `vX.Y.Z` directory names. */
 function compareNodeVersionsDesc(a, b) {
-    const pa = a.replace(/^v/, "").split(".").map((n) => Number(n) || 0);
-    const pb = b.replace(/^v/, "").split(".").map((n) => Number(n) || 0);
+    const pa = a
+        .replace(/^v/, "")
+        .split(".")
+        .map((n) => Number(n) || 0);
+    const pb = b
+        .replace(/^v/, "")
+        .split(".")
+        .map((n) => Number(n) || 0);
     for (let i = 0; i < 3; i++) {
         const d = (pb[i] ?? 0) - (pa[i] ?? 0);
         if (d !== 0)
@@ -195,13 +201,14 @@ export class PtyProcess {
                 if (!settled)
                     onEarlyExit(ErrPTYAllocation);
             });
-            child.stdout?.on("data", (chunk) => p.feed(chunk));
+            child.stdout?.on("data", (chunk) => {
+                p.feed(chunk);
+            });
         });
     }
     readyResolver = null;
     feed(chunk) {
-        this.buf =
-            this.buf.length === 0 ? chunk : concat(this.buf, chunk);
+        this.buf = this.buf.length === 0 ? chunk : concat(this.buf, chunk);
         for (;;) {
             if (this.buf.length < 5)
                 break;

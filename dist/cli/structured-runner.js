@@ -21,14 +21,14 @@
 //   124 — deadline (also prints the literal harness-wrapper deadline line on stderr)
 import { readFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
-import { runOneShotDetailed, cleanEnv } from "../oneshot/index.js";
+import { runOneShotDetailed, cleanEnv, } from "../oneshot/index.js";
 import { Context } from "../async/index.js";
 import { ClaudeCodeReader, CodexReader, toPublicJSON, usageToPublicJSON, } from "../transcript/index.js";
 // Exit codes + DeadlineLine come from the ONE shared protocol module
 // (src/turnproto). Re-exported here so this CLI's tested surface — test/cli/
 // structured-runner.test.ts imports ExitOK from this module — stays UNCHANGED.
 export { ExitOK, ExitError, ExitUsage, ExitDeadline, DeadlineLine, } from "../turnproto/index.js";
-import { ExitOK, ExitError, ExitUsage, ExitDeadline, DeadlineLine } from "../turnproto/index.js";
+import { ExitOK, ExitError, ExitUsage, ExitDeadline, DeadlineLine, } from "../turnproto/index.js";
 const DEFAULT_TIMEOUT_MS = 30 * 60 * 1000;
 // resolveHarnessName / resolveBinaryPath are NOT protocol (the exit codes now
 // live in src/turnproto). They mirror run.ts's helpers and stay local to each

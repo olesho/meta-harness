@@ -3,7 +3,7 @@
 // PTY supervision (Session/Run) is out of scope for the classifier core; this
 // module ports only the config surface those entry points validate against,
 // plus the cause-chain sentinels callers test with isSentinel.
-import { defineSentinel, isSentinel, wrap } from "../../internal/async/errors.js";
+import { defineSentinel, isSentinel, wrap, } from "../../internal/async/errors.js";
 import { harnessSupportsEffort, isSupportedEffort } from "./effort.js";
 /**
  * Wrapper-level sentinel errors. Callers use isSentinel(err, X) to distinguish

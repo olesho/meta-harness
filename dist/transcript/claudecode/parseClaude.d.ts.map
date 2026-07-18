@@ -1,1 +1,1 @@
-{"version":3,"file":"parseClaude.d.ts","sourceRoot":"","sources":["../../../src/transcript/claudecode/parseClaude.ts"],"names":[],"mappings":"AAWA,OAAO,EAQL,KAAK,KAAK,EACX,MAAM,aAAa,CAAA;AAMpB,wBAAgB,MAAM,CAAC,IAAI,EAAE,MAAM,GAAG,KAAK,EAAE,CAgB5C"}
+{"version":3,"file":"parseClaude.d.ts","sourceRoot":"","sources":["../../../src/transcript/claudecode/parseClaude.ts"],"names":[],"mappings":"AAWA,OAAO,EAQL,KAAK,KAAK,EACX,MAAM,aAAa,CAAC;AAMrB,wBAAgB,MAAM,CAAC,IAAI,EAAE,MAAM,GAAG,KAAK,EAAE,CAgB5C"}

@@ -7,9 +7,11 @@ This directory documents the environments layer (`./env` export from meta-harnes
 The word "env" now means **three different things** in this codebase. This section clarifies which is which.
 
 ### 1. The ENVIRONMENTS layer (this directory, `./env`)
+
 **What it is:** A two-axis plugin system for sandboxed execution: **Provisioners** (WHERE does the machine come from) and **Containments** (WHAT may the agent touch).
 
 **Key APIs:**
+
 - `Provisioner` — creates a `Workspace` (exec + file-transfer transport)
 - `Containment` — decorates a Workspace with policy boundaries (OpenShell, etc.)
 - `compose(inner, layer)` — combines them
@@ -22,6 +24,7 @@ The word "env" now means **three different things** in this codebase. This secti
 ---
 
 ### 2. Harness environment hygiene (`src/chat/env.ts`)
+
 **What it is:** Claude nesting markers and env-var stripping logic that keeps a harness's **nested invocation** clean.
 
 **Key concept:** When a harness invokes Claude-in-guest, we strip `CLAUDE_*` / `CODEX_*` env vars to avoid the guest seeing the host's Claude context. The canonical predicate is `isClaudeNestingEnvKey` (line 15).
@@ -33,6 +36,7 @@ The word "env" now means **three different things** in this codebase. This secti
 ---
 
 ### 3. Environment cleanup (`src/oneshot/oneshot.ts:91`)
+
 **What it is:** A helper function `cleanEnv` that removes sensitive and nesting env vars before spawning a harness.
 
 **Key concept:** Part of the one-shot execution setup; related to harness env hygiene but a distinct operation.
@@ -94,13 +98,13 @@ The core `env()` factory orchestrates acquisition and teardown in strict order:
 ### Ordering guarantees
 
 - **Redactions before apply** (step 5 → 6): A half-completed credential apply can never emit an unredacted secret into logs.
-- **Apply against composed workspace**: Credentials land *inside* the containment boundary (e.g., inside the OpenShell sandbox), not on the raw provisioned machine where other processes could read them.
+- **Apply against composed workspace**: Credentials land _inside_ the containment boundary (e.g., inside the OpenShell sandbox), not on the raw provisioned machine where other processes could read them.
 - **Strict reverse-acquisition teardown** (step 8): Cleanup happens in reverse order (injector → containment → provisioner), errors aggregated, never short-circuited.
 
 ### Failure semantics
 
 - Any failure in steps 2–6 unwinds all acquired layers in reverse order.
-- `retention: "keep-on-failure"` applies to *run outcomes*, not setup failures. Setup failures always destroy (though a debug flag exists for rare investigation).
+- `retention: "keep-on-failure"` applies to _run outcomes_, not setup failures. Setup failures always destroy (though a debug flag exists for rare investigation).
 - Retention is evaluated only at step 8, on turn outcomes.
 
 ## Provisioner Contract
@@ -109,18 +113,18 @@ A Provisioner implements:
 
 ```ts
 interface Provisioner {
-  name(): string
-  preflight(ctx: Context): Promise<void>  // host-side checks only
-  create(ctx: Context, spec: WorkspaceSpec): Promise<Workspace>
+  name(): string;
+  preflight(ctx: Context): Promise<void>; // host-side checks only
+  create(ctx: Context, spec: WorkspaceSpec): Promise<Workspace>;
 }
 ```
 
 ### Shipped implementations
 
-| Name | Transport | Source |
-|------|-----------|--------|
-| `local` | `node:child_process` + fs copy | this repo (core) |
-| `daytona` | Daytona SDK | `src/env-daytona/` |
+| Name      | Transport                      | Source             |
+| --------- | ------------------------------ | ------------------ |
+| `local`   | `node:child_process` + fs copy | this repo (core)   |
+| `daytona` | Daytona SDK                    | `src/env-daytona/` |
 
 The Daytona backend also ships **`sweep()`** (`src/env-daytona/sweep.ts`), the Tier-4
 orphan reaper: it lists the account's sandboxes (draining the SDK's auto-paginating
@@ -154,25 +158,25 @@ A Containment implements:
 
 ```ts
 interface Containment {
-  name(): string
-  preflight(ctx: Context, ws: Workspace): Promise<void>  // runtime checks, via ws.exec
-  layer(policy: PolicySpec): ContainmentLayer
+  name(): string;
+  preflight(ctx: Context, ws: Workspace): Promise<void>; // runtime checks, via ws.exec
+  layer(policy: PolicySpec): ContainmentLayer;
 }
 
 interface ContainmentLayer {
-  execWrap(argv: string[], opts: ExecOpts): [string[], ExecOpts]   // wrap argv for sandboxed exec
-  crossUpload(stagingPath: string, guestPath: string): string[]     // shell argv to move file across boundary
-  crossDownload(guestPath: string, stagingPath: string): string[]   // shell argv to move file out
-  pathMap(kind: "repo" | "home" | "tmp"): string                    // containment-specific paths
-  teardown(): string[]                                              // shell argv to clean up sandbox
+  execWrap(argv: string[], opts: ExecOpts): [string[], ExecOpts]; // wrap argv for sandboxed exec
+  crossUpload(stagingPath: string, guestPath: string): string[]; // shell argv to move file across boundary
+  crossDownload(guestPath: string, stagingPath: string): string[]; // shell argv to move file out
+  pathMap(kind: "repo" | "home" | "tmp"): string; // containment-specific paths
+  teardown(): string[]; // shell argv to clean up sandbox
 }
 ```
 
 ### Shipped implementations
 
-| Name | Type | Source |
-|------|------|--------|
-| `none` | identity (no boundary) | `src/env/none.ts` |
+| Name        | Type                            | Source               |
+| ----------- | ------------------------------- | -------------------- |
+| `none`      | identity (no boundary)          | `src/env/none.ts`    |
 | `openshell` | kernel-level isolation + policy | `src/env-openshell/` |
 
 ### How to add a containment
@@ -233,31 +237,32 @@ Credentials are delivered via a pluggable `CredentialInjector` interface:
 
 ```ts
 interface CredentialInjector {
-  requires(): Capability[]           // capabilities the workspace must advertise
-  apply(ctx: Context, ws: Workspace): Promise<void>
-  redactions(): string[]             // secrets for log redaction (registered BEFORE apply)
-  cleanup(ctx: Context, ws: Workspace): Promise<void>  // idempotent, runs even on failure
+  requires(): Capability[]; // capabilities the workspace must advertise
+  apply(ctx: Context, ws: Workspace): Promise<void>;
+  redactions(): string[]; // secrets for log redaction (registered BEFORE apply)
+  cleanup(ctx: Context, ws: Workspace): Promise<void>; // idempotent, runs even on failure
 }
 ```
 
 ### Shipped implementations
 
-| Name | Mechanism | Use case |
-|------|-----------|----------|
-| `proxy` | Provider-provisioned egress proxy injects real key | OpenShell containment with egress policy |
-| `file` | Token written to a file in the sandbox | Remote provisioners (Daytona) where the real CLI runs in-guest |
-| `host` | Credentials never cross; calls happen host-side | Host-driven mode (loomcli's legacy Daytona mode) |
+| Name    | Mechanism                                          | Use case                                                       |
+| ------- | -------------------------------------------------- | -------------------------------------------------------------- |
+| `proxy` | Provider-provisioned egress proxy injects real key | OpenShell containment with egress policy                       |
+| `file`  | Token written to a file in the sandbox             | Remote provisioners (Daytona) where the real CLI runs in-guest |
+| `host`  | Credentials never cross; calls happen host-side    | Host-driven mode (loomcli's legacy Daytona mode)               |
 
 ### Credential leak probe
 
 One canonical list of **sensitive env names** (`CREDENTIAL_SENSITIVE_ENV_NAMES` in `src/env-daytona/leak-probe.ts`) is the source of truth. An in-guest leak-probe binary counts how many are set; if nonzero, the run fails.
 
 The probe is:
+
 - Generated once (`credentialLeakProbe()` returns a shell command)
 - Run in-guest via `exec()` to detect leaks
 - Unit-tested for consistency across language implementations (Go, TS)
 
-**Example:** Test setup might set `ANTHROPIC_API_KEY` in the host env; the guest must *not* see it. The probe detects and fails the turn if it does.
+**Example:** Test setup might set `ANTHROPIC_API_KEY` in the host env; the guest must _not_ see it. The probe detects and fails the turn if it does.
 
 ## Turn Client
 
@@ -276,13 +281,13 @@ runStructuredTurn(ctx: Context, ws: Workspace, cfg: TurnConfig): Promise<Structu
 
 ## Testing Tiers
 
-| Tier | Coverage | Run | Where |
-|------|----------|-----|-------|
-| 1 | Unit, hermetic | Every PR | `test/env/` |
-| 2 | Conformance suite | Every PR (against fakes) | `test/env/conformance.ts` |
-| 3 | In-guest e2e, no cloud | Every PR (with docker/podman) | `test/env/container.test.ts` |
-| 4 | Live (Daytona, OpenShell) | Nightly / opt-in (`META_HARNESS_ENV_LIVE=<backend>`, e.g. `=openshell` or `=daytona`) | `test/env/openshell-live.test.ts`, `test/env/daytona_live.test.ts` |
-| 5 | Protocol freeze, composition, leak-probe | Mix of tiers 1–4 | `test/env/` |
+| Tier | Coverage                                 | Run                                                                                   | Where                                                              |
+| ---- | ---------------------------------------- | ------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| 1    | Unit, hermetic                           | Every PR                                                                              | `test/env/`                                                        |
+| 2    | Conformance suite                        | Every PR (against fakes)                                                              | `test/env/conformance.ts`                                          |
+| 3    | In-guest e2e, no cloud                   | Every PR (with docker/podman)                                                         | `test/env/container.test.ts`                                       |
+| 4    | Live (Daytona, OpenShell)                | Nightly / opt-in (`META_HARNESS_ENV_LIVE=<backend>`, e.g. `=openshell` or `=daytona`) | `test/env/openshell-live.test.ts`, `test/env/daytona_live.test.ts` |
+| 5    | Protocol freeze, composition, leak-probe | Mix of tiers 1–4                                                                      | `test/env/`                                                        |
 
 ## References
 

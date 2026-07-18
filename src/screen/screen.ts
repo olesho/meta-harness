@@ -15,9 +15,9 @@
 // writes behind a Mutex and await each flush so snapshots stay coherent and the
 // generation counter mirrors the Go implementation exactly.
 
-import { createRequire } from "node:module"
+import { createRequire } from "node:module";
 
-import { Mutex } from "../internal/async/index.ts"
+import { Mutex } from "../internal/async/index.ts";
 
 // @xterm/headless is a CommonJS module. A bare `import { Terminal }` resolves
 // under Bun and under a bundler (esbuild), but NOT under plain Node ESM — Node's
@@ -27,7 +27,7 @@ import { Mutex } from "../internal/async/index.ts"
 // `InstanceType<typeof Terminal>` recovers the instance type for annotations.
 const { Terminal } = createRequire(import.meta.url)(
   "@xterm/headless",
-) as typeof import("@xterm/headless")
+) as typeof import("@xterm/headless");
 
 /**
  * A coherent point-in-time view of the emulated screen. Snapshots are plain
@@ -40,15 +40,15 @@ export interface Snapshot {
    * whitespace per row is preserved (mirroring vt10x's String()); callers that
    * compare snapshots should normalize first.
    */
-  text: string
+  text: string;
   /** Terminal dimensions in cells. */
-  cols: number
-  rows: number
+  cols: number;
+  rows: number;
   /** 0-indexed cursor position. */
-  cursorCol: number
-  cursorRow: number
+  cursorCol: number;
+  cursorRow: number;
   /** Increments on each successful write/resize. */
-  generation: number
+  generation: number;
 }
 
 /**
@@ -62,44 +62,44 @@ export interface Notify {
    * Resolve with `{ ok: true }` when a signal is available, or `{ ok: false }`
    * once the subscription has been closed and drained.
    */
-  receive(): Promise<{ ok: boolean }>
+  receive(): Promise<{ ok: boolean }>;
 }
 
 class Subscriber implements Notify {
-  private pending = false
-  private closed = false
-  private waiter: ((r: { ok: boolean }) => void) | null = null
+  private pending = false;
+  private closed = false;
+  private waiter: ((r: { ok: boolean }) => void) | null = null;
 
   receive(): Promise<{ ok: boolean }> {
     if (this.pending) {
-      this.pending = false
-      return Promise.resolve({ ok: true })
+      this.pending = false;
+      return Promise.resolve({ ok: true });
     }
-    if (this.closed) return Promise.resolve({ ok: false })
+    if (this.closed) return Promise.resolve({ ok: false });
     return new Promise((resolve) => {
-      this.waiter = resolve
-    })
+      this.waiter = resolve;
+    });
   }
 
   /** Non-blocking, coalesced fire (mirrors Go's `select { case ch<-{}: default: }`). */
   signal(): void {
-    if (this.closed) return
+    if (this.closed) return;
     if (this.waiter) {
-      const w = this.waiter
-      this.waiter = null
-      w({ ok: true })
-      return
+      const w = this.waiter;
+      this.waiter = null;
+      w({ ok: true });
+      return;
     }
-    this.pending = true
+    this.pending = true;
   }
 
   close(): void {
-    if (this.closed) return
-    this.closed = true
+    if (this.closed) return;
+    this.closed = true;
     if (this.waiter) {
-      const w = this.waiter
-      this.waiter = null
-      w({ ok: false })
+      const w = this.waiter;
+      this.waiter = null;
+      w({ ok: false });
     }
   }
 }
@@ -109,10 +109,10 @@ class Subscriber implements Notify {
  * for concurrent (interleaved-async) use.
  */
 export class Screen {
-  private readonly term: InstanceType<typeof Terminal>
-  private readonly mu = new Mutex()
-  private gen = 0
-  private readonly subs = new Set<Subscriber>()
+  private readonly term: InstanceType<typeof Terminal>;
+  private readonly mu = new Mutex();
+  private gen = 0;
+  private readonly subs = new Set<Subscriber>();
 
   /**
    * Construct a Screen of the given dimensions. Cols and rows must be > 0;
@@ -120,9 +120,9 @@ export class Screen {
    * quick experiments forgiving.
    */
   constructor(cols: number, rows: number) {
-    if (cols <= 0) cols = 120
-    if (rows <= 0) rows = 40
-    this.term = new Terminal({ cols, rows, allowProposedApi: true })
+    if (cols <= 0) cols = 120;
+    if (rows <= 0) rows = 40;
+    this.term = new Terminal({ cols, rows, allowProposedApi: true });
   }
 
   /**
@@ -131,24 +131,26 @@ export class Screen {
    * generation counter is exact under concurrency.
    */
   async write(data: string | Uint8Array): Promise<void> {
-    await this.mu.lock()
+    await this.mu.lock();
     try {
-      await new Promise<void>((resolve) => this.term.write(data, resolve))
-      this.gen++
+      await new Promise<void>((resolve) => {
+        this.term.write(data, resolve);
+      });
+      this.gen++;
     } finally {
-      this.mu.unlock()
+      this.mu.unlock();
     }
-    this.notify()
+    this.notify();
   }
 
   /** A coherent point-in-time view of the emulated screen. */
   snapshot(): Snapshot {
-    const buf = this.term.buffer.active
-    const rows: string[] = []
+    const buf = this.term.buffer.active;
+    const rows: string[] = [];
     for (let y = 0; y < this.term.rows; y++) {
-      const line = buf.getLine(buf.baseY + y)
+      const line = buf.getLine(buf.baseY + y);
       // translateToString(false) keeps trailing whitespace, mirroring vt10x.
-      rows.push(line ? line.translateToString(false) : "")
+      rows.push(line ? line.translateToString(false) : "");
     }
     return {
       text: rows.join("\n"),
@@ -157,12 +159,12 @@ export class Screen {
       cursorCol: buf.cursorX,
       cursorRow: buf.cursorY,
       generation: this.gen,
-    }
+    };
   }
 
   /** The current write counter without rendering a snapshot. */
   generation(): number {
-    return this.gen
+    return this.gen;
   }
 
   /**
@@ -170,10 +172,10 @@ export class Screen {
    * best the emulator allows.
    */
   resize(cols: number, rows: number): void {
-    if (cols <= 0 || rows <= 0) return
-    this.term.resize(cols, rows)
-    this.gen++
-    this.notify()
+    if (cols <= 0 || rows <= 0) return;
+    this.term.resize(cols, rows);
+    this.gen++;
+    this.notify();
   }
 
   /**
@@ -182,22 +184,22 @@ export class Screen {
    * closes the channel.
    */
   subscribe(): [Notify, () => void] {
-    const sub = new Subscriber()
-    this.subs.add(sub)
+    const sub = new Subscriber();
+    this.subs.add(sub);
     return [
       sub,
       () => {
-        if (this.subs.delete(sub)) sub.close()
+        if (this.subs.delete(sub)) sub.close();
       },
-    ]
+    ];
   }
 
   private notify(): void {
-    for (const sub of this.subs) sub.signal()
+    for (const sub of this.subs) sub.signal();
   }
 }
 
 /** Construct a Screen of the given dimensions (mirrors Go's `screen.New`). */
 export function newScreen(cols: number, rows: number): Screen {
-  return new Screen(cols, rows)
+  return new Screen(cols, rows);
 }

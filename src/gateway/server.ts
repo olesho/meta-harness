@@ -22,7 +22,12 @@
 // Bun (project memory `meta-harness-node-pty-bun-broken`). There is no
 // "works under Bun" path.
 
-import { createServer, type IncomingMessage, type Server as HTTPServer, type ServerResponse } from "node:http"
+import {
+  createServer,
+  type IncomingMessage,
+  type Server as HTTPServer,
+  type ServerResponse,
+} from "node:http";
 
 import {
   EventInputRequest,
@@ -34,9 +39,9 @@ import {
   type Options,
   type Session,
   type Turn,
-} from "../chat/index.ts"
-import type { Snapshot } from "../screen/screen.ts"
-import { Context } from "../internal/async/index.ts"
+} from "../chat/index.ts";
+import type { Snapshot } from "../screen/screen.ts";
+import { Context } from "../internal/async/index.ts";
 import {
   conversationSummary,
   inputRequestDTO,
@@ -47,10 +52,10 @@ import {
   type AnswerRequestBody,
   type InputRequestDTO,
   type TurnDTO,
-} from "./dto.ts"
-import { writeChatError, writeRunTurnError } from "./errors.ts"
-import { Fanout, type EventSource } from "./fanout.ts"
-import { streamSSE } from "./sse.ts"
+} from "./dto.ts";
+import { writeChatError, writeRunTurnError } from "./errors.ts";
+import { Fanout, type EventSource } from "./fanout.ts";
+import { streamSSE } from "./sse.ts";
 
 // ── The narrow conversation surface the daemon drives ────────────────────────
 //
@@ -60,37 +65,37 @@ import { streamSSE } from "./sse.ts"
 // a PTY-backed harness.
 export interface ConversationLike {
   /** The chat session id — ALSO the daemon's registry key (Go's `openConv`). */
-  sessionID(): string
+  sessionID(): string;
   /** The single-consumer event channel; the Fanout is its sole drainer. */
-  events(): EventSource
+  events(): EventSource;
   /** Block until granted the exclusive control token; returns a release closure. */
-  acquireControl(ctx: Context): Promise<() => void>
-  send(ctx: Context, text: string): Promise<string>
-  answer(ctx: Context, requestID: string, ans: InputAnswer): Promise<void>
-  history(): Promise<Turn[]>
-  screenSnapshot(): Snapshot
-  close(ctx?: Context): Promise<void>
+  acquireControl(ctx: Context): Promise<() => void>;
+  send(ctx: Context, text: string): Promise<string>;
+  answer(ctx: Context, requestID: string, ans: InputAnswer): Promise<void>;
+  history(): Promise<Turn[]>;
+  screenSnapshot(): Snapshot;
+  close(ctx?: Context): Promise<void>;
 }
 
 /** Opens a Conversation for a decoded open request. Injectable for tests. */
-export type Opener = (opts: Options) => Promise<ConversationLike>
+export type Opener = (opts: Options) => Promise<ConversationLike>;
 
 // The default opener hands `Conversation.Open` a BACKGROUND context — NOT a
 // request-scoped one. Open passes this context to wrapper.Start, which keeps it
 // for the lifetime of the harness process; a request-scoped context would cancel
 // when the open handler returns and kill the harness (Go opens with
 // context.Background() for exactly this reason).
-const defaultOpener: Opener = (opts) => Open(Context.background(), opts) as Promise<ConversationLike>
+const defaultOpener: Opener = (opts) => Open(Context.background(), opts);
 
 // ── newToken (port of Go sse.go newToken) ────────────────────────────────────
 
 /** Mint an opaque 16-byte hex token (control tokens; matches Go's `newToken`). */
 export function newToken(): string {
-  const b = new Uint8Array(16)
-  crypto.getRandomValues(b)
-  let s = ""
-  for (const x of b) s += x.toString(16).padStart(2, "0")
-  return s
+  const b = new Uint8Array(16);
+  crypto.getRandomValues(b);
+  let s = "";
+  for (const x of b) s += x.toString(16).padStart(2, "0");
+  return s;
 }
 
 // ── convEntry — one live conversation + its daemon-owned token registry ───────
@@ -103,7 +108,7 @@ export function newToken(): string {
  * (mirrors Go's `convEntry.tokens map[string]func()`).
  */
 class ConvEntry {
-  readonly tokens = new Map<string, () => void>()
+  readonly tokens = new Map<string, () => void>();
 
   constructor(
     readonly id: string,
@@ -114,30 +119,30 @@ class ConvEntry {
 
   /** Mint a token for an acquired control release closure; store and return it. */
   acquireToken(release: () => void): string {
-    const tok = newToken()
-    this.tokens.set(tok, release)
-    return tok
+    const tok = newToken();
+    this.tokens.set(tok, release);
+    return tok;
   }
 
   /** Release + forget a token; returns false if the token was not held. */
   releaseToken(tok: string): boolean {
-    const rel = this.tokens.get(tok)
-    if (rel === undefined) return false
-    this.tokens.delete(tok)
-    rel()
-    return true
+    const rel = this.tokens.get(tok);
+    if (rel === undefined) return false;
+    this.tokens.delete(tok);
+    rel();
+    return true;
   }
 
   /** Whether this caller's token currently holds control (the send/answer gate). */
   hasToken(tok: string): boolean {
-    return this.tokens.has(tok)
+    return this.tokens.has(tok);
   }
 
   /** Invoke and drop every outstanding release closure (close/shutdown). */
   releaseAll(): void {
-    const rels = [...this.tokens.values()]
-    this.tokens.clear()
-    for (const rel of rels) rel()
+    const rels = [...this.tokens.values()];
+    this.tokens.clear();
+    for (const rel of rels) rel();
   }
 }
 
@@ -145,31 +150,40 @@ class ConvEntry {
 
 /** Compiled route: method + path segments (literal or `:param`) + handler. */
 interface Route {
-  method: string
-  segments: string[]
-  handler: (req: IncomingMessage, res: ServerResponse, params: Record<string, string>) => Promise<void> | void
+  method: string;
+  segments: string[];
+  handler: (
+    req: IncomingMessage,
+    res: ServerResponse,
+    params: Record<string, string>,
+  ) => Promise<void> | void;
 }
 
 /** Read the whole request body and JSON-parse it; `{}` for an empty body. */
 async function readJSON<T>(req: IncomingMessage): Promise<T> {
-  const chunks: Buffer[] = []
-  for await (const chunk of req) chunks.push(chunk as Buffer)
-  const raw = Buffer.concat(chunks).toString("utf8").trim()
-  if (raw === "") return {} as T
-  return JSON.parse(raw) as T
+  const chunks: Buffer[] = [];
+  for await (const chunk of req) chunks.push(chunk as Buffer);
+  const raw = Buffer.concat(chunks).toString("utf8").trim();
+  if (raw === "") return {} as T;
+  return JSON.parse(raw) as T;
 }
 
 /** Write a JSON body with a status code. */
 function writeJSON(res: ServerResponse, status: number, body: unknown): void {
-  const payload = JSON.stringify(body)
-  res.statusCode = status
-  res.setHeader("Content-Type", "application/json")
-  res.end(payload)
+  const payload = JSON.stringify(body);
+  res.statusCode = status;
+  res.setHeader("Content-Type", "application/json");
+  res.end(payload);
 }
 
 /** Write an `{ error, code }` body (Go's writeError shape). */
-function writeError(res: ServerResponse, status: number, code: string, message: string): void {
-  writeJSON(res, status, { error: message, code })
+function writeError(
+  res: ServerResponse,
+  status: number,
+  code: string,
+  message: string,
+): void {
+  writeJSON(res, status, { error: message, code });
 }
 
 /**
@@ -183,108 +197,125 @@ function requestContext(
   res: ServerResponse,
   timeoutSeconds?: number,
 ): { ctx: Context; cleanup: () => void } {
-  const base = Context.withCancel(Context.background())
-  let ctx = base.ctx
-  const cancels: Array<() => void> = [base.cancel]
+  const base = Context.withCancel(Context.background());
+  let ctx = base.ctx;
+  const cancels: (() => void)[] = [base.cancel];
   if (timeoutSeconds && timeoutSeconds > 0) {
-    const d = Context.withDeadline(base.ctx, timeoutSeconds * 1000)
-    ctx = d.ctx
-    cancels.push(d.cancel)
+    const d = Context.withDeadline(base.ctx, timeoutSeconds * 1000);
+    ctx = d.ctx;
+    cancels.push(d.cancel);
   }
-  const onClose = (): void => base.cancel()
-  req.on("close", onClose)
-  res.on("close", onClose)
+  const onClose = (): void => {
+    base.cancel();
+  };
+  req.on("close", onClose);
+  res.on("close", onClose);
   return {
     ctx,
     cleanup: () => {
-      req.off("close", onClose)
-      res.off("close", onClose)
-      for (const c of cancels) c()
+      req.off("close", onClose);
+      res.off("close", onClose);
+      for (const c of cancels) c();
     },
-  }
+  };
 }
 
 // ── Event → wire DTO ─────────────────────────────────────────────────────────
 
 /** Typed SSE envelope; discriminated by `type` (Go's eventDTO). */
 interface EventEnvelopeDTO {
-  type: string
-  turn?: TurnDTO
-  input?: InputRequestDTO
-  error?: string
+  type: string;
+  turn?: TurnDTO;
+  input?: InputRequestDTO;
+  error?: string;
 }
 
 /** Encode a ConversationEvent to its wire envelope (Go's toEventDTO). */
 export function eventDTO(ev: ConversationEvent): EventEnvelopeDTO {
-  const out: EventEnvelopeDTO = { type: ev.type }
+  const out: EventEnvelopeDTO = { type: ev.type };
   if (ev.err !== undefined && ev.err !== null) {
-    out.error = ev.err instanceof Error ? ev.err.message : String(ev.err)
+    // ev.err is `unknown` (out-of-band errors, e.g. Store failures). Avoid the
+    // `String(obj)` → "[object Object]" trap: Errors surface their message,
+    // strings pass through, anything else is JSON-encoded so the wire carries
+    // something legible instead of a useless placeholder.
+    out.error =
+      ev.err instanceof Error
+        ? ev.err.message
+        : typeof ev.err === "string"
+          ? ev.err
+          : JSON.stringify(ev.err);
   }
   if (ev.type === EventInputRequest || ev.type === EventInputResolved) {
-    if (ev.input) out.input = inputRequestDTO(ev.input)
+    if (ev.input) out.input = inputRequestDTO(ev.input);
   } else if (ev.turn) {
-    out.turn = turnDTO(ev.turn)
+    out.turn = turnDTO(ev.turn);
   }
-  return out
+  return out;
 }
 
 // ── Open-request wire shape (Go's openRequest) ───────────────────────────────
 
 interface OpenRequestBody {
-  harness?: string
-  binary_path?: string
-  args?: string[]
-  working_dir?: string
-  env?: string[]
-  cols?: number
-  rows?: number
-  effort?: string
-  model?: string
-  disable_codex_auto_dismiss?: boolean
+  harness?: string;
+  binary_path?: string;
+  args?: string[];
+  working_dir?: string;
+  env?: string[];
+  cols?: number;
+  rows?: number;
+  effort?: string;
+  model?: string;
+  disable_codex_auto_dismiss?: boolean;
 }
 
 interface SendRequestBody {
-  token?: string
-  text?: string
+  token?: string;
+  text?: string;
   /** MH superset: bounds this send as a timed op (→ Context.withDeadline). */
-  timeout_seconds?: number
+  timeout_seconds?: number;
 }
 
 interface RunTurnRequestBody {
-  exit_after_turn?: boolean
+  exit_after_turn?: boolean;
 }
 
 // ── The daemon ───────────────────────────────────────────────────────────────
 
 export class Server {
-  private readonly convs = new Map<string, ConvEntry>()
-  private readonly routes: Route[]
-  private readonly opener: Opener
-  private accepting = true
+  private readonly convs = new Map<string, ConvEntry>();
+  private readonly routes: Route[];
+  private readonly opener: Opener;
+  private accepting = true;
 
   constructor(opts: { open?: Opener } = {}) {
-    this.opener = opts.open ?? defaultOpener
-    this.routes = this.buildRoutes()
+    this.opener = opts.open ?? defaultOpener;
+    this.routes = this.buildRoutes();
   }
 
   /** The `node:http` request listener. Dispatches the route table (Go's Routes). */
   handle = (req: IncomingMessage, res: ServerResponse): void => {
-    const method = req.method ?? "GET"
-    const path = new URL(req.url ?? "/", "http://localhost").pathname
-    const parts = splitPath(path)
+    const method = req.method ?? "GET";
+    const path = new URL(req.url ?? "/", "http://localhost").pathname;
+    const parts = splitPath(path);
     for (const route of this.routes) {
-      if (route.method !== method) continue
-      const params = matchSegments(route.segments, parts)
-      if (!params) continue
+      if (route.method !== method) continue;
+      const params = matchSegments(route.segments, parts);
+      if (!params) continue;
       Promise.resolve(route.handler(req, res, params)).catch((err) => {
         // Last-resort guard: never leak an unhandled rejection; emit a 500.
-        if (!res.headersSent) writeError(res, 500, "internal", err instanceof Error ? err.message : String(err))
-        else res.end()
-      })
-      return
+        if (!res.headersSent)
+          writeError(
+            res,
+            500,
+            "internal",
+            err instanceof Error ? err.message : String(err),
+          );
+        else res.end();
+      });
+      return;
     }
-    writeError(res, 404, "not_found", "route not found")
-  }
+    writeError(res, 404, "not_found", "route not found");
+  };
 
   /**
    * Graceful shutdown: stop accepting, then for every conversation release all
@@ -292,43 +323,87 @@ export class Server {
    * in-flight lookup revives a torn-down entry (Go's Server.Shutdown).
    */
   async shutdown(ctx?: Context): Promise<void> {
-    this.accepting = false
-    const entries = [...this.convs.values()]
-    this.convs.clear()
+    this.accepting = false;
+    const entries = [...this.convs.values()];
+    this.convs.clear();
     for (const e of entries) {
-      e.releaseAll()
-      await e.conv.close(ctx).catch(() => {})
+      e.releaseAll();
+      await e.conv.close(ctx).catch(() => {});
     }
   }
 
   // ── Route table (port of server.go Routes) ─────────────────────────────────
 
   private buildRoutes(): Route[] {
-    const defs: Array<[string, string, Route["handler"]]> = [
-      ["GET", "/healthz", (_q, s) => this.healthz(s)],
+    const defs: [string, string, Route["handler"]][] = [
+      [
+        "GET",
+        "/healthz",
+        (_q, s) => {
+          this.healthz(s);
+        },
+      ],
       ["POST", "/v1/turns", (q, s) => this.runTurn(q, s)],
       ["POST", "/v1/conversations", (q, s) => this.openConv(q, s)],
-      ["GET", "/v1/conversations", (_q, s) => this.listConvs(s)],
+      [
+        "GET",
+        "/v1/conversations",
+        (_q, s) => {
+          this.listConvs(s);
+        },
+      ],
       ["DELETE", "/v1/conversations/:id", (q, s, p) => this.closeConv(q, s, p)],
-      ["POST", "/v1/conversations/:id/control", (q, s, p) => this.acquireControl(q, s, p)],
-      ["DELETE", "/v1/conversations/:id/control/:token", (_q, s, p) => this.releaseControl(s, p)],
-      ["POST", "/v1/conversations/:id/messages", (q, s, p) => this.sendMessage(q, s, p)],
-      ["POST", "/v1/conversations/:id/input", (q, s, p) => this.answerInput(q, s, p)],
-      ["GET", "/v1/conversations/:id/events", (q, s, p) => this.streamEvents(q, s, p)],
-      ["GET", "/v1/conversations/:id/history", (q, s, p) => this.history(q, s, p)],
-      ["GET", "/v1/conversations/:id/screen", (_q, s, p) => this.screen(s, p)],
-    ]
+      [
+        "POST",
+        "/v1/conversations/:id/control",
+        (q, s, p) => this.acquireControl(q, s, p),
+      ],
+      [
+        "DELETE",
+        "/v1/conversations/:id/control/:token",
+        (_q, s, p) => {
+          this.releaseControl(s, p);
+        },
+      ],
+      [
+        "POST",
+        "/v1/conversations/:id/messages",
+        (q, s, p) => this.sendMessage(q, s, p),
+      ],
+      [
+        "POST",
+        "/v1/conversations/:id/input",
+        (q, s, p) => this.answerInput(q, s, p),
+      ],
+      [
+        "GET",
+        "/v1/conversations/:id/events",
+        (q, s, p) => this.streamEvents(q, s, p),
+      ],
+      [
+        "GET",
+        "/v1/conversations/:id/history",
+        (q, s, p) => this.history(q, s, p),
+      ],
+      [
+        "GET",
+        "/v1/conversations/:id/screen",
+        (_q, s, p) => {
+          this.screen(s, p);
+        },
+      ],
+    ];
     return defs.map(([method, pattern, handler]) => ({
       method,
       segments: splitPath(pattern),
       handler,
-    }))
+    }));
   }
 
   // ── Handlers ───────────────────────────────────────────────────────────────
 
   private healthz(res: ServerResponse): void {
-    writeJSON(res, 200, { ok: true })
+    writeJSON(res, 200, { ok: true });
   }
 
   /**
@@ -338,37 +413,58 @@ export class Server {
    * validates the request shape then returns a clear "not yet available" path.
    * Its integration test is marked PENDING until that lands.
    */
-  private async runTurn(req: IncomingMessage, res: ServerResponse): Promise<void> {
-    let body: RunTurnRequestBody
+  private async runTurn(
+    req: IncomingMessage,
+    res: ServerResponse,
+  ): Promise<void> {
+    let body: RunTurnRequestBody;
     try {
-      body = await readJSON<RunTurnRequestBody>(req)
+      body = await readJSON<RunTurnRequestBody>(req);
     } catch (err) {
-      writeError(res, 400, "invalid_json", err instanceof Error ? err.message : String(err))
-      return
+      writeError(
+        res,
+        400,
+        "invalid_json",
+        err instanceof Error ? err.message : String(err),
+      );
+      return;
     }
-    const exitAfterTurn = body.exit_after_turn ?? true
+    const exitAfterTurn = body.exit_after_turn ?? true;
     if (!exitAfterTurn) {
-      writeError(res, 400, "unsupported", "POST /v1/turns is one-shot and requires exit_after_turn=true")
-      return
+      writeError(
+        res,
+        400,
+        "unsupported",
+        "POST /v1/turns is one-shot and requires exit_after_turn=true",
+      );
+      return;
     }
     writeError(
       res,
       501,
       "not_implemented",
       "POST /v1/turns is not yet available (awaits the richer RunTurn/TurnResult)",
-    )
+    );
   }
 
   /** POST /v1/conversations — open. Uses a BACKGROUND context (see defaultOpener). */
-  private async openConv(req: IncomingMessage, res: ServerResponse): Promise<void> {
-    let body: OpenRequestBody
+  private async openConv(
+    req: IncomingMessage,
+    res: ServerResponse,
+  ): Promise<void> {
+    let body: OpenRequestBody;
     try {
-      body = await readJSON<OpenRequestBody>(req)
+      body = await readJSON<OpenRequestBody>(req);
     } catch (err) {
-      writeError(res, 400, "invalid_json", err instanceof Error ? err.message : String(err))
-      return
+      writeError(
+        res,
+        400,
+        "invalid_json",
+        err instanceof Error ? err.message : String(err),
+      );
+      return;
     }
-    let conv: ConversationLike
+    let conv: ConversationLike;
     try {
       conv = await this.opener({
         harness: body.harness ?? "",
@@ -381,32 +477,46 @@ export class Server {
         effort: body.effort,
         model: body.model,
         disableCodexAutoDismiss: body.disable_codex_auto_dismiss,
-      } as Options)
+      } as Options);
     } catch (err) {
-      writeChatError(res, err)
-      return
+      writeChatError(res, err);
+      return;
     }
     // Create the Fanout EAGERLY at open, before any subscriber — it is the sole
     // drainer of events(), so turn/input events fired before the first SSE
     // attach are buffered and replayed rather than dropped.
-    const id = conv.sessionID()
-    const entry = new ConvEntry(id, conv, new Fanout(conv.events()), body.harness ?? "")
+    const id = conv.sessionID();
+    const entry = new ConvEntry(
+      id,
+      conv,
+      new Fanout(conv.events()),
+      body.harness ?? "",
+    );
     // Dedupe a second open of the same underlying session id (Go keys on the
     // session id). The presence check + set is synchronous — no await between.
     if (this.convs.has(id) || !this.accepting) {
-      await conv.close().catch(() => {})
-      if (!this.accepting) writeError(res, 503, "shutting_down", "server is shutting down")
-      else writeError(res, 409, "already_open", "conversation already open for this session id")
-      return
+      await conv.close().catch(() => {});
+      if (!this.accepting)
+        writeError(res, 503, "shutting_down", "server is shutting down");
+      else
+        writeError(
+          res,
+          409,
+          "already_open",
+          "conversation already open for this session id",
+        );
+      return;
     }
-    this.convs.set(id, entry)
-    writeJSON(res, 201, openResponse(id))
+    this.convs.set(id, entry);
+    writeJSON(res, 201, openResponse(id));
   }
 
   /** GET /v1/conversations — list. */
   private listConvs(res: ServerResponse): void {
-    const out = [...this.convs.values()].map((e) => conversationSummary(e.id, e.harness, e.conv.sessionID()))
-    writeJSON(res, 200, out)
+    const out = [...this.convs.values()].map((e) =>
+      conversationSummary(e.id, e.harness, e.conv.sessionID()),
+    );
+    writeJSON(res, 200, out);
   }
 
   /**
@@ -416,46 +526,57 @@ export class Server {
    * that already captured the entry either finishes or sees ErrClosed→410, never
    * a half-torn-down state.
    */
-  private async closeConv(req: IncomingMessage, res: ServerResponse, params: Record<string, string>): Promise<void> {
-    const id = params.id
-    const entry = this.convs.get(id)
+  private async closeConv(
+    req: IncomingMessage,
+    res: ServerResponse,
+    params: Record<string, string>,
+  ): Promise<void> {
+    const id = params.id;
+    const entry = this.convs.get(id);
     if (entry === undefined) {
-      writeError(res, 404, "not_found", "conversation not found")
-      return
+      writeError(res, 404, "not_found", "conversation not found");
+      return;
     }
-    this.convs.delete(id) // synchronous remove — no await before this point
-    entry.releaseAll()
-    await entry.conv.close().catch(() => {})
-    res.statusCode = 204
-    res.end()
+    this.convs.delete(id); // synchronous remove — no await before this point
+    entry.releaseAll();
+    await entry.conv.close().catch(() => {});
+    res.statusCode = 204;
+    res.end();
   }
 
   /** POST /v1/conversations/{id}/control — acquire control, mint a token. */
-  private async acquireControl(req: IncomingMessage, res: ServerResponse, params: Record<string, string>): Promise<void> {
-    const entry = this.lookup(res, params)
-    if (!entry) return
-    const { ctx, cleanup } = requestContext(req, res)
+  private async acquireControl(
+    req: IncomingMessage,
+    res: ServerResponse,
+    params: Record<string, string>,
+  ): Promise<void> {
+    const entry = this.lookup(res, params);
+    if (!entry) return;
+    const { ctx, cleanup } = requestContext(req, res);
     try {
-      const release = await entry.conv.acquireControl(ctx)
-      const tok = entry.acquireToken(release)
-      writeJSON(res, 200, { token: tok })
+      const release = await entry.conv.acquireControl(ctx);
+      const tok = entry.acquireToken(release);
+      writeJSON(res, 200, { token: tok });
     } catch (err) {
-      writeChatError(res, err)
+      writeChatError(res, err);
     } finally {
-      cleanup()
+      cleanup();
     }
   }
 
   /** DELETE /v1/conversations/{id}/control/{token} — release. */
-  private releaseControl(res: ServerResponse, params: Record<string, string>): void {
-    const entry = this.lookup(res, params)
-    if (!entry) return
+  private releaseControl(
+    res: ServerResponse,
+    params: Record<string, string>,
+  ): void {
+    const entry = this.lookup(res, params);
+    if (!entry) return;
     if (!entry.releaseToken(params.token)) {
-      writeError(res, 404, "unknown_token", "token not held")
-      return
+      writeError(res, 404, "unknown_token", "token not held");
+      return;
     }
-    res.statusCode = 204
-    res.end()
+    res.statusCode = 204;
+    res.end();
   }
 
   /**
@@ -464,30 +585,44 @@ export class Server {
    * ErrNoControl only when NOBODY holds control; the daemon gate additionally
    * rejects a caller who holds no token.
    */
-  private async sendMessage(req: IncomingMessage, res: ServerResponse, params: Record<string, string>): Promise<void> {
-    const entry = this.lookup(res, params)
-    if (!entry) return
-    let body: SendRequestBody
+  private async sendMessage(
+    req: IncomingMessage,
+    res: ServerResponse,
+    params: Record<string, string>,
+  ): Promise<void> {
+    const entry = this.lookup(res, params);
+    if (!entry) return;
+    let body: SendRequestBody;
     try {
-      body = await readJSON<SendRequestBody>(req)
+      body = await readJSON<SendRequestBody>(req);
     } catch (err) {
-      writeError(res, 400, "invalid_json", err instanceof Error ? err.message : String(err))
-      return
+      writeError(
+        res,
+        400,
+        "invalid_json",
+        err instanceof Error ? err.message : String(err),
+      );
+      return;
     }
     if (!entry.hasToken(body.token ?? "")) {
-      writeError(res, 409, "no_control", "caller does not hold the control token")
-      return
+      writeError(
+        res,
+        409,
+        "no_control",
+        "caller does not hold the control token",
+      );
+      return;
     }
-    const { ctx, cleanup } = requestContext(req, res, body.timeout_seconds)
+    const { ctx, cleanup } = requestContext(req, res, body.timeout_seconds);
     try {
-      const turnID = await entry.conv.send(ctx, body.text ?? "")
-      writeJSON(res, 202, { turn_id: turnID })
+      const turnID = await entry.conv.send(ctx, body.text ?? "");
+      writeJSON(res, 202, { turn_id: turnID });
     } catch (err) {
       // A timed op: deadline/cancel map to 504/408 via writeRunTurnError, which
       // also falls through to the chat table for every other sentinel.
-      writeRunTurnError(res, err)
+      writeRunTurnError(res, err);
     } finally {
-      cleanup()
+      cleanup();
     }
   }
 
@@ -496,30 +631,46 @@ export class Server {
    * the SUPERSET answerRequest (incl `option_ids[]`) via the DTO layer, so a
    * multi-select prompt is reachable over HTTP.
    */
-  private async answerInput(req: IncomingMessage, res: ServerResponse, params: Record<string, string>): Promise<void> {
-    const entry = this.lookup(res, params)
-    if (!entry) return
-    let body: AnswerRequestBody & { timeout_seconds?: number }
+  private async answerInput(
+    req: IncomingMessage,
+    res: ServerResponse,
+    params: Record<string, string>,
+  ): Promise<void> {
+    const entry = this.lookup(res, params);
+    if (!entry) return;
+    let body: AnswerRequestBody & { timeout_seconds?: number };
     try {
-      body = await readJSON<AnswerRequestBody & { timeout_seconds?: number }>(req)
+      body = await readJSON<AnswerRequestBody & { timeout_seconds?: number }>(
+        req,
+      );
     } catch (err) {
-      writeError(res, 400, "invalid_json", err instanceof Error ? err.message : String(err))
-      return
+      writeError(
+        res,
+        400,
+        "invalid_json",
+        err instanceof Error ? err.message : String(err),
+      );
+      return;
     }
     if (!entry.hasToken(body.token ?? "")) {
-      writeError(res, 409, "no_control", "caller does not hold the control token")
-      return
+      writeError(
+        res,
+        409,
+        "no_control",
+        "caller does not hold the control token",
+      );
+      return;
     }
-    const ans = parseAnswerRequest(body)
-    const { ctx, cleanup } = requestContext(req, res, body.timeout_seconds)
+    const ans = parseAnswerRequest(body);
+    const { ctx, cleanup } = requestContext(req, res, body.timeout_seconds);
     try {
-      await entry.conv.answer(ctx, body.request_id ?? "", ans)
-      res.statusCode = 204
-      res.end()
+      await entry.conv.answer(ctx, body.request_id ?? "", ans);
+      res.statusCode = 204;
+      res.end();
     } catch (err) {
-      writeRunTurnError(res, err)
+      writeRunTurnError(res, err);
     } finally {
-      cleanup()
+      cleanup();
     }
   }
 
@@ -528,49 +679,65 @@ export class Server {
    * NEVER to events() directly, so early turn/input events are replayed to the
    * first subscriber. Per-subscriber lifecycle is a request-scoped Context.
    */
-  private async streamEvents(req: IncomingMessage, res: ServerResponse, params: Record<string, string>): Promise<void> {
-    const entry = this.lookup(res, params)
-    if (!entry) return
-    const { ctx, cleanup } = requestContext(req, res)
-    const sub = entry.fan.subscribe()
+  private async streamEvents(
+    req: IncomingMessage,
+    res: ServerResponse,
+    params: Record<string, string>,
+  ): Promise<void> {
+    const entry = this.lookup(res, params);
+    if (!entry) return;
+    const { ctx, cleanup } = requestContext(req, res);
+    const sub = entry.fan.subscribe();
     try {
       await streamSSE(res, sub, {
         encode: (ev) => JSON.stringify(eventDTO(ev)),
         signal: ctx.done(),
         req,
-      })
+      });
     } finally {
-      cleanup()
+      cleanup();
     }
   }
 
   /** GET /v1/conversations/{id}/history. */
-  private async history(req: IncomingMessage, res: ServerResponse, params: Record<string, string>): Promise<void> {
-    const entry = this.lookup(res, params)
-    if (!entry) return
+  private async history(
+    req: IncomingMessage,
+    res: ServerResponse,
+    params: Record<string, string>,
+  ): Promise<void> {
+    const entry = this.lookup(res, params);
+    if (!entry) return;
     try {
-      const turns = await entry.conv.history()
-      writeJSON(res, 200, { turns: turns.map(turnDTO) })
+      const turns = await entry.conv.history();
+      writeJSON(res, 200, { turns: turns.map(turnDTO) });
     } catch (err) {
-      writeError(res, 500, "history_failed", err instanceof Error ? err.message : String(err))
+      writeError(
+        res,
+        500,
+        "history_failed",
+        err instanceof Error ? err.message : String(err),
+      );
     }
   }
 
   /** GET /v1/conversations/{id}/screen — a pure read; requires no token. */
   private screen(res: ServerResponse, params: Record<string, string>): void {
-    const entry = this.lookup(res, params)
-    if (!entry) return
-    writeJSON(res, 200, screenResponse(entry.conv.screenSnapshot()))
+    const entry = this.lookup(res, params);
+    if (!entry) return;
+    writeJSON(res, 200, screenResponse(entry.conv.screenSnapshot()));
   }
 
   /** Look the entry up once at handler entry; 404 when absent (Go's lookup). */
-  private lookup(res: ServerResponse, params: Record<string, string>): ConvEntry | undefined {
-    const entry = this.convs.get(params.id)
+  private lookup(
+    res: ServerResponse,
+    params: Record<string, string>,
+  ): ConvEntry | undefined {
+    const entry = this.convs.get(params.id);
     if (entry === undefined) {
-      writeError(res, 404, "not_found", "conversation not found")
-      return undefined
+      writeError(res, 404, "not_found", "conversation not found");
+      return undefined;
     }
-    return entry
+    return entry;
   }
 }
 
@@ -578,7 +745,7 @@ export class Server {
 
 /** Split a path into non-empty segments. */
 function splitPath(path: string): string[] {
-  return path.split("/").filter((s) => s.length > 0)
+  return path.split("/").filter((s) => s.length > 0);
 }
 
 /**
@@ -586,76 +753,79 @@ function splitPath(path: string): string[] {
  * params, or null if the shapes differ. `:name` segments capture; literals must
  * equal exactly.
  */
-function matchSegments(segments: string[], parts: string[]): Record<string, string> | null {
-  if (segments.length !== parts.length) return null
-  const params: Record<string, string> = {}
+function matchSegments(
+  segments: string[],
+  parts: string[],
+): Record<string, string> | null {
+  if (segments.length !== parts.length) return null;
+  const params: Record<string, string> = {};
   for (let i = 0; i < segments.length; i++) {
-    const seg = segments[i]
+    const seg = segments[i];
     if (seg.startsWith(":")) {
-      params[seg.slice(1)] = decodeURIComponent(parts[i])
+      params[seg.slice(1)] = decodeURIComponent(parts[i]);
     } else if (seg !== parts[i]) {
-      return null
+      return null;
     }
   }
-  return params
+  return params;
 }
 
 // ── Process entry point (port of main.go) ────────────────────────────────────
 
-const DEFAULT_BIND = "127.0.0.1:8080"
+const DEFAULT_BIND = "127.0.0.1:8080";
 
 /** Parse `--bind host:port` from argv; defaults to localhost-only. */
 export function parseBind(argv: string[]): string {
   for (let i = 0; i < argv.length; i++) {
-    const a = argv[i]
-    if (a === "--bind") return argv[i + 1] ?? DEFAULT_BIND
-    if (a.startsWith("--bind=")) return a.slice("--bind=".length)
+    const a = argv[i];
+    if (a === "--bind") return argv[i + 1] ?? DEFAULT_BIND;
+    if (a.startsWith("--bind=")) return a.slice("--bind=".length);
   }
-  return DEFAULT_BIND
+  return DEFAULT_BIND;
 }
 
 /** Split a `host:port` bind target into listen args (IPv6-aware, best-effort). */
 function bindTarget(bind: string): { host: string; port: number } {
-  const idx = bind.lastIndexOf(":")
-  if (idx < 0) return { host: "127.0.0.1", port: Number(bind) }
-  const host = bind.slice(0, idx) || "127.0.0.1"
-  const port = Number(bind.slice(idx + 1))
-  return { host, port }
+  const idx = bind.lastIndexOf(":");
+  if (idx < 0) return { host: "127.0.0.1", port: Number(bind) };
+  const host = bind.slice(0, idx) || "127.0.0.1";
+  const port = Number(bind.slice(idx + 1));
+  return { host, port };
 }
 
 export async function main(argv: string[]): Promise<void> {
-  const bind = parseBind(argv)
-  const server = new Server()
-  const httpServer: HTTPServer = createServer(server.handle)
-  const { host, port } = bindTarget(bind)
+  const bind = parseBind(argv);
+  const server = new Server();
+  const httpServer: HTTPServer = createServer(server.handle);
+  const { host, port } = bindTarget(bind);
 
   await new Promise<void>((resolve, reject) => {
-    httpServer.once("error", reject)
+    httpServer.once("error", reject);
     httpServer.listen(port, host, () => {
-      httpServer.off("error", reject)
-      resolve()
-    })
-  })
-  process.stderr.write(`harness-chatd: listening on ${bind}\n`)
+      httpServer.off("error", reject);
+      resolve();
+    });
+  });
+  process.stderr.write(`harness-chatd: listening on ${bind}\n`);
 
-  let shuttingDown = false
+  let shuttingDown = false;
   const onSignal = (): void => {
-    if (shuttingDown) return
-    shuttingDown = true
-    process.stderr.write("harness-chatd: shutting down\n")
+    if (shuttingDown) return;
+    shuttingDown = true;
+    process.stderr.write("harness-chatd: shutting down\n");
     // Stop accepting, release all control tokens, close all conversations.
-    httpServer.close()
-    void server.shutdown().then(() => process.exit(0))
-  }
-  process.on("SIGINT", onSignal)
-  process.on("SIGTERM", onSignal)
+    httpServer.close();
+    void server.shutdown().then(() => process.exit(0));
+  };
+  process.on("SIGINT", onSignal);
+  process.on("SIGTERM", onSignal);
 }
 
 // Node-safe entry guard (mirrors src/cli/run.ts; import.meta.main is Node ≥24.2).
-import { pathToFileURL } from "node:url"
+import { pathToFileURL } from "node:url";
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
   main(process.argv.slice(2)).catch((err) => {
-    process.stderr.write("harness-chatd: fatal: " + String(err) + "\n")
-    process.exit(1)
-  })
+    process.stderr.write("harness-chatd: fatal: " + String(err) + "\n");
+    process.exit(1);
+  });
 }
