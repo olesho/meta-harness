@@ -32,9 +32,7 @@ const UUID_RE_SRC = "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}
 // rendered `/status` box draws those borders around the label, so this excludes a
 // bare `Session: <uuid>` string appearing in reply prose. It assumes the row
 // renders unwrapped on one screen line — see CODEX_STATUS_MIN_COLS.
-const statusSessionRE = new RegExp("│[^\\S\\r\\n]*Session:[^\\S\\r\\n]+(" +
-    UUID_RE_SRC +
-    ")[^\\S\\r\\n]*│");
+const statusSessionRE = new RegExp("│[^\\S\\r\\n]*Session:[^\\S\\r\\n]+(" + UUID_RE_SRC + ")[^\\S\\r\\n]*│");
 // statusBoxHeaderRE gates statusSessionRE on the `/status` box header so a lone
 // spoofed box row (borders around a "Session:" line in some other context) cannot
 // match. The header is the Codex banner the `/status` box renders above the rows.
@@ -148,7 +146,7 @@ export class CodexAdapter extends GenericAdapter {
         const m = resumeRE.exec(snap.text);
         if (m)
             return [m[1], true];
-        if (statusBoxHeaderRE.test(snap.text)) {
+        if (snap.text.includes(">_ OpenAI Codex (v")) {
             const s = statusSessionRE.exec(snap.text);
             if (s)
                 return [s[1], true];
@@ -395,7 +393,12 @@ export function AutoDismissKeys(req) {
 }
 function continueOption() {
     return [
-        { id: "continue", alias: "continue", label: "Continue", keys: enc.encode("\r") },
+        {
+            id: "continue",
+            alias: "continue",
+            label: "Continue",
+            keys: enc.encode("\r"),
+        },
     ];
 }
 function parseMenuOptions(text) {
@@ -464,7 +467,11 @@ function findByAlias(req, alias) {
     return null;
 }
 function inputID(req) {
-    const parts = [req.kind, req.prompt, ...(req.options ?? []).map((o) => o.label)];
+    const parts = [
+        req.kind,
+        req.prompt,
+        ...(req.options ?? []).map((o) => o.label),
+    ];
     const sum = createHash("sha256").update(parts.join("\0")).digest();
     return sum.subarray(0, 8).toString("hex");
 }

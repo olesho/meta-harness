@@ -4,20 +4,20 @@
 // rename are exercised under real OS-level parallelism.
 //
 // argv: [node, thisFile, modulePath, configPath, iterations]
-const [, , modulePath, configPath, iterationsRaw] = process.argv
-const iterations = Number(iterationsRaw)
+const [, , modulePath, configPath, iterationsRaw] = process.argv;
+const iterations = Number(iterationsRaw);
 
-const { ensureSettingsJSONHooks, renderHookCommand } = await import(modulePath)
+const { ensureSettingsJSONHooks, renderHookCommand } = await import(modulePath);
 
-const event = "Stop"
+const event = "Stop";
 const command = renderHookCommand({
   nodePath: "/usr/bin/node",
   distDir: "/opt/dist",
   event,
-})
+});
 
 for (let i = 0; i < iterations; i++) {
   ensureSettingsJSONHooks(configPath, {
     [event]: [{ matcher: "*", hooks: [{ type: "command", command }] }],
-  })
+  });
 }

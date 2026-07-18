@@ -38,7 +38,11 @@ const claudeStaticProfile = {
         { event: HookEventSessionStart, command: "harness hook yield" },
         { event: HookEventStop, command: "harness hook yield" },
         { event: HookEventSubagentStop, command: "harness hook yield" },
-        { event: HookEventPostToolUse, command: "harness hook yield", matcher: "Task" },
+        {
+            event: HookEventPostToolUse,
+            command: "harness hook yield",
+            matcher: "Task",
+        },
     ],
     yield: { event: HookEventStop, command: "harness hook yield" },
 };
@@ -109,9 +113,13 @@ function buildEvents(payload, sessionID) {
                 marker(EventSessionMeta, RoleSystem, `session-start:${payload.source ?? "startup"}`, sessionID, payload.source ?? "startup"),
             ];
         case HookEventStop:
-            return [marker(EventTurnBoundary, RoleSystem, "turn-end", sessionID, "stop")];
+            return [
+                marker(EventTurnBoundary, RoleSystem, "turn-end", sessionID, "stop"),
+            ];
         case HookEventSubagentStop:
-            return [marker(EventTurnBoundary, RoleSystem, "subagent-end", sessionID, "subagent")];
+            return [
+                marker(EventTurnBoundary, RoleSystem, "subagent-end", sessionID, "subagent"),
+            ];
         case HookEventPostToolUse:
         case HookEventPostTask: {
             const tool = payload.tool_name ?? "";

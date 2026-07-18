@@ -3,10 +3,10 @@ import { type DaytonaConfig } from "./daytona.ts";
 export interface SweepResult {
     swept: string[];
     kept: string[];
-    failed: Array<{
+    failed: {
         id: string;
         error: string;
-    }>;
+    }[];
 }
 /** Lists sandboxes and deletes every one matching ALL of `opts.labels`.
  *

@@ -3,31 +3,31 @@
 // keep at most `limit` bytes, dropping the oldest when full.
 
 export class RecentOutputBuffer {
-  private readonly limit: number
-  private buf: Uint8Array = new Uint8Array(0)
+  private readonly limit: number;
+  private buf: Uint8Array = new Uint8Array(0);
 
   constructor(limit: number) {
-    this.limit = limit
+    this.limit = limit;
   }
 
   write(p: Uint8Array): void {
-    if (this.limit <= 0 || p.length === 0) return
+    if (this.limit <= 0 || p.length === 0) return;
     if (p.length >= this.limit) {
-      this.buf = p.slice(p.length - this.limit)
-      return
+      this.buf = p.slice(p.length - this.limit);
+      return;
     }
-    const merged = new Uint8Array(this.buf.length + p.length)
-    merged.set(this.buf, 0)
-    merged.set(p, this.buf.length)
-    const over = merged.length - this.limit
-    this.buf = over > 0 ? merged.slice(over) : merged
+    const merged = new Uint8Array(this.buf.length + p.length);
+    merged.set(this.buf, 0);
+    merged.set(p, this.buf.length);
+    const over = merged.length - this.limit;
+    this.buf = over > 0 ? merged.slice(over) : merged;
   }
 
   string(): string {
-    return new TextDecoder().decode(this.buf)
+    return new TextDecoder().decode(this.buf);
   }
 }
 
 export function newRecentOutput(limit: number): RecentOutputBuffer {
-  return new RecentOutputBuffer(limit)
+  return new RecentOutputBuffer(limit);
 }

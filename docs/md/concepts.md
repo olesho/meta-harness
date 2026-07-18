@@ -32,7 +32,7 @@ blocking [`Conversation`](#conversation) / [one-shot](modules/oneshot.md) method
 - `Context.withDeadline(parent, ms)` — a child that auto-cancels after `ms`.
 - `fromAbortSignal(signal, deadlineMs?)` — adapt a DOM `AbortSignal`.
 
-Cancellation propagates parent → child. The *cause* is recoverable via `ctx.err()` and
+Cancellation propagates parent → child. The _cause_ is recoverable via `ctx.err()` and
 is one of the sentinels `ctxCanceled` (explicit/abort) or `ctxDeadlineExceeded`
 (timeout), so callers can distinguish a timeout from an abort. Lives in
 [`meta-harness/async`](modules/async.md).
@@ -54,18 +54,18 @@ showing right now?"
 
 The wrapper's normalized verdict about a harness at a moment in time. One of:
 
-| Status | Meaning | Terminal? |
-| --- | --- | --- |
-| `idle` | Harness exited cleanly (code 0). | yes |
-| `failed` | Harness exited non-zero (no signal). | yes |
-| `blocked_by_cost` | Hit a cost / quota / usage-limit fingerprint. | yes |
-| `retry_later` | Transient API/transport error worth a backoff-respawn. | yes |
-| `api_error` | Upstream API error (429, 5xx, …), carries `httpCode` + `retryAfter`. | no (by default) |
-| `waiting_for_input` | Emitted an interactive prompt; awaiting stdin. | no |
-| `stale` | No output for the stale threshold; a state notice, not actionable. | no |
-| `interrupted` | Ended by signal, `stop()`, or context cancellation. | — |
-| `unknown` | Exit couldn't be classified. | — |
-| `binary_not_found` | Harness binary not on PATH. | — |
+| Status              | Meaning                                                              | Terminal?       |
+| ------------------- | -------------------------------------------------------------------- | --------------- |
+| `idle`              | Harness exited cleanly (code 0).                                     | yes             |
+| `failed`            | Harness exited non-zero (no signal).                                 | yes             |
+| `blocked_by_cost`   | Hit a cost / quota / usage-limit fingerprint.                        | yes             |
+| `retry_later`       | Transient API/transport error worth a backoff-respawn.               | yes             |
+| `api_error`         | Upstream API error (429, 5xx, …), carries `httpCode` + `retryAfter`. | no (by default) |
+| `waiting_for_input` | Emitted an interactive prompt; awaiting stdin.                       | no              |
+| `stale`             | No output for the stale threshold; a state notice, not actionable.   | no              |
+| `interrupted`       | Ended by signal, `stop()`, or context cancellation.                  | —               |
+| `unknown`           | Exit couldn't be classified.                                         | —               |
+| `binary_not_found`  | Harness binary not on PATH.                                          | —               |
 
 `Status` appears in three layers with the same string values: as the wrapper's outcome
 ([`wrapper`](modules/wrapper.md)), as the input to a turns adapter's
@@ -76,7 +76,7 @@ by chat.
 
 ## Error class
 
-A stable, numeric taxonomy of *why* a harness failed, orthogonal to [`Status`](#status)
+A stable, numeric taxonomy of _why_ a harness failed, orthogonal to [`Status`](#status)
 and designed for programmatic retry/backoff decisions:
 
 `ErrNone` (0), `ErrRateLimited` (1), `ErrAuth` (2), `ErrBilling` (3),
@@ -136,7 +136,7 @@ stream, which chat consumes to drive [turn state](#turn-state).
 
 ## Adapter
 
-A per-harness object that teaches the upper layers how *this* harness behaves. In
+A per-harness object that teaches the upper layers how _this_ harness behaves. In
 [`turns`](modules/turns.md) an adapter has a required core (`name`, `onScreen`,
 `onWrapperStatus`) plus **optional capabilities**, each a separate structural interface
 the chat layer probes for:
@@ -148,7 +148,7 @@ the chat layer probes for:
 - history: `TranscriptReader`
 
 An adapter implementing none still works (it behaves like `generic`). Each capability it
-*does* implement lights up a corresponding feature. This "optional interface" model is
+_does_ implement lights up a corresponding feature. This "optional interface" model is
 the main extension point — see [Guides › Adding a harness](guides/adding-a-harness.md).
 
 ---
@@ -177,7 +177,7 @@ avoids most confusion:
   `Open()`. Independent of the harness; it's what the [store](#store) is keyed on and what
   identifies the conversation to your code.
 - **Harness session** (`harnessSessionID`) — the **harness's own** session id (a UUID the
-  CLI assigns itself). Empty until meta-harness *captures* it — from the screen, a raw
+  CLI assigns itself). Empty until meta-harness _captures_ it — from the screen, a raw
   output line, or the on-disk log — and it's the id that actually [resumes](#resume) the
   harness and locates its [transcript](#transcript-vs-store-history).
 
@@ -186,11 +186,11 @@ events, and turn records — but at that point the harness hasn't revealed its i
 yet. So it mints its own immediately and captures the harness's id separately, whenever the
 harness surfaces it.
 
-| | Chat session id | Harness session id |
-| --- | --- | --- |
-| Created by | meta-harness, at `Open` | the harness CLI, internally |
-| Available | immediately, always | only once captured (empty `""` until then) |
-| Used for | the store, your records, `Reopen` | resuming the harness, reading its transcript |
+|            | Chat session id                   | Harness session id                           |
+| ---------- | --------------------------------- | -------------------------------------------- |
+| Created by | meta-harness, at `Open`           | the harness CLI, internally                  |
+| Available  | immediately, always               | only once captured (empty `""` until then)   |
+| Used for   | the store, your records, `Reopen` | resuming the harness, reading its transcript |
 
 A typical lifecycle:
 
@@ -200,7 +200,7 @@ first turn runs     (unchanged)            harness reveals its UUID → captured
 Reopen("a1b2c3…")   pass the chat id       → internally resumes the harness via "9f8e7d6c…"
 ```
 
-So `Reopen` takes the *chat* id (you always have it) but resumes with the *harness* id —
+So `Reopen` takes the _chat_ id (you always have it) but resumes with the _harness_ id —
 which is why it throws `ErrNoHarnessSession` when a conversation never ran far enough to
 capture one. (Exceptions: **pi** mints the harness id at launch via `--session-id`, and
 `Open({ resume })` seeds it up front.)
@@ -213,12 +213,12 @@ The stored `Session` persists only `id`, `harness`, `workingDir`, `createdAt`, a
 Relaunching a harness so it continues a prior [harness session](#session). Low-level:
 `Open({ resume: harnessSessionID, … })` prepends the adapter's `resumeArgs` at launch.
 Convenience: [`Reopen({ sessionID })`](modules/chat.md#resume) loads a stored chat
-session and resumes from its captured `harnessSessionID`, reusing the *same* chat session
+session and resumes from its captured `harnessSessionID`, reusing the _same_ chat session
 id. Requires the adapter to support resuming; throws `ErrResumeUnsupported` otherwise,
 or `ErrNoHarnessSession` if the stored session never captured an id. See
 [Guides › Resuming sessions](guides/resuming-sessions.md).
 
-Some harnesses **fork** on resume (mint a *new* id rather than continuing the old one);
+Some harnesses **fork** on resume (mint a _new_ id rather than continuing the old one);
 adapters signal this with `resumeForksSessionID()`, and chat arms a one-shot refresh to
 overwrite the seeded id with the freshly-minted one.
 
@@ -237,7 +237,7 @@ the same six methods.
 ### Transcript vs store history
 
 `history()` returns the conversation's turns. `historyWithSource()` additionally tells
-you *where they came from*:
+you _where they came from_:
 
 - **`HistorySourceTranscript`** — parsed from the harness's own on-disk log via the
   adapter's [`TranscriptReader`](modules/transcript.md). Authoritative, used **only**
@@ -258,7 +258,7 @@ a mid-turn clarifying question), the turns layer reports an **`InputRequest`**:
 `{ id, kind, prompt, options?, header?, multiSelect?, submitKeys? }`, where each
 `InputOption` carries an `id`, a human `label`, an optional `description`, a portable
 `alias` (`"proceed"` / `"deny"` / `"yes"` / `"no"` / `"other"`), and the raw `keys` to
-write. The `id` is a content hash — stable across redraws of the *same* prompt,
+write. The `id` is a content hash — stable across redraws of the _same_ prompt,
 different for a new one.
 
 The client-surfaced `kind` vocabulary is `trust_prompt` (folder-trust / bypass dialog),
@@ -301,7 +301,7 @@ trust prompt.
 ## Readiness
 
 Whether a harness's composer is ready to accept input. Some harnesses (`claude-code`,
-`codex`, `pi`) need the prompt to be *ready* before keystrokes land, so `send()` waits
+`codex`, `pi`) need the prompt to be _ready_ before keystrokes land, so `send()` waits
 for it. The [`ready` helpers](modules/chat.md#readiness-helpers) —
 `requiresPromptReadiness`, `readyForInput`, `submitKeyForHarness` — encode the
 per-harness UI markers and the correct submit key (Codex/Claude Code use a kitty-protocol
@@ -313,7 +313,7 @@ per-harness UI markers and the correct submit key (Codex/Claude Code use a kitty
 
 Not every harness prints an unambiguous "done" marker. For those that need it, chat runs
 an **idle-completion** fallback: once a turn is in flight and the composer is
-[ready](#readiness) and *settled* (no recent screen changes), the turn auto-completes on
+[ready](#readiness) and _settled_ (no recent screen changes), the turn auto-completes on
 a timer. Claude Code narrows the window using an end-of-turn marker (~2s) versus the
 plain idle window (~8s). This is why, for some harnesses, `TurnComplete` on the wire does
 not by itself finalize the turn — chat waits for the screen to quiesce first.

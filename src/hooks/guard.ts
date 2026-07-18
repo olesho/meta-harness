@@ -3,9 +3,9 @@
 // guard. Both are pure predicates so the payload parser can call them without
 // side effects.
 
-import path from "node:path"
+import path from "node:path";
 
-import { canonicalDir, cleanPosix } from "../transcript/pathutil.ts"
+import { canonicalDir, cleanPosix } from "../transcript/pathutil.ts";
 
 // guardPath validates a payload-supplied path stays within baseDir. Absolute
 // candidates are cleaned as-is; relative candidates are resolved against the
@@ -18,16 +18,17 @@ import { canonicalDir, cleanPosix } from "../transcript/pathutil.ts"
 // contract. cleanPosix collapses `..` segments lexically first so a traversal
 // is caught even when the escaped target does not exist on disk.
 export function guardPath(baseDir: string, candidate: string): string | null {
-  if (candidate === "") return null
-  const base = canonicalDir(baseDir)
+  if (candidate === "") return null;
+  const base = canonicalDir(baseDir);
   const lexical = path.posix.isAbsolute(candidate)
     ? cleanPosix(candidate)
-    : cleanPosix(path.posix.join(base, candidate))
-  const canon = canonicalDir(lexical)
-  const rel = path.posix.relative(base, canon)
-  if (rel === "") return canon
-  if (rel === ".." || rel.startsWith("../") || path.posix.isAbsolute(rel)) return null
-  return canon
+    : cleanPosix(path.posix.join(base, candidate));
+  const canon = canonicalDir(lexical);
+  const rel = path.posix.relative(base, canon);
+  if (rel === "") return canon;
+  if (rel === ".." || rel.startsWith("../") || path.posix.isAbsolute(rel))
+    return null;
+  return canon;
 }
 
 // sessionMatches reports whether a payload's session id is acceptable given the
@@ -35,7 +36,10 @@ export function guardPath(baseDir: string, candidate: string): string | null {
 // id passes (the guard is disarmed until the launch id is known). A non-empty
 // expected requires an exact match; a mismatch (a stray hook from an unrelated
 // session sharing the same settings.json) fails and its payload is dropped.
-export function sessionMatches(expected: string | undefined, payloadID: string): boolean {
-  if (!expected) return true
-  return expected === payloadID
+export function sessionMatches(
+  expected: string | undefined,
+  payloadID: string,
+): boolean {
+  if (!expected) return true;
+  return expected === payloadID;
 }

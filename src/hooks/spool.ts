@@ -15,27 +15,38 @@
 // drained event is (re)stamped source=SourceHook — that provenance is the whole
 // point of the spool (it feeds the eventID dedup consumer in hookMerge.ts).
 
-import { closeSync, existsSync, mkdirSync, openSync, readFileSync, writeFileSync } from "node:fs"
-import path from "node:path"
+import {
+  closeSync,
+  existsSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  writeFileSync,
+} from "node:fs";
+import path from "node:path";
 
-import { SourceHook, type Event, type ParsedEvent } from "../transcript/event.ts"
-import { withLockedFile } from "./lock.ts"
+import {
+  SourceHook,
+  type Event,
+  type ParsedEvent,
+} from "../transcript/event.ts";
+import { withLockedFile } from "./lock.ts";
 
 // spoolFileName is the fixed basename of the spool file inside a spool dir. The
 // appender and the drainer derive the same path from the dir alone.
-export const spoolFileName = "events.jsonl"
+export const spoolFileName = "events.jsonl";
 
 // spoolFilePath resolves the spool file inside a spool directory.
 export function spoolFilePath(spoolDir: string): string {
-  return path.join(spoolDir, spoolFileName)
+  return path.join(spoolDir, spoolFileName);
 }
 
 // SpoolRecord is the JSONL wire shape of one spooled event. It mirrors
 // ParsedEvent; the Event's Date timestamp round-trips through an ISO string.
 interface SpoolRecord {
-  harnessSessionID: string
-  parentSessionID?: string
-  event: Event
+  harnessSessionID: string;
+  parentSessionID?: string;
+  event: Event;
 }
 
 // appendSpool appends the given ParsedEvents to the spool file for spoolDir as
@@ -44,21 +55,21 @@ interface SpoolRecord {
 // uses, so concurrent hook processes never interleave a line and a drain never
 // observes a half-written record. An empty batch is a no-op.
 export function appendSpool(spoolDir: string, events: ParsedEvent[]): void {
-  if (events.length === 0) return
-  mkdirSync(spoolDir, { recursive: true })
-  const file = spoolFilePath(spoolDir)
-  let lines = ""
+  if (events.length === 0) return;
+  mkdirSync(spoolDir, { recursive: true });
+  const file = spoolFilePath(spoolDir);
+  let lines = "";
   for (const pe of events) {
-    lines += JSON.stringify(toRecord(pe)) + "\n"
+    lines += JSON.stringify(toRecord(pe)) + "\n";
   }
   withLockedFile(file, () => {
-    const fd = openSync(file, "a", 0o600)
+    const fd = openSync(file, "a", 0o600);
     try {
-      writeFileSync(fd, lines)
+      writeFileSync(fd, lines);
     } finally {
-      closeSync(fd)
+      closeSync(fd);
     }
-  })
+  });
 }
 
 // drainSpool reads AND truncates the spool for spoolDir, returning every spooled
@@ -68,60 +79,67 @@ export function appendSpool(spoolDir: string, events: ParsedEvent[]): void {
 // empty spool drains to []. Corrupt/blank lines are skipped rather than
 // aborting the drain.
 export function drainSpool(spoolDir: string): ParsedEvent[] {
-  const file = spoolFilePath(spoolDir)
-  if (!existsSync(file)) return []
+  const file = spoolFilePath(spoolDir);
+  if (!existsSync(file)) return [];
   return withLockedFile(file, () => {
-    let raw: string
+    let raw: string;
     try {
-      raw = readFileSync(file, "utf8")
+      raw = readFileSync(file, "utf8");
     } catch {
-      return []
+      return [];
     }
     // Truncate in place — appenders re-create/extend the same path under lock.
-    writeFileSync(file, "", { mode: 0o600 })
-    return parseLines(raw)
-  })
+    writeFileSync(file, "", { mode: 0o600 });
+    return parseLines(raw);
+  });
 }
 
 // toRecord projects a ParsedEvent to its JSONL record. parentSessionID is
 // dropped when empty so the wire line stays minimal.
 function toRecord(pe: ParsedEvent): SpoolRecord {
-  const rec: SpoolRecord = { harnessSessionID: pe.harnessSessionID, event: pe.event }
-  if (pe.parentSessionID) rec.parentSessionID = pe.parentSessionID
-  return rec
+  const rec: SpoolRecord = {
+    harnessSessionID: pe.harnessSessionID,
+    event: pe.event,
+  };
+  if (pe.parentSessionID) rec.parentSessionID = pe.parentSessionID;
+  return rec;
 }
 
 // parseLines turns raw JSONL back into ParsedEvents, skipping blank/corrupt
 // lines. Each event is rehydrated (Date timestamp) and re-stamped SourceHook.
 function parseLines(raw: string): ParsedEvent[] {
-  const out: ParsedEvent[] = []
+  const out: ParsedEvent[] = [];
   for (const line of raw.split("\n")) {
-    if (line.trim() === "") continue
-    let rec: SpoolRecord
+    if (line.trim() === "") continue;
+    let parsed: unknown;
     try {
-      rec = JSON.parse(line) as SpoolRecord
+      parsed = JSON.parse(line);
     } catch {
-      continue
+      continue;
     }
-    if (!rec || typeof rec !== "object" || !rec.event) continue
+    // JSONL is untrusted on read: keep the shape `Partial` so the required-field
+    // guards below stay meaningful instead of being cast away.
+    if (!parsed || typeof parsed !== "object") continue;
+    const rec = parsed as Partial<SpoolRecord>;
+    if (!rec.event) continue;
     const pe: ParsedEvent = {
       harnessSessionID: rec.harnessSessionID ?? "",
       event: rehydrateEvent(rec.event),
-    }
-    if (rec.parentSessionID) pe.parentSessionID = rec.parentSessionID
-    out.push(pe)
+    };
+    if (rec.parentSessionID) pe.parentSessionID = rec.parentSessionID;
+    out.push(pe);
   }
-  return out
+  return out;
 }
 
 // rehydrateEvent restores the JSON-serialized Event to the canonical model:
 // converts an ISO-string timestamp back to a Date and forces source=SourceHook.
 function rehydrateEvent(raw: Event): Event {
-  const event: Event = { ...raw, source: SourceHook }
-  const ts = raw.timestamp as unknown
+  const event: Event = { ...raw, source: SourceHook };
+  const ts = raw.timestamp as unknown;
   if (typeof ts === "string" || typeof ts === "number") {
-    const d = new Date(ts)
-    event.timestamp = Number.isNaN(d.getTime()) ? undefined : d
+    const d = new Date(ts);
+    event.timestamp = Number.isNaN(d.getTime()) ? undefined : d;
   }
-  return event
+  return event;
 }

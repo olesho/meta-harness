@@ -37,12 +37,12 @@ export {
   type HistorySource,
   HistorySourceTranscript,
   HistorySourceStore,
-} from "./types.ts"
+} from "./types.ts";
 
-export type { Store } from "./store.ts"
-export { MemStore, newMemStore } from "./memstore.ts"
+export type { Store } from "./store.ts";
+export { MemStore, newMemStore } from "./memstore.ts";
 
-export { cleanHarnessEnv } from "./env.ts"
+export { cleanHarnessEnv } from "./env.ts";
 
 export {
   ErrInvalidOptions,
@@ -58,13 +58,13 @@ export {
   ErrQuitUnsupported,
   ErrResumeUnsupported,
   ErrNoHarnessSession,
-} from "./errors.ts"
+} from "./errors.ts";
 
 export {
   submitKeyForHarness,
   requiresPromptReadiness,
   readyForInput,
-} from "./ready.ts"
+} from "./ready.ts";
 
 export {
   Conversation,
@@ -73,7 +73,7 @@ export {
   resolveAdapter,
   type Options,
   type ReopenOptions,
-} from "./conversation.ts"
+} from "./conversation.ts";
 
 export type {
   WrapperSession,
@@ -87,4 +87,4 @@ export type {
   TurnsInputOption,
   StartConfig,
   Backend,
-} from "./deps.ts"
+} from "./deps.ts";

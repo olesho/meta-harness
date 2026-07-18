@@ -36,7 +36,7 @@ export async function loadDaytonaClass(config) {
     const sdkImport = config.sdkImport || "@daytonaio/sdk";
     try {
         const mod = await import(__rewriteRelativeImportExtension(sdkImport));
-        const DaytonaClass = mod.Daytona || (mod.default && mod.default.Daytona);
+        const DaytonaClass = mod.Daytona || mod.default?.Daytona;
         if (typeof DaytonaClass !== "function") {
             throw new Error(`${sdkImport} did not expose Daytona as a constructor`);
         }

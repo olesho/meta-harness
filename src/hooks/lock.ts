@@ -16,72 +16,76 @@ import {
   statSync,
   unlinkSync,
   writeFileSync,
-} from "node:fs"
+} from "node:fs";
 
 // A lock held longer than this is presumed abandoned (crashed writer) and is
 // reclaimable. Kept comfortably longer than any real edit window.
-export const lockStaleTTLMs = 30_000
+export const lockStaleTTLMs = 30_000;
 
 // Bounded-backoff defaults for contended acquisition.
-const defaultAcquireTimeoutMs = 10_000
-const retryBaseMs = 10
-const retryMaxMs = 250
+const defaultAcquireTimeoutMs = 10_000;
+const retryBaseMs = 10;
+const retryMaxMs = 250;
 
 export interface LockOptions {
   // Max time to spend contending for the sentinel before giving up. Defaults to
   // defaultAcquireTimeoutMs.
-  acquireTimeoutMs?: number
+  acquireTimeoutMs?: number;
   // Age past which a sentinel is treated as abandoned and reclaimed. Defaults to
   // lockStaleTTLMs.
-  staleTTLMs?: number
+  staleTTLMs?: number;
 }
 
 // sleepSync blocks the current thread for `ms` without a busy loop. Atomics.wait
 // on a private SharedArrayBuffer is the one synchronous sleep available on both
 // Node and Bun (setTimeout is async; there is no fs-level blocking primitive).
 function sleepSync(ms: number): void {
-  if (ms <= 0) return
-  const buf = new Int32Array(new SharedArrayBuffer(4))
-  Atomics.wait(buf, 0, 0, ms)
+  if (ms <= 0) return;
+  const buf = new Int32Array(new SharedArrayBuffer(4));
+  Atomics.wait(buf, 0, 0, ms);
 }
 
 function lockPathFor(configPath: string): string {
-  return `${configPath}.lock`
+  return `${configPath}.lock`;
 }
 
 function tmpPathFor(configPath: string): string {
-  return `${configPath}.tmp`
+  return `${configPath}.tmp`;
 }
 
 // acquire creates the O_EXCL sentinel, retrying on EEXIST with bounded backoff.
 // A sentinel older than the stale TTL is reclaimed (best-effort unlink) so a
 // crashed writer cannot wedge the config forever.
-function acquire(lockPath: string, timeoutMs: number, staleTTLMs: number): void {
-  const deadline = Date.now() + timeoutMs
-  let attempt = 0
+function acquire(
+  lockPath: string,
+  timeoutMs: number,
+  staleTTLMs: number,
+): void {
+  const deadline = Date.now() + timeoutMs;
+  let attempt = 0;
   for (;;) {
     try {
       // "wx" == O_CREAT | O_EXCL | O_WRONLY — atomic create-or-fail.
-      const fd = openSync(lockPath, "wx")
+      const fd = openSync(lockPath, "wx");
       // Record the holder's timestamp so a peer can judge staleness even if the
       // filesystem mtime is coarse.
       try {
-        writeFileSync(fd, `${process.pid} ${Date.now()}\n`)
+        writeFileSync(fd, `${process.pid} ${Date.now()}\n`);
       } finally {
-        closeSync(fd)
+        closeSync(fd);
       }
-      return
+      return;
     } catch (err) {
-      if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err
-      if (reclaimIfStale(lockPath, staleTTLMs)) continue
+      if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err;
+      if (reclaimIfStale(lockPath, staleTTLMs)) continue;
       if (Date.now() >= deadline) {
         throw new Error(
           `withLockedFile: timed out acquiring ${lockPath} after ${timeoutMs}ms`,
-        )
+        );
       }
-      const backoff = Math.min(retryBaseMs * 2 ** attempt, retryMaxMs)
-      attempt++
-      sleepSync(backoff)
+      const backoff = Math.min(retryBaseMs * 2 ** attempt, retryMaxMs);
+      attempt++;
+      sleepSync(backoff);
     }
   }
 }
@@ -89,29 +93,29 @@ function acquire(lockPath: string, timeoutMs: number, staleTTLMs: number): void 
 // reclaimIfStale unlinks the sentinel when its age exceeds the stale TTL.
 // Returns true if a reclaim was attempted (caller should retry immediately).
 function reclaimIfStale(lockPath: string, staleTTLMs: number): boolean {
-  let ageMs: number
+  let ageMs: number;
   try {
-    ageMs = Date.now() - statSync(lockPath).mtimeMs
+    ageMs = Date.now() - statSync(lockPath).mtimeMs;
   } catch (err) {
     // Vanished between EEXIST and stat — the holder released; retry now.
-    if ((err as NodeJS.ErrnoException).code === "ENOENT") return true
-    throw err
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return true;
+    throw err;
   }
-  if (ageMs < staleTTLMs) return false
+  if (ageMs < staleTTLMs) return false;
   try {
-    unlinkSync(lockPath)
+    unlinkSync(lockPath);
   } catch (err) {
     // Another peer already reclaimed it; that is fine — just retry.
-    if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err
+    if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
   }
-  return true
+  return true;
 }
 
 function release(lockPath: string): void {
   try {
-    unlinkSync(lockPath)
+    unlinkSync(lockPath);
   } catch (err) {
-    if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err
+    if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
   }
 }
 
@@ -122,16 +126,16 @@ export function withLockedFile<T>(
   fn: () => T,
   opts: LockOptions = {},
 ): T {
-  const lockPath = lockPathFor(configPath)
+  const lockPath = lockPathFor(configPath);
   acquire(
     lockPath,
     opts.acquireTimeoutMs ?? defaultAcquireTimeoutMs,
     opts.staleTTLMs ?? lockStaleTTLMs,
-  )
+  );
   try {
-    return fn()
+    return fn();
   } finally {
-    release(lockPath)
+    release(lockPath);
   }
 }
 
@@ -144,7 +148,7 @@ export function atomicWriteFileSync(
   data: string,
   mode = 0o600,
 ): void {
-  const tmp = tmpPathFor(configPath)
-  writeFileSync(tmp, data, { mode })
-  renameSync(tmp, configPath)
+  const tmp = tmpPathFor(configPath);
+  writeFileSync(tmp, data, { mode });
+  renameSync(tmp, configPath);
 }

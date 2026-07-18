@@ -3,7 +3,7 @@ export { marshalParsedEvents, unmarshalParsedEvents } from "./eventWire.ts";
 export { mergeHookEvents } from "./hookMerge.ts";
 export { usageFromClaudeJSONL, usageFromCodexJSONL, usageToPublicJSON, type Usage, } from "./usage.ts";
 export type { Reader } from "./reader.ts";
-export { ErrEmptySessionID, ErrEmptyWorkingDir, ErrSessionNotFound } from "./errors.ts";
+export { ErrEmptySessionID, ErrEmptyWorkingDir, ErrSessionNotFound, } from "./errors.ts";
 export { PiReader, slugForCwd } from "./pi/pi.ts";
 export { CodexReader } from "./codex/codex.ts";
 export { events as codexEvents, parseRollout } from "./codex/parseCodex.ts";

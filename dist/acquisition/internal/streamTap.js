@@ -59,7 +59,8 @@ export class StreamTap {
      * EITHER consumer needs it.
      */
     installs() {
-        return (this.cfg.parser != null && this.cfg.onEvent != null) || this.cfg.display != null;
+        return ((this.cfg.parser != null && this.cfg.onEvent != null) ||
+            this.cfg.display != null);
     }
     /** True once live stream events should be emitted (Stream mode + a parser). */
     emitLive() {

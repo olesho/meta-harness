@@ -9,47 +9,47 @@
 // string[] handed to ws.exec — the env layer (compose/argv.ts `argvToShell`) owns
 // the injection-safe quoting at the boundary, and the prompt is never a token.
 
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs"
-import { tmpdir } from "node:os"
-import path from "node:path"
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 
-import type { Context } from "../async/index.ts"
-import { encodedCWD } from "../transcript/index.ts"
+import type { Context } from "../async/index.ts";
+import { encodedCWD } from "../transcript/index.ts";
 import {
   ExitDeadline,
   ExitUsage,
   parseLastJSONLine,
   type StructuredTurnResult,
   type TurnStatus,
-} from "../turnproto/index.ts"
-import type { Workspace } from "./types.ts"
+} from "../turnproto/index.ts";
+import type { Workspace } from "./types.ts";
 
 /** The guest bin invoked per turn; overridable for image-pinned paths. */
-const DEFAULT_BINARY = "meta-harness-structured-run"
+const DEFAULT_BINARY = "meta-harness-structured-run";
 
 /** Inputs for one structured turn. The prompt is a plain string — it is written
  *  to a temp file and uploaded, NEVER placed on the argv. */
 export interface TurnConfig {
   /** Short harness alias (claude → claude-code, codex → codex) or the full name. */
-  harness: string
+  harness: string;
   /** The prompt text (crosses via --prompt-file, never argv). */
-  prompt: string
+  prompt: string;
   /** Reasoning effort forwarded to the harness. */
-  effort?: string
+  effort?: string;
   /** Model forwarded to the harness. */
-  model?: string
+  model?: string;
   /** Extra args forwarded verbatim to the harness after `--`. */
-  harnessArgs?: string[]
+  harnessArgs?: string[];
   /** Environment overlaid on the guest process. */
-  env?: Record<string, string>
+  env?: Record<string, string>;
   /** Guest working directory; defaults to the workspace's repo path. */
-  cwd?: string
+  cwd?: string;
   /** Override the guest bin name/path (default meta-harness-structured-run). */
-  binary?: string
+  binary?: string;
   /** OPTIONAL out-of-band RAW-JSONL transcript retrieval to this HOST path.
    *  claude-code ONLY (see below); a codex turn REJECTS this rather than
    *  downloading from the wrong on-disk layout. */
-  retrieveTranscriptTo?: string
+  retrieveTranscriptTo?: string;
 }
 
 /** Thrown when stdout carries a payload the client cannot interpret coherently
@@ -60,8 +60,8 @@ export class TurnProtocolError extends Error {
     readonly exitCode: number,
     readonly stderr: string,
   ) {
-    super(message)
-    this.name = "TurnProtocolError"
+    super(message);
+    this.name = "TurnProtocolError";
   }
 }
 
@@ -75,8 +75,8 @@ export class TranscriptRetrievalUnsupportedError extends Error {
     super(
       `out-of-band transcript retrieval not supported for harness "${harness}" ` +
         `(claude-code retrieval only)`,
-    )
-    this.name = "TranscriptRetrievalUnsupportedError"
+    );
+    this.name = "TranscriptRetrievalUnsupportedError";
   }
 }
 
@@ -87,30 +87,35 @@ function resolveHarnessName(name: string): "claude-code" | "codex" | null {
   switch (name) {
     case "claude":
     case "claude-code":
-      return "claude-code"
+      return "claude-code";
     case "codex":
-      return "codex"
+      return "codex";
     default:
-      return null
+      return null;
   }
 }
 
 /** Assemble the structured-runner argv. The prompt is NOT here — only its file
  *  path — so no prompt content ever reaches the argv or a shell. */
-function buildArgv(binary: string, promptPath: string, cfg: TurnConfig): string[] {
-  const argv = [binary, "--prompt-file", promptPath]
-  if (cfg.effort !== undefined) argv.push("--effort", cfg.effort)
-  if (cfg.model !== undefined) argv.push("--model", cfg.model)
-  argv.push(cfg.harness)
-  if (cfg.harnessArgs && cfg.harnessArgs.length > 0) argv.push("--", ...cfg.harnessArgs)
-  return argv
+function buildArgv(
+  binary: string,
+  promptPath: string,
+  cfg: TurnConfig,
+): string[] {
+  const argv = [binary, "--prompt-file", promptPath];
+  if (cfg.effort !== undefined) argv.push("--effort", cfg.effort);
+  if (cfg.model !== undefined) argv.push("--model", cfg.model);
+  argv.push(cfg.harness);
+  if (cfg.harnessArgs && cfg.harnessArgs.length > 0)
+    argv.push("--", ...cfg.harnessArgs);
+  return argv;
 }
 
 /** statusForExit maps an exit code that produced NO JSON to a coherent status. */
 function statusForExit(code: number): TurnStatus {
-  if (code === ExitDeadline) return "deadline"
-  if (code === ExitUsage) return "startup_error"
-  return "errored"
+  if (code === ExitDeadline) return "deadline";
+  if (code === ExitUsage) return "startup_error";
+  return "errored";
 }
 
 /**
@@ -129,26 +134,26 @@ export async function runStructuredTurn(
   ws: Workspace,
   cfg: TurnConfig,
 ): Promise<StructuredTurnResult> {
-  const binary = cfg.binary ?? DEFAULT_BINARY
-  const cwd = cfg.cwd ?? ws.guestPath("repo")
+  const binary = cfg.binary ?? DEFAULT_BINARY;
+  const cwd = cfg.cwd ?? ws.guestPath("repo");
 
   // Stage the prompt on the host, upload to the guest tmp dir, exec, clean up.
-  const stageDir = mkdtempSync(path.join(tmpdir(), "mh-turn-"))
-  const hostPromptPath = path.join(stageDir, "prompt.txt")
-  const guestPromptPath = `${ws.guestPath("tmp")}/meta-harness-prompt.txt`
+  const stageDir = mkdtempSync(path.join(tmpdir(), "mh-turn-"));
+  const hostPromptPath = path.join(stageDir, "prompt.txt");
+  const guestPromptPath = `${ws.guestPath("tmp")}/meta-harness-prompt.txt`;
 
-  let result: StructuredTurnResult
+  let result: StructuredTurnResult;
   try {
-    writeFileSync(hostPromptPath, cfg.prompt, "utf8")
-    await ws.upload(ctx, hostPromptPath, guestPromptPath)
+    writeFileSync(hostPromptPath, cfg.prompt, "utf8");
+    await ws.upload(ctx, hostPromptPath, guestPromptPath);
 
-    const argv = buildArgv(binary, guestPromptPath, cfg)
-    const exec = await ws.exec(ctx, argv, { env: cfg.env, cwd })
+    const argv = buildArgv(binary, guestPromptPath, cfg);
+    const exec = await ws.exec(ctx, argv, { env: cfg.env, cwd });
 
-    const parsed = parseLastJSONLine(exec.stdout)
+    const parsed = parseLastJSONLine(exec.stdout);
     if (parsed !== null) {
       // JSON payload present — the source of truth (exit 0 / 124 / caught throw).
-      result = parsed
+      result = parsed;
     } else if (exec.code !== 0) {
       // No JSON on a non-zero exit (usage / prompt-read failure / fatal): derive
       // a coherent result from exit code + stderr rather than assume a payload.
@@ -159,23 +164,23 @@ export async function runStructuredTurn(
         transcript_entries: [],
         reason: exec.stderr.trim() || `structured-runner exited ${exec.code}`,
         working_dir: cwd,
-      }
+      };
     } else {
       // Exit 0 with no JSON is anomalous — there is no reply to hand back.
       throw new TurnProtocolError(
         "structured-runner exited 0 but emitted no JSON result line",
         exec.code,
         exec.stderr,
-      )
+      );
     }
   } finally {
-    rmSync(stageDir, { recursive: true, force: true })
+    rmSync(stageDir, { recursive: true, force: true });
   }
 
   if (cfg.retrieveTranscriptTo !== undefined) {
-    await retrieveTranscript(ctx, ws, cfg, result)
+    await retrieveTranscript(ctx, ws, cfg, result);
   }
-  return result
+  return result;
 }
 
 /**
@@ -193,15 +198,15 @@ async function retrieveTranscript(
   cfg: TurnConfig,
   result: StructuredTurnResult,
 ): Promise<void> {
-  const harness = resolveHarnessName(cfg.harness)
+  const harness = resolveHarnessName(cfg.harness);
   if (harness !== "claude-code") {
     // codex (or an unknown alias) — do NOT download from the claude path.
-    throw new TranscriptRetrievalUnsupportedError(cfg.harness)
+    throw new TranscriptRetrievalUnsupportedError(cfg.harness);
   }
-  if (!result.harnessSessionID) return // nothing to retrieve without a session id
+  if (!result.harnessSessionID) return; // nothing to retrieve without a session id
 
-  const home = ws.guestPath("home")
-  const projectDir = encodedCWD(result.working_dir || (cfg.cwd ?? ""))
-  const guestFile = `${home}/.claude/projects/${projectDir}/${result.harnessSessionID}.jsonl`
-  await ws.download(ctx, guestFile, cfg.retrieveTranscriptTo!)
+  const home = ws.guestPath("home");
+  const projectDir = encodedCWD(result.working_dir || (cfg.cwd ?? ""));
+  const guestFile = `${home}/.claude/projects/${projectDir}/${result.harnessSessionID}.jsonl`;
+  await ws.download(ctx, guestFile, cfg.retrieveTranscriptTo!);
 }

@@ -39,14 +39,14 @@
 // Hooks/Off and the Stream branch is reachable only by a synthetic interleaved
 // fake. This is the accepted A1 outcome — the Stream branch is scaffolding.
 
-import type { Adapter, AcquisitionMode } from "../../turns/index.ts"
+import type { Adapter, AcquisitionMode } from "../../turns/index.ts";
 import {
   AcquisitionModeHooks,
   AcquisitionModeOff,
   AcquisitionModeStream,
-} from "../../turns/index.ts"
-import type { Info } from "../../discovery/discovery.ts"
-import { pinned as versionPinned } from "../../versions/versions.ts"
+} from "../../turns/index.ts";
+import type { Info } from "../../discovery/discovery.ts";
+import { pinned as versionPinned } from "../../versions/versions.ts";
 
 // ── Fact 2: per-capability adapter presence ─────────────────────────────────
 
@@ -57,17 +57,17 @@ import { pinned as versionPinned } from "../../versions/versions.ts"
  */
 export interface AdapterCapabilities {
   /** adapter implements StreamParser.parseStreamLine. */
-  hasStreamParser: boolean
+  hasStreamParser: boolean;
   /** adapter implements SessionResumer.resumeArgs. */
-  hasSessionResumer: boolean
+  hasSessionResumer: boolean;
   /** adapter implements TranscriptReader.readTranscript. */
-  hasTranscriptReader: boolean
+  hasTranscriptReader: boolean;
   /**
    * adapter implements StreamInterleaved AND its marker returns true — i.e. the
    * harness emits stream-json interleaved with the interactive TUI so a live
    * tap can observe it. Absent interface ⇒ false (the conservative default).
    */
-  streamInterleaved: boolean
+  streamInterleaved: boolean;
 }
 
 /**
@@ -80,17 +80,22 @@ export interface AdapterCapabilities {
 export function probeAdapter(adapter: Adapter): AdapterCapabilities {
   // Probe optional methods off the concrete object. Adapter's declared type
   // does not include the optional capability interfaces, so widen to a record.
-  const a = adapter as unknown as Record<string, unknown>
-  const hasStreamParser = typeof a.parseStreamLine === "function"
-  const hasSessionResumer = typeof a.resumeArgs === "function"
-  const hasTranscriptReader = typeof a.readTranscript === "function"
+  const a = adapter as unknown as Record<string, unknown>;
+  const hasStreamParser = typeof a.parseStreamLine === "function";
+  const hasSessionResumer = typeof a.resumeArgs === "function";
+  const hasTranscriptReader = typeof a.readTranscript === "function";
 
-  let streamInterleaved = false
+  let streamInterleaved = false;
   if (typeof a.streamInterleaved === "function") {
-    streamInterleaved = (a.streamInterleaved as () => boolean)() === true
+    streamInterleaved = (a.streamInterleaved as () => boolean)();
   }
 
-  return { hasStreamParser, hasSessionResumer, hasTranscriptReader, streamInterleaved }
+  return {
+    hasStreamParser,
+    hasSessionResumer,
+    hasTranscriptReader,
+    streamInterleaved,
+  };
 }
 
 // ── Fact 3: capability-by-version ───────────────────────────────────────────
@@ -102,7 +107,7 @@ export function probeAdapter(adapter: Adapter): AdapterCapabilities {
  * StreamParser". Injected so tests can drive the version gate independently of
  * the embedded versions.json.
  */
-export type StreamVersionPredicate = (harness: string) => boolean
+export type StreamVersionPredicate = (harness: string) => boolean;
 
 /**
  * defaultStreamVersionPredicate ties fact 3 to versions.ts exactly as described:
@@ -112,10 +117,12 @@ export type StreamVersionPredicate = (harness: string) => boolean
  * verified). An unpinned/unknown harness is conservatively treated as NOT
  * supporting the stream surface.
  */
-export const defaultStreamVersionPredicate: StreamVersionPredicate = (harness) => {
-  const [, ok] = versionPinned(harness)
-  return ok
-}
+export const defaultStreamVersionPredicate: StreamVersionPredicate = (
+  harness,
+) => {
+  const [, ok] = versionPinned(harness);
+  return ok;
+};
 
 // ── The ResolvedProfile-analogue ────────────────────────────────────────────
 
@@ -126,17 +133,17 @@ export const defaultStreamVersionPredicate: StreamVersionPredicate = (harness) =
  */
 export interface ResolvedProfile {
   /** Canonical harness key (versions.json name). Empty when unknown. */
-  harness: string
+  harness: string;
   /** Fact 1: the binary was found installed for the run. */
-  installed: boolean
+  installed: boolean;
   /** Fact 1: the version detected/pinned for the run ("" when unknown). */
-  version: string
+  version: string;
   /** Fact 1: the harness carries a confirmed pin in versions.json. */
-  hasPin: boolean
+  hasPin: boolean;
   /** Fact 2: the resolved adapter's optional capabilities. */
-  capabilities: AdapterCapabilities
+  capabilities: AdapterCapabilities;
   /** Fact 3: this installed version supports the stream-json surface. */
-  streamJSONSupported: boolean
+  streamJSONSupported: boolean;
 }
 
 /** Inputs to resolveProfile. Kept structural so tests supply plain fakes. */
@@ -146,14 +153,17 @@ export interface ResolveProfileInput {
    * install / version fields are consulted; a `Pick` of Info satisfies it, so
    * tests need not build a whole Info.
    */
-  info: Pick<Info, "harness" | "installed" | "detectedVersion" | "pinnedVersion">
+  info: Pick<
+    Info,
+    "harness" | "installed" | "detectedVersion" | "pinnedVersion"
+  >;
   /** The resolved turns adapter for the run (probed structurally, fact 2). */
-  adapter: Adapter
+  adapter: Adapter;
   /**
    * Fact 3 — the version predicate. Defaults to the versions.json-backed
    * predicate; tests override it to drive the version gate.
    */
-  streamVersionPredicate?: StreamVersionPredicate
+  streamVersionPredicate?: StreamVersionPredicate;
 }
 
 /**
@@ -162,16 +172,18 @@ export interface ResolveProfileInput {
  * runtime detection). Pure: it reads its inputs and the injected predicate only.
  */
 export function resolveProfile(input: ResolveProfileInput): ResolvedProfile {
-  const { info, adapter } = input
-  const predicate = input.streamVersionPredicate ?? defaultStreamVersionPredicate
+  const { info, adapter } = input;
+  const predicate =
+    input.streamVersionPredicate ?? defaultStreamVersionPredicate;
 
-  const capabilities = probeAdapter(adapter)
+  const capabilities = probeAdapter(adapter);
   // Prefer the detected version; fall back to the pin when detection didn't run.
-  const version = info.detectedVersion !== "" ? info.detectedVersion : info.pinnedVersion
-  const hasPin = info.pinnedVersion !== ""
+  const version =
+    info.detectedVersion !== "" ? info.detectedVersion : info.pinnedVersion;
+  const hasPin = info.pinnedVersion !== "";
   // Fact 3 is a property of the installed binary, so it is only meaningful when
   // the harness is actually installed for the run.
-  const streamJSONSupported = info.installed && predicate(info.harness)
+  const streamJSONSupported = info.installed && predicate(info.harness);
 
   return {
     harness: info.harness,
@@ -180,7 +192,7 @@ export function resolveProfile(input: ResolveProfileInput): ResolvedProfile {
     hasPin,
     capabilities,
     streamJSONSupported,
-  }
+  };
 }
 
 // ── The decision function ───────────────────────────────────────────────────
@@ -192,17 +204,17 @@ export function resolveProfile(input: ResolveProfileInput): ResolvedProfile {
  */
 export interface PlanContext {
   /** The three facts resolved for the run. */
-  profile: ResolvedProfile
+  profile: ResolvedProfile;
   /**
    * Whether an event sink exists for the run (Go's `haveSink`). With no sink
    * there is nothing to acquire into, so the plan is Off regardless of mode.
    */
-  haveSink: boolean
+  haveSink: boolean;
   /**
    * Whether hook-based delivery is viable for the run — a HookProvider resolved
    * and its config can be ensured. The Hooks fall-back rung.
    */
-  hooksViable: boolean
+  hooksViable: boolean;
 }
 
 /**
@@ -217,7 +229,7 @@ export function streamEligible(profile: ResolvedProfile): boolean {
     profile.capabilities.hasStreamParser &&
     profile.streamJSONSupported &&
     profile.capabilities.streamInterleaved
-  )
+  );
 }
 
 /**
@@ -237,32 +249,35 @@ export function streamEligible(profile: ResolvedProfile): boolean {
  * interleaved), real-adapter output is Hooks/Off; the Stream branch is reached
  * only by a synthetic interleaved fake.
  */
-export function planAcquisition(requested: AcquisitionMode, ctx: PlanContext): AcquisitionMode {
+export function planAcquisition(
+  requested: AcquisitionMode,
+  ctx: PlanContext,
+): AcquisitionMode {
   if (!ctx.haveSink) {
-    return AcquisitionModeOff
+    return AcquisitionModeOff;
   }
 
-  const eligible = streamEligible(ctx.profile)
+  const eligible = streamEligible(ctx.profile);
 
   switch (requested) {
     case AcquisitionModeOff:
-      return AcquisitionModeOff
+      return AcquisitionModeOff;
     case AcquisitionModeStream:
       if (eligible) {
-        return AcquisitionModeStream
+        return AcquisitionModeStream;
       }
-      return ctx.hooksViable ? AcquisitionModeHooks : AcquisitionModeOff
+      return ctx.hooksViable ? AcquisitionModeHooks : AcquisitionModeOff;
     case AcquisitionModeHooks:
       if (ctx.hooksViable) {
-        return AcquisitionModeHooks
+        return AcquisitionModeHooks;
       }
       if (eligible) {
-        return AcquisitionModeStream
+        return AcquisitionModeStream;
       }
-      return AcquisitionModeOff
+      return AcquisitionModeOff;
     default:
       // Exhaustive over AcquisitionMode; unreachable. Conservative default.
-      return AcquisitionModeOff
+      return AcquisitionModeOff;
   }
 }
 
@@ -278,5 +293,5 @@ export function planAcquisition(requested: AcquisitionMode, ctx: PlanContext): A
  * seam the tap/StreamTap layer can call without re-running the full plan.
  */
 export function replanAfterStreamFailure(ctx: PlanContext): AcquisitionMode {
-  return ctx.hooksViable ? AcquisitionModeHooks : AcquisitionModeOff
+  return ctx.hooksViable ? AcquisitionModeHooks : AcquisitionModeOff;
 }

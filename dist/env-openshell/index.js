@@ -133,6 +133,10 @@ export function generatePolicy(scopes) {
     lines.push("  fleet:");
     lines.push(`    endpoints: [{ host: ${scopes.fleetHost}, port: ${scopes.fleetPort}, protocol: rest, access: full, enforcement: ${enforcement} }]`);
     lines.push(`    binaries: [{ path: ${scopes.harnessPath} }, { path: /usr/local/bin/orche }]`);
+    // Optional scrape lanes — one per endpoint so each host is bound to exactly its own
+    // binaries (a shared lane would let any listed binary reach any listed host). Bare
+    // `{host, port}` endpoints (plain CONNECT tunnel), no name field — same shape the
+    // model/fleet lanes use above, which relies on the key as the lane name.
     (scopes.scrapeEndpoints ?? []).forEach((e, i) => {
         lines.push(`  scrape_${i}:`);
         lines.push(`    endpoints: [{ host: ${e.host}, port: ${e.port ?? 443} }]`);
@@ -211,7 +215,8 @@ export class OpenShellContainment {
                 modelPort: policy.modelPort ?? 443,
                 fleetHost: policy.fleetHost ?? "localhost",
                 fleetPort: policy.fleetPort ?? 53343,
-                harnessPath: policy.harnessPath ?? "/usr/local/bin/harness-wrapper",
+                harnessPath: policy.harnessPath ??
+                    "/usr/local/bin/harness-wrapper",
                 scrapeEndpoints: policy.scrapeEndpoints,
             });
             policyPath = `${ws.guestPath("tmp")}/openshell-policy-${name}.yaml`;
@@ -220,7 +225,7 @@ export class OpenShellContainment {
             });
             if (staged.code !== 0) {
                 throw new Error(`openshell.acquire: staging policy file failed (exit ${staged.code}): ` +
-                    `${staged.stderr || staged.stdout}`);
+                    (staged.stderr || staged.stdout));
             }
         }
         // `create` with no trailing command attaches an interactive shell and
@@ -241,7 +246,7 @@ export class OpenShellContainment {
         ]);
         if (created.code !== 0) {
             throw new Error(`openshell.acquire: sandbox create failed (exit ${created.code}): ` +
-                `${created.stderr || created.stdout}`);
+                (created.stderr || created.stdout));
         }
         // Anything fallible after create must not leak the sandbox: best-effort
         // delete before rethrowing.
@@ -263,7 +268,7 @@ export class OpenShellContainment {
             ]);
             if (prep.code !== 0) {
                 throw new Error(`openshell.acquire: guest layout prep failed (exit ${prep.code}): ` +
-                    `${prep.stderr || prep.stdout}`);
+                    (prep.stderr || prep.stdout));
             }
         }
         catch (err) {
@@ -338,9 +343,28 @@ function buildLayer(name, guestRepo, driver) {
             return [
                 "sh",
                 "-c",
-                argvToShell(["openshell", "sandbox", "upload", "--no-git-ignore", name, stagingPath, "/tmp"]) +
+                argvToShell([
+                    "openshell",
+                    "sandbox",
+                    "upload",
+                    "--no-git-ignore",
+                    name,
+                    stagingPath,
+                    "/tmp",
+                ]) +
                     " && " +
-                    argvToShell(["openshell", "sandbox", "exec", "-n", name, "--no-tty", "--", "sh", "-c", move]),
+                    argvToShell([
+                        "openshell",
+                        "sandbox",
+                        "exec",
+                        "-n",
+                        name,
+                        "--no-tty",
+                        "--",
+                        "sh",
+                        "-c",
+                        move,
+                    ]),
             ];
         },
         crossDownload(guestPath, stagingPath) {

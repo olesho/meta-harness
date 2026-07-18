@@ -12,7 +12,7 @@
 
 // displaySinkCap bounds the best-effort display queue. Generous enough to absorb
 // normal bursts; under sustained back-pressure the oldest lines are dropped.
-export const displaySinkCap = 1024
+export const displaySinkCap = 1024;
 
 /**
  * DisplaySink is a queue-bounded, best-effort consumer of raw output lines.
@@ -21,9 +21,9 @@ export const displaySinkCap = 1024
  */
 export interface DisplaySink {
   /** Enqueue a line without blocking. Evicts the oldest line when full. */
-  push(line: string): void
+  push(line: string): void;
   /** Flush remaining lines and return the total dropped-line count. */
-  close(): number
+  close(): number;
 }
 
 // noopSink stands in for a null/absent callback so callers need not branch (the
@@ -31,57 +31,61 @@ export interface DisplaySink {
 const noopSink: DisplaySink = {
   push(): void {},
   close(): number {
-    return 0
+    return 0;
   },
-}
+};
 
 /**
  * newDisplaySink returns a best-effort sink draining to `onLine`, or a no-op
  * sink when `onLine` is null/undefined (the push/close methods stay safe to
  * call, so callers need not branch on the callback's presence).
  */
-export function newDisplaySink(onLine?: ((line: string) => void) | null): DisplaySink {
-  if (!onLine) return noopSink
-  return new BoundedDisplaySink(onLine)
+export function newDisplaySink(
+  onLine?: ((line: string) => void) | null,
+): DisplaySink {
+  if (!onLine) return noopSink;
+  return new BoundedDisplaySink(onLine);
 }
 
 class BoundedDisplaySink implements DisplaySink {
-  private readonly onLine: (line: string) => void
-  private readonly queue: string[] = []
-  private dropped = 0
-  private closed = false
-  private scheduled = false
+  private readonly onLine: (line: string) => void;
+  private readonly queue: string[] = [];
+  private dropped = 0;
+  private closed = false;
+  private scheduled = false;
 
   constructor(onLine: (line: string) => void) {
-    this.onLine = onLine
+    this.onLine = onLine;
   }
 
   // push enqueues a line without blocking. On a full queue it drops the OLDEST
   // line to make room for the newest, counting the drop. A push after close is a
   // no-op.
   push(line: string): void {
-    if (this.closed) return
+    if (this.closed) return;
     if (this.queue.length >= displaySinkCap) {
-      this.queue.shift()
-      this.dropped++
+      this.queue.shift();
+      this.dropped++;
     }
-    this.queue.push(line)
-    this.schedule()
+    this.queue.push(line);
+    this.schedule();
   }
 
   // schedule arranges an asynchronous drain on the event loop, coalescing many
   // pushes into a single drain so the producer's synchronous burst never blocks.
   private schedule(): void {
-    if (this.scheduled) return
-    this.scheduled = true
-    queueMicrotask(() => this.drain())
+    if (this.scheduled) return;
+    this.scheduled = true;
+    queueMicrotask(() => {
+      this.drain();
+    });
   }
 
   private drain(): void {
-    this.scheduled = false
+    this.scheduled = false;
     while (this.queue.length > 0) {
       // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-      this.deliver(this.queue.shift()!)
+      this.deliver(this.queue.shift()!);
     }
   }
 
@@ -89,7 +93,7 @@ class BoundedDisplaySink implements DisplaySink {
   // dropped, never crashing the drain (display is non-critical).
   private deliver(line: string): void {
     try {
-      this.onLine(line)
+      this.onLine(line);
     } catch {
       // best-effort: a throwing callback is swallowed.
     }
@@ -98,12 +102,12 @@ class BoundedDisplaySink implements DisplaySink {
   // close flushes remaining lines and returns the total dropped count. Idempotent.
   close(): number {
     if (!this.closed) {
-      this.closed = true
+      this.closed = true;
       while (this.queue.length > 0) {
         // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-        this.deliver(this.queue.shift()!)
+        this.deliver(this.queue.shift()!);
       }
     }
-    return this.dropped
+    return this.dropped;
   }
 }

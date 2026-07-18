@@ -10,7 +10,7 @@ and reading a transcript directly (independent of a live conversation).
 ## The two sources
 
 - **`HistorySourceStore`** — the turns meta-harness recorded as they happened. Always
-  available; the metadata is authoritative, but the assistant *text* is what was extracted
+  available; the metadata is authoritative, but the assistant _text_ is what was extracted
   from the screen.
 - **`HistorySourceTranscript`** — parsed from the harness's own session log via the
   adapter's [`TranscriptReader`](../modules/transcript.md). Authoritative text, but only
@@ -22,23 +22,23 @@ and reading a transcript directly (independent of a live conversation).
 ## history() and historyWithSource()
 
 ```ts
-const turns = await conv.history()                  // Turn[]
-const [turns2, source] = await conv.historyWithSource()   // [Turn[], HistorySource]
+const turns = await conv.history(); // Turn[]
+const [turns2, source] = await conv.historyWithSource(); // [Turn[], HistorySource]
 ```
 
 `history()` just returns the turns. `historyWithSource()` also tells you where they came
 from:
 
 ```ts
-import { HistorySourceTranscript, HistorySourceStore } from "meta-harness/chat"
+import { HistorySourceTranscript, HistorySourceStore } from "meta-harness/chat";
 
-const [turns, source] = await conv.historyWithSource()
+const [turns, source] = await conv.historyWithSource();
 if (source === HistorySourceTranscript) {
   // parsed from the harness's on-disk log — authoritative text
 } else {
   // came from the store (fallback, or no transcript reader for this harness)
 }
-for (const t of turns) console.log(`${t.role}: ${t.text}`)
+for (const t of turns) console.log(`${t.role}: ${t.text}`);
 ```
 
 ---
@@ -60,7 +60,7 @@ Even when a reader exists, the on-disk log may be missing or not yet flushed. A
 [`ErrEmptySessionID`](../modules/transcript.md#errors) is caught and the store is read
 instead (tagged `HistorySourceStore`). **Genuine reader failures are not masked** — a parse
 error or a permission problem propagates. So a `HistorySourceStore` result means "no
-usable transcript *yet*," while an exception means "the transcript exists but couldn't be
+usable transcript _yet_," while an exception means "the transcript exists but couldn't be
 read."
 
 ---
@@ -72,10 +72,14 @@ The [`transcript`](../modules/transcript.md) readers are public and usable witho
 [`runOneShotDetailed`](one-shot-turns.md#in-process-failure-safe)) and just want the log:
 
 ```ts
-import { ClaudeCodeReader, CodexReader, type Reader } from "meta-harness/transcript"
+import {
+  ClaudeCodeReader,
+  CodexReader,
+  type Reader,
+} from "meta-harness/transcript";
 
-const reader: Reader = new ClaudeCodeReader()          // defaults to ~/.claude/projects
-const events = reader.read(harnessSessionID, workingDir)   // Event[]
+const reader: Reader = new ClaudeCodeReader(); // defaults to ~/.claude/projects
+const events = reader.read(harnessSessionID, workingDir); // Event[]
 ```
 
 `read(harnessSessionID, workingDir)` returns the canonical `Event[]` and throws on missing
@@ -90,13 +94,13 @@ Project events to the lossy chat view with `turnsFromEvents(events)`.
 
 ## Support at a glance
 
-| Harness | Transcript reader | `historyWithSource()` can serve transcript? |
-| --- | --- | --- |
-| Claude Code | `ClaudeCodeReader` (`Event[]`) | ✓ |
-| Codex | `CodexReader` (`Event[]`) | ✓ |
-| pi | `PiReader` (`Turn[]`) | ✓ |
-| OpenCode | — | ✗ always store |
-| generic | — | ✗ always store |
+| Harness     | Transcript reader              | `historyWithSource()` can serve transcript? |
+| ----------- | ------------------------------ | ------------------------------------------- |
+| Claude Code | `ClaudeCodeReader` (`Event[]`) | ✓                                           |
+| Codex       | `CodexReader` (`Event[]`)      | ✓                                           |
+| pi          | `PiReader` (`Turn[]`)          | ✓                                           |
+| OpenCode    | —                              | ✗ always store                              |
+| generic     | —                              | ✗ always store                              |
 
 See [Harnesses](../harnesses.md) and the [transcript module](../modules/transcript.md) for
 file locations and formats.

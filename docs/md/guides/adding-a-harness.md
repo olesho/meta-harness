@@ -3,7 +3,7 @@
 Teaching meta-harness a new coding agent means touching several layers — but not all of
 them, and not all at once. This guide is the map: what each layer needs, in what order, and
 where the existing harnesses serve as templates. Unlike the other guides, most of this is
-*editing the library's source*, not consuming its API.
+_editing the library's source_, not consuming its API.
 
 The golden rule: **start generic, then enrich.** Any launchable CLI already runs as
 [`generic`](../harnesses.md#the-generic-fallback) — supervised turns driven purely by
@@ -17,7 +17,11 @@ Add them in the order below and you always have a working harness.
 Before writing any code, confirm the CLI drives at all:
 
 ```ts
-await runOneShot(ctx, { harness: "generic", binaryPath: "/path/to/newcli", prompt: "hello" })
+await runOneShot(ctx, {
+  harness: "generic",
+  binaryPath: "/path/to/newcli",
+  prompt: "hello",
+});
 ```
 
 If that returns a reply, the PTY, screen, and status→turn mapping already work. Everything
@@ -68,25 +72,25 @@ The **required** surface is three methods:
 
 ```ts
 interface Adapter {
-  name(): string                                             // "newcli"
-  onScreen(snap: Snapshot): Event[]                          // detect turn events from the screen
-  onWrapperStatus(status: Status, reason: string): Event[]   // usually inherited from GenericAdapter
+  name(): string; // "newcli"
+  onScreen(snap: Snapshot): Event[]; // detect turn events from the screen
+  onWrapperStatus(status: Status, reason: string): Event[]; // usually inherited from GenericAdapter
 }
 ```
 
 Then add [optional capabilities](../modules/turns.md#optional-capabilities) as the harness
 supports them — each is just a method you define; chat probes for it structurally:
 
-| Add this method | To get |
-| --- | --- |
+| Add this method                                                     | To get                                                                              |
+| ------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
 | `extractSessionID` / `extractSessionIDFromLine` / `locateSessionID` | [Session-id capture](resuming-sessions.md#two-ids) (from screen / raw line / disk). |
-| `primeSessionIDKeys` | Keystrokes that surface the id (like Codex's `/status`). |
-| `initSession` | Mint the id at launch (like pi's `--session-id`). |
-| `resumeArgs` (+ `resumeForksSessionID`, `sessionControlFlags`) | [Resume](resuming-sessions.md). |
-| `busy` | Turn-in-progress detection (gates premature completion). |
-| `extractMessage` | Clean assistant-reply extraction from the TUI. |
-| `quitSequence` | Graceful [`quit()`](../modules/chat.md#sending--control). |
-| `readTranscript` | [Transcript history](reading-history.md) (delegates to step 4). |
+| `primeSessionIDKeys`                                                | Keystrokes that surface the id (like Codex's `/status`).                            |
+| `initSession`                                                       | Mint the id at launch (like pi's `--session-id`).                                   |
+| `resumeArgs` (+ `resumeForksSessionID`, `sessionControlFlags`)      | [Resume](resuming-sessions.md).                                                     |
+| `busy`                                                              | Turn-in-progress detection (gates premature completion).                            |
+| `extractMessage`                                                    | Clean assistant-reply extraction from the TUI.                                      |
+| `quitSequence`                                                      | Graceful [`quit()`](../modules/chat.md#sending--control).                           |
+| `readTranscript`                                                    | [Transcript history](reading-history.md) (delegates to step 4).                     |
 
 Study the closest existing adapter: [`pi.ts`](../../../src/turns/harness/pi.ts) for
 session-control-heavy harnesses, [`codex.ts`](../../../src/turns/harness/codex.ts) for
@@ -102,7 +106,7 @@ If the harness writes an on-disk session log and you want authoritative
 [history](reading-history.md), implement a [`Reader`](../modules/transcript.md#the-reader-interface)
 under `src/transcript/newcli/` returning `Event[]`, and export it from
 `src/transcript/index.ts`. Wire it into your adapter's `readTranscript`. The main work is
-the *locate* strategy — how a session id maps to a file path (see
+the _locate_ strategy — how a session id maps to a file path (see
 [`encodedCWD`](../modules/transcript.md#claudecodereader) /
 [`slugForCwd`](../modules/transcript.md#pireader) for the two existing shapes).
 
@@ -110,7 +114,7 @@ the *locate* strategy — how a session id maps to a file path (see
 
 ## 5. Handle readiness (if needed)
 
-If the harness has a composer that must be *ready* before keystrokes land, add its markers
+If the harness has a composer that must be _ready_ before keystrokes land, add its markers
 to [`src/chat/ready.ts`](../../../src/chat/ready.ts) — `requiresPromptReadiness`,
 `readyForInput`, and the correct `submitKeyForHarness`. Harnesses that accept input
 immediately don't need this.

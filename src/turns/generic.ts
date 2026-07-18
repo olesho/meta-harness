@@ -5,10 +5,10 @@
 // per-harness adapter is in development. Its fidelity is bounded by the
 // wrapper's classifier vocabulary. Port of pkg/turns/generic/generic.go.
 
-import type { Snapshot } from "../screen/index.ts"
-import type { Adapter, Event } from "./types.ts"
-import { Blocked, Errored, TurnComplete } from "./types.ts"
-import type { Status } from "./wrapper.ts"
+import type { Snapshot } from "../screen/index.ts";
+import type { Adapter, Event } from "./types.ts";
+import { Blocked, Errored, TurnComplete } from "./types.ts";
+import type { Status } from "./wrapper.ts";
 import {
   StatusAPIError,
   StatusBlockedByCost,
@@ -17,17 +17,17 @@ import {
   StatusInterrupted,
   StatusRetryLater,
   StatusWaitingForInput,
-} from "./wrapper.ts"
+} from "./wrapper.ts";
 
 /** The generic, screen-agnostic turn detector. Stateless and shareable. */
 export class GenericAdapter implements Adapter {
   name(): string {
-    return "generic"
+    return "generic";
   }
 
   /** The generic adapter relies entirely on wrapper status transitions. */
   onScreen(_snap: Snapshot): Event[] {
-    return []
+    return [];
   }
 
   /**
@@ -41,23 +41,23 @@ export class GenericAdapter implements Adapter {
   onWrapperStatus(status: Status, reason: string): Event[] {
     switch (status) {
       case StatusWaitingForInput:
-        return [{ kind: TurnComplete, reason }]
+        return [{ kind: TurnComplete, reason }];
       case StatusBlockedByCost:
       case StatusRetryLater:
       case StatusAPIError:
-        return [{ kind: Blocked, reason }]
+        return [{ kind: Blocked, reason }];
       case StatusFailed:
       case StatusInterrupted:
-        return [{ kind: Errored, reason }]
+        return [{ kind: Errored, reason }];
       case StatusIdle:
-        return [{ kind: Errored, reason: "harness exited" }]
+        return [{ kind: Errored, reason: "harness exited" }];
       default:
-        return []
+        return [];
     }
   }
 }
 
 /** Constructs the generic adapter (mirrors generic.New). */
 export function New(): GenericAdapter {
-  return new GenericAdapter()
+  return new GenericAdapter();
 }

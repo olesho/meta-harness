@@ -10,23 +10,23 @@
 
 Two orchestrators consume meta-harness today, and both have independently converged on the same execution pattern for sandboxed agents:
 
-| | orche (shipping) | loomcli (spec'd, Part C/D) |
-|---|---|---|
-| Sandbox tech | NVIDIA OpenShell (containment on a host you own) | Daytona (elastic remote compute) |
-| Harness placement | baked into the sandbox image, exec'd in-guest | same (planned; today host-driven via Flue) |
-| Turn protocol | `harness-wrapper run` exec'd in-guest; whole-stdout reply + exit 0/non-zero/124 today — structured-run JSON is the adoption target (§7) | one JSON line from `meta-harness-structured-run`, last-stdout-line parsed (spec'd) |
-| Transcript | read in-guest, shipped back in the JSON line | same |
-| Credentials | never in guest env (egress proxy injects the real key) | never in guest env (file-provisioned scoped token, spec'd) |
-| Repo in / results out | host clone → `sandbox upload`; git bundle → CAS ref update | in-guest clone; `git diff --binary` patch artifact / PR |
+|                       | orche (shipping)                                                                                                                        | loomcli (spec'd, Part C/D)                                                         |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| Sandbox tech          | NVIDIA OpenShell (containment on a host you own)                                                                                        | Daytona (elastic remote compute)                                                   |
+| Harness placement     | baked into the sandbox image, exec'd in-guest                                                                                           | same (planned; today host-driven via Flue)                                         |
+| Turn protocol         | `harness-wrapper run` exec'd in-guest; whole-stdout reply + exit 0/non-zero/124 today — structured-run JSON is the adoption target (§7) | one JSON line from `meta-harness-structured-run`, last-stdout-line parsed (spec'd) |
+| Transcript            | read in-guest, shipped back in the JSON line                                                                                            | same                                                                               |
+| Credentials           | never in guest env (egress proxy injects the real key)                                                                                  | never in guest env (file-provisioned scoped token, spec'd)                         |
+| Repo in / results out | host clone → `sandbox upload`; git bundle → CAS ref update                                                                              | in-guest clone; `git diff --binary` patch artifact / PR                            |
 
 Loomcli's spec explicitly cites orche's `sandbox/materialize.ts` as its model. The duplication is scheduled, not hypothetical: the moment loomcli implements its Part C/D, orche's ~790-line `openshell.ts` machinery gets re-written against Daytona, and the structured-runner protocol contract will live in three repos.
 
 **Decision:** consolidate the environment layer into meta-harness. TypeScript is the forced choice — Daytona has no Go SDK (its SDKs are TS/Python; even loomcli's Go orchestrator wrote its Daytona integration in TS), and both consumers already sit on the TS artifact at exactly the seam where environments plug in. The legacy Go `harness-wrapper` is frozen as-is and never grows environment code.
 
-**Design requirement:** the two sandbox technologies solve different problems and must be swappable *independently*:
+**Design requirement:** the two sandbox technologies solve different problems and must be swappable _independently_:
 
-- **Daytona** answers *"where does the machine come from"* — provisioning, elasticity, placement.
-- **OpenShell** answers *"what may the agent touch on it"* — kernel-level isolation, declarative policy, egress control.
+- **Daytona** answers _"where does the machine come from"_ — provisioning, elasticity, placement.
+- **OpenShell** answers _"what may the agent touch on it"_ — kernel-level isolation, declarative policy, egress control.
 
 Hence the model below is two orthogonal axes, not a flat backend list. "Swap Daytona for E2B" and "swap OpenShell for another containment runtime" are each one-implementation changes; "OpenShell inside a Daytona machine" is composition, not a fourth backend.
 
@@ -41,7 +41,7 @@ Hence the model below is two orthogonal axes, not a flat backend list. "Swap Day
 ### Non-goals
 
 - Workspace/publish semantics (orche's bundle/CAS vs loomcli's patch/PR) — these stay in orchestrators (§12).
-- Task claiming, scheduling, retention *policy* decisions, credential *minting*.
+- Task claiming, scheduling, retention _policy_ decisions, credential _minting_.
 - Interactive (`Conversation`) sessions over remote environments — one-shot structured turns first (§14, open questions).
 
 ---
@@ -63,19 +63,22 @@ Hence the model below is two orthogonal axes, not a flat backend list. "Swap Day
 ```
 
 - A **Provisioner** yields a `Workspace`: an exec + file-transfer transport onto a machine.
-- A **Containment** is a *decorator over the full `Workspace` contract* — not just `exec`. It contributes a `ContainmentLayer` of primitives; the core owns the composition (§5).
+- A **Containment** is a _decorator over the full `Workspace` contract_ — not just `exec`. It contributes a `ContainmentLayer` of primitives; the core owns the composition (§5).
 - The primary API makes the axis choice explicit:
 
 ```ts
-const environment = env({ provision: daytona(cfg), contain: openshell({ tier: "untrusted" }) })
+const environment = env({
+  provision: daytona(cfg),
+  contain: openshell({ tier: "untrusted" }),
+});
 ```
 
 Presets (`localEnv()`, `daytonaEnv(cfg)`, `openshellLocal(tier)`) are convenience sugar over the explicit selectors — documented as such, never the primary API — so callers cannot silently lock in policy by preset. This mirrors orche's `openshell({tier})` helper ergonomics (`sandbox/index.ts:140`) while keeping the axes visible.
 
 **External compute (BYO VMs).** Daytona provides its own managed cloud compute by default — the SDK talks to Daytona's hosted control plane and sandboxes land in their shared regions (loomcli today: `new Daytona({apiKey})`, no `apiUrl`/image/snapshot; `target` overridable via `DAYTONA_TARGET`). Machines you own enter the model two ways, and neither is a new axis:
 
-1. *Through Daytona* — BYOC "custom regions": customer-managed runner nodes deployed on your Kubernetes via Daytona's `daytona-region` Helm chart (region proxy, snapshot manager, registration job), control plane stays Daytona-managed over a reverse tunnel, and the SDK selects the region via `target`. Config-only for the `daytona` provisioner — zero new code here. Caveats: invite-only/experimental as of Jan 2026; wants Kubernetes, not raw VMs; the OSS full-self-host route is unmaintained since June 2026.
-2. *Outside Daytona* — a new `Provisioner` (`ssh` for raw VMs, `k8s` for clusters, per the axis diagram above): implement the six-method `Workspace` contract over ssh/scp, pass the Tier-2 conformance suite, and containment composes on top unchanged. The §8 image contract becomes a VM provisioning script.
+1. _Through Daytona_ — BYOC "custom regions": customer-managed runner nodes deployed on your Kubernetes via Daytona's `daytona-region` Helm chart (region proxy, snapshot manager, registration job), control plane stays Daytona-managed over a reverse tunnel, and the SDK selects the region via `target`. Config-only for the `daytona` provisioner — zero new code here. Caveats: invite-only/experimental as of Jan 2026; wants Kubernetes, not raw VMs; the OSS full-self-host route is unmaintained since June 2026.
+2. _Outside Daytona_ — a new `Provisioner` (`ssh` for raw VMs, `k8s` for clusters, per the axis diagram above): implement the six-method `Workspace` contract over ssh/scp, pass the Tier-2 conformance suite, and containment composes on top unchanged. The §8 image contract becomes a VM provisioning script.
 
 ---
 
@@ -85,41 +88,41 @@ Repo idiom applies: Go-style `Context` from `src/internal/async` for cancellatio
 
 ```ts
 interface Provisioner {
-  name(): string
+  name(): string;
   /** Host-side checks only, zero resources acquired: CLI/API key present, image
    *  resolvable. Pattern: orche openshell.ts:649 preflight; loomcli daytona
    *  repo-URL/API-key validation. */
-  preflight(ctx: Context): Promise<void>
-  create(ctx: Context, spec: WorkspaceSpec): Promise<Workspace>
+  preflight(ctx: Context): Promise<void>;
+  create(ctx: Context, spec: WorkspaceSpec): Promise<Workspace>;
 }
 
 interface Workspace {
   /** env crosses via opts.env; transports without an env flag (openshell 0.0.53
    *  exec has no --env) cross it as an in-guest `env K=V` argv prefix. */
-  exec(ctx: Context, argv: string[], opts?: ExecOpts): Promise<ExecResult>
-  upload(ctx: Context, hostPath: string, guestPath: string): Promise<void>
-  download(ctx: Context, guestPath: string, hostPath: string): Promise<void>
+  exec(ctx: Context, argv: string[], opts?: ExecOpts): Promise<ExecResult>;
+  upload(ctx: Context, hostPath: string, guestPath: string): Promise<void>;
+  download(ctx: Context, guestPath: string, hostPath: string): Promise<void>;
   /** Path conventions; orche precedent: repo=/sandbox/repo, home=/sandbox/.home
    *  (home pinned inside the workspace so harness JSONL is retrievable). */
-  guestPath(kind: "repo" | "home" | "tmp"): string
+  guestPath(kind: "repo" | "home" | "tmp"): string;
   /** Loopback rewrite for guest-reachable host URLs (host.docker.internal /
    *  host.containers.internal — orche openshell.ts:226). */
-  hostAlias(hostUrl: string): string
+  hostAlias(hostUrl: string): string;
   /** Honors spec.retention; see lifecycle rules (§4) for when retention applies. */
-  destroy(ctx: Context, outcome?: Outcome): Promise<void>
+  destroy(ctx: Context, outcome?: Outcome): Promise<void>;
 }
 
 interface Containment {
-  name(): string
+  name(): string;
   /** Runtime capability checks ONLY (CLI present, gateway Connected, provider
    *  registered), executed where containment runs — i.e. via the inner
    *  workspace's exec. Operator provisioning (e.g. `openshell provider create`
    *  with the real key) is explicitly OUT of preflight: one-time,
    *  credential-bearing, operator/orchestrator-owned. */
-  preflight(ctx: Context, ws: Workspace): Promise<void>
+  preflight(ctx: Context, ws: Workspace): Promise<void>;
   /** Primitives consumed by the core compose() combinator (§5). Containments
    *  never hand-roll the Workspace decorator. */
-  layer(policy: PolicySpec): ContainmentLayer
+  layer(policy: PolicySpec): ContainmentLayer;
   /** OPTIONAL: acquire containment resources (e.g. `openshell sandbox create`)
    *  and return a layer closed over them. env() prefers acquire over layer at
    *  lifecycle step 4 (§4); commands run via the inner workspace's exec
@@ -129,19 +132,23 @@ interface Containment {
    *  acquire runs via ws.exec — identical for a local inner, but a REMOTE
    *  provisioner would need preflight revisited (host-side check could
    *  false-positive for a differently-configured remote host). */
-  acquire?(ctx: Context, ws: Workspace, policy: PolicySpec): Promise<ContainmentLayer>
+  acquire?(
+    ctx: Context,
+    ws: Workspace,
+    policy: PolicySpec,
+  ): Promise<ContainmentLayer>;
 }
 
 interface ContainmentLayer {
-  execWrap(argv: string[], opts: ExecOpts): [string[], ExecOpts]   // e.g. prefix `openshell sandbox exec -n … --no-tty --workdir … -- env K=V …`
-  crossUpload(stagingPath: string, guestPath: string): string[]     // argv run via inner exec, e.g. `openshell sandbox upload …`
-  crossDownload(guestPath: string, stagingPath: string): string[]
-  pathMap(kind: "repo" | "home" | "tmp"): string                    // containment paths shadow inner paths
-  teardown(): string[]                                              // argv via inner exec, e.g. `openshell sandbox delete <name>`
+  execWrap(argv: string[], opts: ExecOpts): [string[], ExecOpts]; // e.g. prefix `openshell sandbox exec -n … --no-tty --workdir … -- env K=V …`
+  crossUpload(stagingPath: string, guestPath: string): string[]; // argv run via inner exec, e.g. `openshell sandbox upload …`
+  crossDownload(guestPath: string, stagingPath: string): string[];
+  pathMap(kind: "repo" | "home" | "tmp"): string; // containment paths shadow inner paths
+  teardown(): string[]; // argv via inner exec, e.g. `openshell sandbox delete <name>`
 }
 
 // core-owned:
-function compose(inner: Workspace, layer: ContainmentLayer): Workspace
+function compose(inner: Workspace, layer: ContainmentLayer): Workspace;
 ```
 
 `WorkspaceSpec`: image ref, labels, retention (`retention?: "always" | "keep-on-failure"` — ABSENT ⇒ destroy on both success and failure, the common case), auto-stop/auto-delete intervals (Daytona), and a **deterministic name** for crash recovery (orche `sandboxName` pattern, `openshell.ts:133` — a crashed run's leftover can be found and deleted before recreate).
@@ -150,12 +157,12 @@ function compose(inner: Workspace, layer: ContainmentLayer): Workspace
 
 ### Shipped implementations
 
-| Axis | Impl | Transport | Source ported |
-|---|---|---|---|
-| Provisioner | `local` | `node:child_process` + fs copy (degenerate: host == guest) | current behavior |
-| Provisioner | `daytona` | Daytona SDK — `client.create()`, `sandbox.process.executeCommand`, `sandbox.fs.*`, `sandbox.delete()`. loomcli imports `@daytona/sdk` (flue-bundled); the public npm package is `@daytonaio/sdk` — confirm which to declare before P4 | loomcli `daytona-task-runner.ts` (`DaytonaSandboxApi`, create/teardown, lines 122–147, 373–435, 300–308) |
-| Containment | `none` | identity | — |
-| Containment | `openshell` | `openshell` CLI via injectable `CliRunner` (no SDK exists) | orche `openshell.ts` bottom half + `policy.ts` |
+| Axis        | Impl        | Transport                                                                                                                                                                                                                             | Source ported                                                                                            |
+| ----------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| Provisioner | `local`     | `node:child_process` + fs copy (degenerate: host == guest)                                                                                                                                                                            | current behavior                                                                                         |
+| Provisioner | `daytona`   | Daytona SDK — `client.create()`, `sandbox.process.executeCommand`, `sandbox.fs.*`, `sandbox.delete()`. loomcli imports `@daytona/sdk` (flue-bundled); the public npm package is `@daytonaio/sdk` — confirm which to declare before P4 | loomcli `daytona-task-runner.ts` (`DaytonaSandboxApi`, create/teardown, lines 122–147, 373–435, 300–308) |
+| Containment | `none`      | identity                                                                                                                                                                                                                              | —                                                                                                        |
+| Containment | `openshell` | `openshell` CLI via injectable `CliRunner` (no SDK exists)                                                                                                                                                                            | orche `openshell.ts` bottom half + `policy.ts`                                                           |
 
 ---
 
@@ -178,13 +185,13 @@ The core `env()` factory drives the canonical acquisition order. Implementations
 Ordering rules that are part of the contract, not implementation detail:
 
 - **Redactions before apply** (step 5): a half-completed `apply()` can never emit an unredacted secret into logs.
-- **Apply against the composed workspace**: a file-injected token must land *inside* the containment boundary. Applying against the inner workspace would strand the credential on the provisioned machine — outside the agent's sandbox, readable by anything else on that machine, and invisible to the agent that needs it.
+- **Apply against the composed workspace**: a file-injected token must land _inside_ the containment boundary. Applying against the inner workspace would strand the credential on the provisioned machine — outside the agent's sandbox, readable by anything else on that machine, and invisible to the agent that needs it.
 - **Strict reverse-acquisition teardown** (step 7): injector cleanup (idempotent, runs even after a half-failed apply) → containment teardown → inner destroy.
 
 Failure rules:
 
 - **Any failure in steps 2–5 unwinds all acquired layers in reverse order** — best-effort, errors aggregated, never short-circuited on the first teardown error.
-- `retention: keep-on-failure` does **not** apply to setup failures. It exists to debug failed *runs*; a preflight or apply failure leaves nothing of debugging value inside the sandbox. Setup failures always destroy (an explicit debug-keep flag exists for rare investigation).
+- `retention: keep-on-failure` does **not** apply to setup failures. It exists to debug failed _runs_; a preflight or apply failure leaves nothing of debugging value inside the sandbox. Setup failures always destroy (an explicit debug-keep flag exists for rare investigation).
 - Retention is evaluated only at step 7, on run outcomes.
 - **Crash-between-stages** (host process dies): deterministic names + labels make any interrupted stage's resource identifiable; `sweep()` (§10, Tier 4) reaps orphans; Daytona's `autoStopInterval`/`autoDeleteInterval` (loomcli defaults: autoStop **15 min**, autoDelete **0 = disabled** — the vendor-side backstop is stop-only unless configured) limits billing exposure.
 
@@ -196,15 +203,15 @@ Failure rules:
 
 `compose(inner, layer)` returns a `Workspace` in which **every** operation is defined in terms of inner-workspace operations. For openshell:
 
-| Outer op | Implementation via inner |
-|---|---|
-| `exec(argv, opts)` | `layer.execWrap` → `openshell sandbox exec -n <name> --no-tty --workdir <path> -- env K=V… <argv>`, run via **inner exec** |
-| `upload(host, guest)` | inner `upload` to a **staging path** on the inner machine, then `layer.crossUpload` (`openshell sandbox upload --no-git-ignore …`) via inner exec across the policy boundary |
-| `download(guest, host)` | symmetric: `layer.crossDownload` via inner exec to staging, then inner `download` |
-| `guestPath(kind)` | `layer.pathMap` — containment paths (`/sandbox/repo`, `/sandbox/.home`) **shadow** inner paths; inner paths become staging-only |
-| `hostAlias(url)` | folds across **both** hops: true host → provisioned machine → contained sandbox |
-| `destroy(outcome)` | `layer.teardown()` via inner exec (`openshell sandbox delete` + bridge cleanup) **then** inner `destroy`; per-layer partial-failure handling per §4 |
-| `preflight` | containment checks run via inner exec (they must run where containment runs) |
+| Outer op                | Implementation via inner                                                                                                                                                     |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `exec(argv, opts)`      | `layer.execWrap` → `openshell sandbox exec -n <name> --no-tty --workdir <path> -- env K=V… <argv>`, run via **inner exec**                                                   |
+| `upload(host, guest)`   | inner `upload` to a **staging path** on the inner machine, then `layer.crossUpload` (`openshell sandbox upload --no-git-ignore …`) via inner exec across the policy boundary |
+| `download(guest, host)` | symmetric: `layer.crossDownload` via inner exec to staging, then inner `download`                                                                                            |
+| `guestPath(kind)`       | `layer.pathMap` — containment paths (`/sandbox/repo`, `/sandbox/.home`) **shadow** inner paths; inner paths become staging-only                                              |
+| `hostAlias(url)`        | folds across **both** hops: true host → provisioned machine → contained sandbox                                                                                              |
+| `destroy(outcome)`      | `layer.teardown()` via inner exec (`openshell sandbox delete` + bridge cleanup) **then** inner `destroy`; per-layer partial-failure handling per §4                          |
+| `preflight`             | containment checks run via inner exec (they must run where containment runs)                                                                                                 |
 
 Upload/download crossing as distinct verbs is not hypothetical — orche's implementation uses `openshell sandbox upload` (`openshell.ts:431-434`) and `sandbox download` (`openshell.ts:510`) precisely because exec cannot move files across the policy boundary.
 
@@ -216,7 +223,7 @@ Containments supply the `ContainmentLayer` primitives; the single core-owned `co
 
 ### 5.3 Trust locus under composition
 
-The inner machine is the **containment host**: the OpenShell gateway, CLI, and operator-provisioned provider — which holds the *real* model key for proxy injection — live wherever containment runs.
+The inner machine is the **containment host**: the OpenShell gateway, CLI, and operator-provisioned provider — which holds the _real_ model key for proxy injection — live wherever containment runs.
 
 - Local provisioner → containment host is the true host. This is orche today.
 - Daytona provisioner → the real key sits inside the Daytona machine: outside the agent's OpenShell boundary (the agent still cannot read it), but inside the vendor's infrastructure, and an agent that escapes the containment layer lands where the key lives.
@@ -233,18 +240,18 @@ Not a closed enum baked into the core — that would freeze today's three mechan
 interface CredentialInjector {
   /** Capabilities the target must advertise (e.g. "egress-proxy"); checked at
    *  compose time, so a mismatch fails before any resource is acquired. */
-  requires(): Capability[]
-  apply(ctx: Context, ws: Workspace): Promise<void>
+  requires(): Capability[];
+  apply(ctx: Context, ws: Workspace): Promise<void>;
   /** Secrets registered for log redaction — registered BEFORE apply begins (§4). */
-  redactions(): string[]
+  redactions(): string[];
   /** Bound to destroy; idempotent; runs even on failure paths / half-failed apply. */
-  cleanup(ctx: Context, ws: Workspace): Promise<void>
+  cleanup(ctx: Context, ws: Workspace): Promise<void>;
 }
 ```
 
 Shipped implementations (implementations, not the abstraction):
 
-- **proxy** — requires the `egress-proxy` capability that only openshell containment advertises. The operator provisions the provider once (`openshell provider create --name anthropic …`); the egress proxy injects the real key on the model host; the guest holds a placeholder. (orche `openshell.ts:694` inside `preflight()`, `README.md:100-109`; the provider *name* is `anthropic`, its openshell *type* is `claude-code`.)
+- **proxy** — requires the `egress-proxy` capability that only openshell containment advertises. The operator provisions the provider once (`openshell provider create --name anthropic …`); the egress proxy injects the real key on the model host; the guest holds a placeholder. (orche `openshell.ts:694` inside `preflight()`, `README.md:100-109`; the provider _name_ is `anthropic`, its openshell _type_ is `claude-code`.)
 - **file** — a short-lived scoped token written in-guest as a file (e.g. codex `~/.codex/auth.json` shaped `{ tokens: { access_token, refresh_token } }`), registered for redaction, removed on cleanup. Generalizes loomcli's Part C/D credential contract. Required for provisioners with no egress-policy control (Daytona) when the real CLI runs in-guest.
 - **host** — nothing crosses; model calls happen host-side (loomcli's current host-driven Daytona mode).
 
@@ -267,13 +274,13 @@ runStructuredTurn(ctx: Context, ws: Workspace, cfg: TurnConfig): Promise<Structu
 3. Parse the **last stdout line** as the structured result: `{ status, reply, harnessSessionID, transcript_entries, usage?, reason?, transcript_error?, working_dir }` (`usage?` is additive telemetry, emitted since `structured-runner.ts:302` — it belongs in the frozen golden).
 4. Optional transcript retrieval to a host path (orche's `retrieve()` pattern: download the guest `~/.claude/projects/<encodedCwd>/` JSONL so host-side readers resolve it).
 
-**Protocol ownership.** The result schema and exit codes move to a shared protocol module imported by both the producer (`src/cli/structured-runner.ts`) and this client, with a golden-schema test. Frozen as the cross-repo contract — but note neither consumer parses the JSON *today*: orche's `packages/agent/src/harness/headless.ts` consumes the whole stdout as the reply text and only distinguishes exit 0 / non-zero / 124-or-`DeadlineLine` (`reply()` :377–399, `isWrapperDeadline` :409 — no last-line JSON, no exit-2 handling), and loomcli's in-guest parsing is Part C/D, spec'd not shipped. The freeze defines what consumers adopt; migrating orche from whole-stdout onto the structured schema is part of the P2/P3 consumer work, not a drop-in parser swap:
+**Protocol ownership.** The result schema and exit codes move to a shared protocol module imported by both the producer (`src/cli/structured-runner.ts`) and this client, with a golden-schema test. Frozen as the cross-repo contract — but note neither consumer parses the JSON _today_: orche's `packages/agent/src/harness/headless.ts` consumes the whole stdout as the reply text and only distinguishes exit 0 / non-zero / 124-or-`DeadlineLine` (`reply()` :377–399, `isWrapperDeadline` :409 — no last-line JSON, no exit-2 handling), and loomcli's in-guest parsing is Part C/D, spec'd not shipped. The freeze defines what consumers adopt; migrating orche from whole-stdout onto the structured schema is part of the P2/P3 consumer work, not a drop-in parser swap:
 
-| Exit | Meaning |
-|---|---|
-| `0` | completed |
-| `1` | errored / startup failure / fatal |
-| `2` | usage: bad args, unknown harness, missing/empty prompt |
+| Exit  | Meaning                                                                                      |
+| ----- | -------------------------------------------------------------------------------------------- |
+| `0`   | completed                                                                                    |
+| `1`   | errored / startup failure / fatal                                                            |
+| `2`   | usage: bad args, unknown harness, missing/empty prompt                                       |
 | `124` | deadline — plus the **literal stderr line** `harness-wrapper run: context deadline exceeded` |
 
 (Constants: `ExitOK/ExitError/ExitUsage/ExitDeadline`, `DeadlineLine` — `src/cli/structured-runner.ts:35-41`.)
@@ -304,7 +311,7 @@ The whole stack standardizes on Node.js.
 
 - **The constraint that forced the issue:** node-pty's data stream is dead under Bun, and `bun build --compile` cannot embed the native `pty.node` addon (`src/cli/PACKAGING.md`, `src/wrapper/internal/pty.ts`) — every deployment already requires Node for the `ptyHost.mjs` bridge. Bun can never be the sole runtime here. Deno rejected: a third engine no consumer uses, unproven node-pty support, and a permission model that duplicates what OpenShell/Daytona enforce at a stronger boundary.
 - **The env layer targets Node APIs directly** (`node:child_process`, `node:fs`, `node:stream`). Orche has already swapped its `Bun.spawnSync` CLI transport for Node `spawnSync` via `@orche/node-compat`, behind the injectable `OpenShellCli` seam (`openshell.ts:88-97`) — the port keeps that seam and calls `node:child_process` directly. **Decoupling:** largely moot in practice — orche's host side already runs Node (npm + vitest + tsx; production cutover tracked as ORCHE-100 Phase 4) — but the principle stands: shipping the env layer never blocks on, and is never blocked by, any remaining runtime migration.
-- **Guest runtime: Node only.** `meta-harness-structured-run` (Node, consumes `dist/`) is *the* guest entrypoint. `run.ts` is already a Node CLI (`#!/usr/bin/env node`, shipped as the `meta-harness-run` bin) — the dual bun+node image requirement is historical. Residual cleanup: stale "Bun-only" comments in `structured-runner.ts:7,46` and the bun+node guest Dockerfile in orche's image.
+- **Guest runtime: Node only.** `meta-harness-structured-run` (Node, consumes `dist/`) is _the_ guest entrypoint. `run.ts` is already a Node CLI (`#!/usr/bin/env node`, shipped as the `meta-harness-run` bin) — the dual bun+node image requirement is historical. Residual cleanup: stale "Bun-only" comments in `structured-runner.ts:7,46` and the bun+node guest Dockerfile in orche's image.
 - **Consumer migration (separate track, own timeline):** orche@dev already pins meta-harness v0.1.5 and, running under Node, resolves the package through the `import` condition to `dist/**`; the bun-first conditional `exports` map stays only until no consumer runs under Bun (ORCHE-100 Phase 4), then gets removed. loomcli's TS leaf is already Node (flue `--target node`). Env-layer delivery (§13 P1–P5) does not depend on this track.
 - **Dev/test: done.** meta-harness migrated to Node/vitest at v0.1.5 (commits `8d6cffa`, `8ec3479`; `bunfig.toml` retired) — the runner is vitest, not `node --test`.
 
@@ -360,22 +367,22 @@ Gating à la loomcli: `META_HARNESS_ENV_LIVE=daytona` + `DAYTONA_API_KEY`; `=ope
 
 ## 12. Boundaries — what stays in orchestrators
 
-- **Publish semantics.** Orche: in-guest git bundle → host-side validation → CAS ref update. Loomcli: `git diff --binary` patch artifact / GitHub PR. Different trust models, both legitimate; forcing agreement would turn this library into an orchestrator framework. If they converge later, orche's three-contract `ActiveSandbox` (materialize/execute/complete) is the candidate to migrate down *on top of* this layer.
+- **Publish semantics.** Orche: in-guest git bundle → host-side validation → CAS ref update. Loomcli: `git diff --binary` patch artifact / GitHub PR. Different trust models, both legitimate; forcing agreement would turn this library into an orchestrator framework. If they converge later, orche's three-contract `ActiveSandbox` (materialize/execute/complete) is the candidate to migrate down _on top of_ this layer.
 - **Task claiming, scheduling, ticket↔sandbox mapping, heartbeats, stale-run sweeping** (loomcli `StaleTaskSweeper` etc.).
 - **Retention policy decisions** (the env layer implements the mechanism; the orchestrator decides the policy).
-- **Credential minting** — which keys exist, their scope and lifetime. The env layer standardizes *delivery* (§6), never acquisition.
+- **Credential minting** — which keys exist, their scope and lifetime. The env layer standardizes _delivery_ (§6), never acquisition.
 
 ---
 
 ## 13. Migration phases
 
-| Phase | Deliverable | Unblocks |
-|---|---|---|
-| P1 | `./env` core: interfaces, lifecycle engine (§4), `compose()`, `local` provisioner, Tier-1/2 tests | everything below |
-| P2 | Turn client + shared protocol module (extracted from `structured-runner.ts`) + protocol goldens | consumers replacing hand-rolled parsers |
-| P3 | `./env-openshell`: port bottom half of orche `openshell.ts` (~790 LOC) + `policy.ts`; orche migrates as first consumer | deletes orche's bespoke transport |
-| P4 | `./env-daytona`: port loomcli `DaytonaSandboxApi` + create/teardown; file-credential injector | loomcli Part C/D lands as a consumer of this layer instead of a reimplementation |
-| P5 | Composition hardening (openshell-in-daytona live variant), guest-image reference layer, docs | remote + contained tier |
+| Phase | Deliverable                                                                                                            | Unblocks                                                                         |
+| ----- | ---------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| P1    | `./env` core: interfaces, lifecycle engine (§4), `compose()`, `local` provisioner, Tier-1/2 tests                      | everything below                                                                 |
+| P2    | Turn client + shared protocol module (extracted from `structured-runner.ts`) + protocol goldens                        | consumers replacing hand-rolled parsers                                          |
+| P3    | `./env-openshell`: port bottom half of orche `openshell.ts` (~790 LOC) + `policy.ts`; orche migrates as first consumer | deletes orche's bespoke transport                                                |
+| P4    | `./env-daytona`: port loomcli `DaytonaSandboxApi` + create/teardown; file-credential injector                          | loomcli Part C/D lands as a consumer of this layer instead of a reimplementation |
+| P5    | Composition hardening (openshell-in-daytona live variant), guest-image reference layer, docs                           | remote + contained tier                                                          |
 
 Sequencing note: loomcli only benefits once its TS leaf is the execution path (`LOOM_DAEMON_LEAF=ts`, default-off — `tsruntime.go:33`) — the default in-process Go invoker never sees this layer, and loomcli `main` carries none of the meta-harness leaf code (it all lives on `feat/meta-harness-node-leaf`).
 
@@ -392,14 +399,14 @@ Sequencing note: loomcli only benefits once its TS leaf is the execution path (`
 
 ## Appendix: provenance map
 
-| Design element | Source generalized |
-|---|---|
-| Two-axis split (placement × containment) | loomcli `internal/driver/task_scheduling.go:208-219` (`flue-daytona` profile: `RunnerPlacement`=flue, `SandboxPlacement`=daytona; type `domain.TaskRunPlacement`, `internal/domain/platform.go:541`) |
-| `Sandbox`/`ActiveSandbox` seam shape | orche `packages/agent/src/sandbox/index.ts` |
-| OpenShell transport, upload/download verbs, host-alias, deterministic names, retention | orche `packages/agent/src/sandbox/openshell.ts` |
-| Policy generation | orche `packages/agent/src/sandbox/policy.ts` |
-| Daytona create/teardown, SDK injection, autoStop/autoDelete, leak probe | loomcli-mh-v5 `internal/workflows/builtin/daytona-task-runner.ts` |
-| File-based credential contract, prompt-file transport, injection-safe argv | loomcli-mh-v5 `docs/design/meta-harness-sandbox-runner.md` (Parts C/D) |
-| Structured-turn protocol + exit codes | this repo `src/cli/structured-runner.ts` |
-| Guest runtime constraints (node-pty/Bun, ptyHost, addon-on-disk) | this repo `src/cli/PACKAGING.md`, `src/wrapper/internal/pty.ts` |
-| Image LABEL convention | orche `packages/agent/src/sandbox/image/Dockerfile:56-60` |
+| Design element                                                                         | Source generalized                                                                                                                                                                                   |
+| -------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Two-axis split (placement × containment)                                               | loomcli `internal/driver/task_scheduling.go:208-219` (`flue-daytona` profile: `RunnerPlacement`=flue, `SandboxPlacement`=daytona; type `domain.TaskRunPlacement`, `internal/domain/platform.go:541`) |
+| `Sandbox`/`ActiveSandbox` seam shape                                                   | orche `packages/agent/src/sandbox/index.ts`                                                                                                                                                          |
+| OpenShell transport, upload/download verbs, host-alias, deterministic names, retention | orche `packages/agent/src/sandbox/openshell.ts`                                                                                                                                                      |
+| Policy generation                                                                      | orche `packages/agent/src/sandbox/policy.ts`                                                                                                                                                         |
+| Daytona create/teardown, SDK injection, autoStop/autoDelete, leak probe                | loomcli-mh-v5 `internal/workflows/builtin/daytona-task-runner.ts`                                                                                                                                    |
+| File-based credential contract, prompt-file transport, injection-safe argv             | loomcli-mh-v5 `docs/design/meta-harness-sandbox-runner.md` (Parts C/D)                                                                                                                               |
+| Structured-turn protocol + exit codes                                                  | this repo `src/cli/structured-runner.ts`                                                                                                                                                             |
+| Guest runtime constraints (node-pty/Bun, ptyHost, addon-on-disk)                       | this repo `src/cli/PACKAGING.md`, `src/wrapper/internal/pty.ts`                                                                                                                                      |
+| Image LABEL convention                                                                 | orche `packages/agent/src/sandbox/image/Dockerfile:56-60`                                                                                                                                            |

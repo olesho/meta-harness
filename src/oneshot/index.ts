@@ -17,4 +17,4 @@ export {
   EmptyPromptError,
   type OneShotConfig,
   type OneShotOutcome,
-} from "./oneshot.ts"
+} from "./oneshot.ts";

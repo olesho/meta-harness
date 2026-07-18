@@ -4,33 +4,33 @@
 // than silently masking the problem. Not Pi-specific — driven via a generic
 // adapter with a throwing readTranscript.
 
-import { describe, expect, test } from "vitest"
-import { Conversation } from "../../src/chat/conversation.ts"
-import { newMemStore } from "../../src/chat/memstore.ts"
-import { generic, type Adapter } from "../../src/turns/index.ts"
+import { describe, expect, test } from "vitest";
+import { Conversation } from "../../src/chat/conversation.ts";
+import { newMemStore } from "../../src/chat/memstore.ts";
+import { generic, type Adapter } from "../../src/turns/index.ts";
 import {
   RoleAssistant,
   HistorySourceStore,
   type Session,
   type Turn,
-} from "../../src/chat/types.ts"
-import { wrap } from "../../src/internal/async/index.ts"
-import { ErrSessionNotFound } from "../../src/transcript/errors.ts"
+} from "../../src/chat/types.ts";
+import { wrap } from "../../src/internal/async/index.ts";
+import { ErrSessionNotFound } from "../../src/transcript/errors.ts";
 
 /** A generic adapter whose readTranscript throws the supplied error. */
 function throwingAdapter(err: unknown): Adapter {
   const a = generic.New() as Adapter & {
-    readTranscript(id: string, wd: string): { role: string; text: string }[]
-  }
+    readTranscript(id: string, wd: string): { role: string; text: string }[];
+  };
   a.readTranscript = () => {
-    throw err
-  }
-  return a
+    throw err;
+  };
+  return a;
 }
 
 async function seed(sess: Session): Promise<ReturnType<typeof newMemStore>> {
-  const store = newMemStore()
-  await store.createSession(sess)
+  const store = newMemStore();
+  await store.createSession(sess);
   const turn: Turn = {
     id: "t1",
     sessionID: sess.id,
@@ -42,9 +42,9 @@ async function seed(sess: Session): Promise<ReturnType<typeof newMemStore>> {
     completedAt: new Date(),
     httpCode: 0,
     retryAfter: 0,
-  }
-  await store.appendTurn(turn)
-  return store
+  };
+  await store.appendTurn(turn);
+  return store;
 }
 
 const session: Session = {
@@ -53,29 +53,31 @@ const session: Session = {
   workingDir: "",
   createdAt: new Date(),
   harnessSessionID: "harness-uuid",
-}
+};
 
 describe("historyWithSource transcript-error fallback", () => {
   test("ErrSessionNotFound degrades to store history", async () => {
-    const store = await seed(session)
+    const store = await seed(session);
     const c = new Conversation({
       store,
       session,
       adapter: throwingAdapter(wrap("no file", ErrSessionNotFound)),
-    })
-    const [out, src] = await c.historyWithSource()
-    expect(src).toBe(HistorySourceStore)
-    expect(out.map((t) => t.text)).toEqual(["store reply"])
-  })
+    });
+    const [out, src] = await c.historyWithSource();
+    expect(src).toBe(HistorySourceStore);
+    expect(out.map((t) => t.text)).toEqual(["store reply"]);
+  });
 
   test("a non-sentinel reader error rethrows", async () => {
-    const store = await seed(session)
-    const boom = new Error("corrupt transcript line 42")
+    const store = await seed(session);
+    const boom = new Error("corrupt transcript line 42");
     const c = new Conversation({
       store,
       session,
       adapter: throwingAdapter(boom),
-    })
-    await expect(c.historyWithSource()).rejects.toThrow("corrupt transcript line 42")
-  })
-})
+    });
+    await expect(c.historyWithSource()).rejects.toThrow(
+      "corrupt transcript line 42",
+    );
+  });
+});

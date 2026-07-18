@@ -4,39 +4,39 @@
 // Session. Run is the blocking convenience wrapper (Start + wait) for callers
 // that don't need a live handle. Mirrors pkg/wrapper/wrapper.go.
 
-import { isSentinel } from "../../internal/async/errors.ts"
-import { type Config, ErrBinaryNotFound, validateConfig } from "./config.ts"
-import { argsWithHarnessEffort } from "./effort.ts"
-import { argsWithHarnessModel } from "./mode.ts"
-import { binaryNotFoundError, PtyProcess } from "./pty.ts"
-import { resolvePath } from "../../discovery/discovery.ts"
+import { isSentinel } from "../../internal/async/errors.ts";
+import { type Config, ErrBinaryNotFound, validateConfig } from "./config.ts";
+import { argsWithHarnessEffort } from "./effort.ts";
+import { argsWithHarnessModel } from "./mode.ts";
+import { binaryNotFoundError, PtyProcess } from "./pty.ts";
+import { resolvePath } from "../../discovery/discovery.ts";
 import {
   applyDefaults,
   type Result,
   type Session,
   startSession,
-} from "./session.ts"
-import { StatusBinaryNotFound } from "./status.ts"
-import { ErrNone } from "./errorclass.ts"
+} from "./session.ts";
+import { StatusBinaryNotFound } from "./status.ts";
+import { ErrNone } from "./errorclass.ts";
 
 /** A cancellation context (the async toolkit's Context, or anything done()-shaped). */
 export interface RunContext {
-  done(): Promise<void>
-  err?(): unknown
+  done(): Promise<void>;
+  err?(): unknown;
 }
 
 function envToRecord(env: string[]): Record<string, string> | undefined {
-  if (env.length === 0) return undefined
-  const out: Record<string, string> = {}
+  if (env.length === 0) return undefined;
+  const out: Record<string, string> = {};
   for (const entry of env) {
-    const i = entry.indexOf("=")
+    const i = entry.indexOf("=");
     if (i < 0) {
-      out[entry] = ""
+      out[entry] = "";
     } else {
-      out[entry.slice(0, i)] = entry.slice(i + 1)
+      out[entry.slice(0, i)] = entry.slice(i + 1);
     }
   }
-  return out
+  return out;
 }
 
 /**
@@ -45,24 +45,27 @@ function envToRecord(env: string[]): Record<string, string> | undefined {
  * ErrPTYAllocation) only when the wrapper itself fails to start; once a Session
  * is returned, every harness outcome flows through Session.wait().
  */
-export async function start(ctx: RunContext | undefined, cfg: Config): Promise<Session> {
-  const invalid = validateConfig(cfg)
-  if (invalid) throw invalid
-  applyDefaults(cfg)
+export async function start(
+  ctx: RunContext | undefined,
+  cfg: Config,
+): Promise<Session> {
+  const invalid = validateConfig(cfg);
+  if (invalid) throw invalid;
+  applyDefaults(cfg);
 
-  let args = cfg.args ?? []
-  args = argsWithHarnessEffort(cfg.harness ?? "", args, cfg.effort ?? "")
-  args = argsWithHarnessModel(cfg.harness ?? "", args, cfg.model ?? "")
-  const env = cfg.env ?? []
-  const envRecord = envToRecord(env)
+  let args = cfg.args ?? [];
+  args = argsWithHarnessEffort(cfg.harness ?? "", args, cfg.effort ?? "");
+  args = argsWithHarnessModel(cfg.harness ?? "", args, cfg.model ?? "");
+  const env = cfg.env ?? [];
+  const envRecord = envToRecord(env);
 
   // Preflight the binary: node-pty only surfaces a missing harness as an opaque
   // exit(1), so resolve it up front and fail with ErrBinaryNotFound. Defer to
   // the discovery SSOT (resolvePath) so the wrapper benefits from the full
   // resolution chain — env overrides, PATH, and well-known dirs — making spawn
   // robust to a stripped PATH regardless of the calling runtime (bun/node).
-  const resolved = resolvePath(cfg.binaryPath ?? "", envRecord)
-  if (resolved === null) throw binaryNotFoundError(cfg.binaryPath ?? "")
+  const resolved = resolvePath(cfg.binaryPath ?? "", envRecord);
+  if (resolved === null) throw binaryNotFoundError(cfg.binaryPath ?? "");
 
   cfg.trace?.emit({
     at: new Date(),
@@ -75,15 +78,15 @@ export async function start(ctx: RunContext | undefined, cfg: Config): Promise<S
       idle_classify: cfg.idleClassify,
       wait_delay: cfg.waitDelay,
     },
-  })
+  });
 
   const pty = await PtyProcess.spawn({
     binaryPath: resolved,
     args,
     cwd: cfg.workingDir,
     env: envRecord,
-  })
-  return startSession(cfg, pty, ctx)
+  });
+  return startSession(cfg, pty, ctx);
 }
 
 /**
@@ -95,9 +98,9 @@ export async function run(
   ctx: RunContext | undefined,
   cfg: Config,
 ): Promise<{ result: Result; err: Error | null }> {
-  let session: Session
+  let session: Session;
   try {
-    session = await start(ctx, cfg)
+    session = await start(ctx, cfg);
   } catch (err) {
     const result: Result = {
       status: "",
@@ -109,12 +112,12 @@ export async function run(
       startedAt: null,
       endedAt: null,
       lastOutputAt: null,
-    }
+    };
     if (isSentinel(err, ErrBinaryNotFound)) {
-      result.status = StatusBinaryNotFound
-      result.reason = err instanceof Error ? err.message : String(err)
+      result.status = StatusBinaryNotFound;
+      result.reason = err instanceof Error ? err.message : String(err);
     }
-    return { result, err: err instanceof Error ? err : new Error(String(err)) }
+    return { result, err: err instanceof Error ? err : new Error(String(err)) };
   }
-  return session.wait()
+  return session.wait();
 }

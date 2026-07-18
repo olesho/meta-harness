@@ -18,30 +18,30 @@ import {
   type Conversation,
   type InputPolicy,
   type Turn,
-} from "../chat/index.ts"
-import { Context, ctxDeadlineExceeded } from "../internal/async/index.ts"
-import type { AcquisitionMode, Adapter } from "../turns/index.ts"
-import type { EventEnvelope } from "../transcript/index.ts"
-import type { YieldControl } from "../acquisition/internal/yield.ts"
-import type { StreamVersionPredicate } from "../acquisition/internal/planAcquisition.ts"
+} from "../chat/index.ts";
+import { Context, ctxDeadlineExceeded } from "../internal/async/index.ts";
+import type { AcquisitionMode, Adapter } from "../turns/index.ts";
+import type { EventEnvelope } from "../transcript/index.ts";
+import type { YieldControl } from "../acquisition/internal/yield.ts";
+import type { StreamVersionPredicate } from "../acquisition/internal/planAcquisition.ts";
 
 /** Config for a single one-shot turn. `harness` is the adapter name (e.g. "claude-code", "codex"). */
 export interface OneShotConfig {
-  harness: string
-  binaryPath: string
-  prompt: string
-  args?: string[]
-  workingDir?: string
-  env?: string[]
-  effort?: string
-  model?: string
+  harness: string;
+  binaryPath: string;
+  prompt: string;
+  args?: string[];
+  workingDir?: string;
+  env?: string[];
+  effort?: string;
+  model?: string;
   /** Terminal geometry; defaults match chat.Open (120x40). */
-  cols?: number
-  rows?: number
+  cols?: number;
+  rows?: number;
   /** Test-only idle-completion window override (ms). Zero/undefined = package default. */
-  idleGap?: number
+  idleGap?: number;
   /** Test-only marker-confirm window override (ms). Zero/undefined = package default. */
-  markerGap?: number
+  markerGap?: number;
 
   // ── Acquisition (StreamTap) opt-in ─────────────────────────────────────────
   // A one-shot run is a thin client over a single chat Conversation, so it must
@@ -53,44 +53,44 @@ export interface OneShotConfig {
   // fields on chat.Options one-for-one.
 
   /** REQUESTED acquisition mode; planAcquisition latches it against the adapter. Absent ⇒ Off. */
-  acquisitionMode?: AcquisitionMode
+  acquisitionMode?: AcquisitionMode;
   /** Acquisition event sink. Its presence is the sink gate (Go's `haveSink`); absent ⇒ plan degrades to Off. */
-  onAcquisitionEvent?: (env: EventEnvelope) => void
+  onAcquisitionEvent?: (env: EventEnvelope) => void;
   /** Best-effort per-line display callback (bounded, may drop under back-pressure). */
-  onDisplayLine?: (line: string) => void
+  onDisplayLine?: (line: string) => void;
   /** Caller-supplied cooperative-preemption handle wired into the launch env (hookEnv). */
-  yieldControl?: YieldControl
+  yieldControl?: YieldControl;
   /** Hook spool dir wired into the launch env (HW_EVENT_SPOOL) for Hooks mode. */
-  spoolDir?: string
+  spoolDir?: string;
   /** Advanced/testing seam: use this already-resolved adapter instead of resolving from `harness`. */
-  adapter?: Adapter
+  adapter?: Adapter;
   /** Advanced/testing seam: overrides planAcquisition's fact-3 version predicate. */
-  streamVersionPredicate?: StreamVersionPredicate
+  streamVersionPredicate?: StreamVersionPredicate;
 }
 
 /** Thrown when the run's deadline (or an ancestor deadline) fired before completion. */
 export class DeadlineError extends Error {
   constructor(message = "one-shot: context deadline exceeded") {
-    super(message)
-    this.name = "DeadlineError"
+    super(message);
+    this.name = "DeadlineError";
   }
 }
 
 /** Thrown when the assistant turn reached a terminal ERRORED state. */
 export class TurnErroredError extends Error {
-  readonly reason: string
+  readonly reason: string;
   constructor(reason: string) {
-    super("one-shot: turn errored: " + reason)
-    this.name = "TurnErroredError"
-    this.reason = reason
+    super("one-shot: turn errored: " + reason);
+    this.name = "TurnErroredError";
+    this.reason = reason;
   }
 }
 
 /** Thrown when the prompt is empty (nothing to submit). */
 export class EmptyPromptError extends Error {
   constructor() {
-    super("one-shot: empty prompt")
-    this.name = "EmptyPromptError"
+    super("one-shot: empty prompt");
+    this.name = "EmptyPromptError";
   }
 }
 
@@ -104,11 +104,11 @@ export const AutoAcceptTrust: InputPolicy = {
   byKind: {
     trust_prompt: { kind: DispositionAnswer, optionID: "proceed" },
   },
-}
+};
 
 /** Environment keys that leak the outer Claude Code session into the child harness. */
 export function isLeakedClaudeEnv(key: string): boolean {
-  return key === "CLAUDECODE" || key.startsWith("CLAUDE_CODE_")
+  return key === "CLAUDECODE" || key.startsWith("CLAUDE_CODE_");
 }
 
 /**
@@ -118,10 +118,10 @@ export function isLeakedClaudeEnv(key: string): boolean {
  */
 export function cleanEnv(env: string[]): string[] {
   return env.filter((entry) => {
-    const i = entry.indexOf("=")
-    const key = i < 0 ? entry : entry.slice(0, i)
-    return !isLeakedClaudeEnv(key)
-  })
+    const i = entry.indexOf("=");
+    const key = i < 0 ? entry : entry.slice(0, i);
+    return !isLeakedClaudeEnv(key);
+  });
 }
 
 /**
@@ -134,14 +134,17 @@ export function cleanEnv(env: string[]): string[] {
  *   - TurnErroredError   when the assistant turn errored.
  *   - Error(reason)      for any other startup / underlying failure.
  */
-export async function runOneShot(ctx: Context, cfg: OneShotConfig): Promise<string> {
-  if (cfg.prompt.trim() === "") throw new EmptyPromptError()
-  const outcome = await runOneShotDetailed(ctx, cfg)
-  if (outcome.status === "completed") return outcome.reply
-  if (outcome.status === "deadline") throw new DeadlineError()
-  if (outcome.status === "errored") throw new TurnErroredError(outcome.reason)
+export async function runOneShot(
+  ctx: Context,
+  cfg: OneShotConfig,
+): Promise<string> {
+  if (cfg.prompt.trim() === "") throw new EmptyPromptError();
+  const outcome = await runOneShotDetailed(ctx, cfg);
+  if (outcome.status === "completed") return outcome.reply;
+  if (outcome.status === "deadline") throw new DeadlineError();
+  if (outcome.status === "errored") throw new TurnErroredError(outcome.reason);
   // startup_error (post-empty-prompt): a launch/Open failure — surface its reason.
-  throw new Error(outcome.reason)
+  throw new Error(outcome.reason);
 }
 
 /**
@@ -156,16 +159,31 @@ export async function runOneShot(ctx: Context, cfg: OneShotConfig): Promise<stri
  * during Open()), where `harnessSessionID` may be absent.
  */
 export type OneShotOutcome =
-  | { status: "completed"; reply: string; harnessSessionID: string; workingDir: string }
-  | { status: "errored"; reason: string; harnessSessionID: string; workingDir: string }
+  | {
+      status: "completed";
+      reply: string;
+      harnessSessionID: string;
+      workingDir: string;
+    }
+  | {
+      status: "errored";
+      reason: string;
+      harnessSessionID: string;
+      workingDir: string;
+    }
   | { status: "deadline"; harnessSessionID: string; workingDir: string }
-  | { status: "startup_error"; reason: string; harnessSessionID?: string; workingDir: string }
+  | {
+      status: "startup_error";
+      reason: string;
+      harnessSessionID?: string;
+      workingDir: string;
+    };
 
 /** Best-effort message extraction for an unknown thrown value. */
 function errReason(err: unknown): string {
-  if (err instanceof Error) return err.message
-  if (typeof err === "string") return err
-  return String(err)
+  if (err instanceof Error) return err.message;
+  if (typeof err === "string") return err;
+  return String(err);
 }
 
 /**
@@ -180,12 +198,12 @@ export async function runOneShotDetailed(
   ctx: Context,
   cfg: OneShotConfig,
 ): Promise<OneShotOutcome> {
-  const workingDir = cfg.workingDir ?? ""
+  const workingDir = cfg.workingDir ?? "";
   if (cfg.prompt.trim() === "") {
-    return { status: "startup_error", reason: "empty prompt", workingDir }
+    return { status: "startup_error", reason: "empty prompt", workingDir };
   }
 
-  let conv: Conversation
+  let conv: Conversation;
   try {
     conv = await Open(ctx, {
       harness: cfg.harness,
@@ -211,69 +229,94 @@ export async function runOneShotDetailed(
       spoolDir: cfg.spoolDir,
       adapter: cfg.adapter,
       streamVersionPredicate: cfg.streamVersionPredicate,
-    })
+    });
   } catch (err) {
     // Open failed before any durable session existed — no id to read back.
-    return { status: "startup_error", reason: errReason(err), workingDir }
+    return { status: "startup_error", reason: errReason(err), workingDir };
   }
 
   try {
-    const release = await conv.acquireControl(ctx)
+    const release = await conv.acquireControl(ctx);
     try {
-      await conv.send(ctx, cfg.prompt)
+      await conv.send(ctx, cfg.prompt);
     } finally {
-      release()
+      release();
     }
 
-    const turn = await waitForTerminalTurn(ctx, conv)
-    const harnessSessionID = conv.session.harnessSessionID
+    const turn = await waitForTerminalTurn(ctx, conv);
+    const harnessSessionID = conv.session.harnessSessionID;
     if (turn.state === TurnStateErrored) {
-      return { status: "errored", reason: turn.reason, harnessSessionID, workingDir }
+      return {
+        status: "errored",
+        reason: turn.reason,
+        harnessSessionID,
+        workingDir,
+      };
     }
-    return { status: "completed", reply: turn.text, harnessSessionID, workingDir }
+    return {
+      status: "completed",
+      reply: turn.text,
+      harnessSessionID,
+      workingDir,
+    };
   } catch (err) {
     // A session may or may not have been established before the failure. Read the
     // id best-effort: present → deadline/errored (transcript readable); absent →
     // startup_error.
-    const harnessSessionID = conv.session.harnessSessionID
+    const harnessSessionID = conv.session.harnessSessionID;
     if (isDeadline(ctx, err)) {
       return harnessSessionID
         ? { status: "deadline", harnessSessionID, workingDir }
-        : { status: "startup_error", reason: "context deadline exceeded", workingDir }
+        : {
+            status: "startup_error",
+            reason: "context deadline exceeded",
+            workingDir,
+          };
     }
     return harnessSessionID
-      ? { status: "errored", reason: errReason(err), harnessSessionID, workingDir }
-      : { status: "startup_error", reason: errReason(err), workingDir }
+      ? {
+          status: "errored",
+          reason: errReason(err),
+          harnessSessionID,
+          workingDir,
+        }
+      : { status: "startup_error", reason: errReason(err), workingDir };
   } finally {
-    const { ctx: closeCtx } = Context.withDeadline(Context.background(), 2000)
-    await conv.close(closeCtx).catch(() => {})
+    const { ctx: closeCtx } = Context.withDeadline(Context.background(), 2000);
+    await conv.close(closeCtx).catch(() => {});
   }
 }
 
 /** waitForTerminalTurn drains conversation events until an assistant turn ends, or ctx fires. */
-async function waitForTerminalTurn(ctx: Context, conv: Conversation): Promise<Turn> {
-  const bus = conv.events()
+async function waitForTerminalTurn(
+  ctx: Context,
+  conv: Conversation,
+): Promise<Turn> {
+  const bus = conv.events();
   for (;;) {
-    const next = bus.receive()
-    const cancelled = ctx.done().then(() => "cancel" as const)
-    const outcome = await Promise.race([next, cancelled])
-    if (outcome === "cancel") throw ctx.err() ?? new Error("one-shot: context done")
-    const { value, ok } = outcome as Awaited<typeof next>
-    if (!ok) throw new Error("one-shot: event channel closed before a terminal turn")
-    const ev = value!
+    const next = bus.receive();
+    const cancelled = ctx.done().then(() => "cancel" as const);
+    const outcome = await Promise.race([next, cancelled]);
+    if (outcome === "cancel")
+      throw ctx.err() ?? new Error("one-shot: context done");
+    const { value, ok } = outcome;
+    if (!ok)
+      throw new Error("one-shot: event channel closed before a terminal turn");
+    const ev = value!;
     if (
       ev.type === EventTurn &&
       ev.turn?.role === RoleAssistant &&
-      (ev.turn.state === TurnStateComplete || ev.turn.state === TurnStateErrored)
+      (ev.turn.state === TurnStateComplete ||
+        ev.turn.state === TurnStateErrored)
     ) {
-      return ev.turn
+      return ev.turn;
     }
   }
 }
 
 /** isDeadline reports whether ctx expired with a deadline cause (vs plain cancel). */
 function isDeadline(ctx: Context, err: unknown): boolean {
-  if (err === ctxDeadlineExceeded) return true
-  if (err instanceof DeadlineError) return true
-  return ctx.err() === ctxDeadlineExceeded
+  if (err === ctxDeadlineExceeded) return true;
+  if (err instanceof DeadlineError) return true;
+  return ctx.err() === ctxDeadlineExceeded;
 }

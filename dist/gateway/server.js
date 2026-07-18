@@ -21,7 +21,7 @@
 // that spawn harnesses through node-pty, whose `onData`/`onExit` are DEAD under
 // Bun (project memory `meta-harness-node-pty-bun-broken`). There is no
 // "works under Bun" path.
-import { createServer } from "node:http";
+import { createServer, } from "node:http";
 import { EventInputRequest, EventInputResolved, Open, } from "../chat/index.js";
 import { Context } from "../internal/async/index.js";
 import { conversationSummary, inputRequestDTO, openResponse, parseAnswerRequest, screenResponse, turnDTO, } from "./dto.js";
@@ -127,7 +127,9 @@ function requestContext(req, res, timeoutSeconds) {
         ctx = d.ctx;
         cancels.push(d.cancel);
     }
-    const onClose = () => base.cancel();
+    const onClose = () => {
+        base.cancel();
+    };
     req.on("close", onClose);
     res.on("close", onClose);
     return {
@@ -144,7 +146,16 @@ function requestContext(req, res, timeoutSeconds) {
 export function eventDTO(ev) {
     const out = { type: ev.type };
     if (ev.err !== undefined && ev.err !== null) {
-        out.error = ev.err instanceof Error ? ev.err.message : String(ev.err);
+        // ev.err is `unknown` (out-of-band errors, e.g. Store failures). Avoid the
+        // `String(obj)` → "[object Object]" trap: Errors surface their message,
+        // strings pass through, anything else is JSON-encoded so the wire carries
+        // something legible instead of a useless placeholder.
+        out.error =
+            ev.err instanceof Error
+                ? ev.err.message
+                : typeof ev.err === "string"
+                    ? ev.err
+                    : JSON.stringify(ev.err);
     }
     if (ev.type === EventInputRequest || ev.type === EventInputResolved) {
         if (ev.input)
@@ -204,18 +215,62 @@ export class Server {
     // ── Route table (port of server.go Routes) ─────────────────────────────────
     buildRoutes() {
         const defs = [
-            ["GET", "/healthz", (_q, s) => this.healthz(s)],
+            [
+                "GET",
+                "/healthz",
+                (_q, s) => {
+                    this.healthz(s);
+                },
+            ],
             ["POST", "/v1/turns", (q, s) => this.runTurn(q, s)],
             ["POST", "/v1/conversations", (q, s) => this.openConv(q, s)],
-            ["GET", "/v1/conversations", (_q, s) => this.listConvs(s)],
+            [
+                "GET",
+                "/v1/conversations",
+                (_q, s) => {
+                    this.listConvs(s);
+                },
+            ],
             ["DELETE", "/v1/conversations/:id", (q, s, p) => this.closeConv(q, s, p)],
-            ["POST", "/v1/conversations/:id/control", (q, s, p) => this.acquireControl(q, s, p)],
-            ["DELETE", "/v1/conversations/:id/control/:token", (_q, s, p) => this.releaseControl(s, p)],
-            ["POST", "/v1/conversations/:id/messages", (q, s, p) => this.sendMessage(q, s, p)],
-            ["POST", "/v1/conversations/:id/input", (q, s, p) => this.answerInput(q, s, p)],
-            ["GET", "/v1/conversations/:id/events", (q, s, p) => this.streamEvents(q, s, p)],
-            ["GET", "/v1/conversations/:id/history", (q, s, p) => this.history(q, s, p)],
-            ["GET", "/v1/conversations/:id/screen", (_q, s, p) => this.screen(s, p)],
+            [
+                "POST",
+                "/v1/conversations/:id/control",
+                (q, s, p) => this.acquireControl(q, s, p),
+            ],
+            [
+                "DELETE",
+                "/v1/conversations/:id/control/:token",
+                (_q, s, p) => {
+                    this.releaseControl(s, p);
+                },
+            ],
+            [
+                "POST",
+                "/v1/conversations/:id/messages",
+                (q, s, p) => this.sendMessage(q, s, p),
+            ],
+            [
+                "POST",
+                "/v1/conversations/:id/input",
+                (q, s, p) => this.answerInput(q, s, p),
+            ],
+            [
+                "GET",
+                "/v1/conversations/:id/events",
+                (q, s, p) => this.streamEvents(q, s, p),
+            ],
+            [
+                "GET",
+                "/v1/conversations/:id/history",
+                (q, s, p) => this.history(q, s, p),
+            ],
+            [
+                "GET",
+                "/v1/conversations/:id/screen",
+                (_q, s, p) => {
+                    this.screen(s, p);
+                },
+            ],
         ];
         return defs.map(([method, pattern, handler]) => ({
             method,

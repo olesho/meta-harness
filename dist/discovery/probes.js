@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { defaultProbeTimeoutMs, registerProbe } from "./discovery.js";
+import { defaultProbeTimeoutMs, registerProbe, } from "./discovery.js";
 /**
  * Matches the first X.Y.Z (optionally followed by -pre.release or +build
  * metadata) substring. Used by `semverDashVProbe`. The shape is reused

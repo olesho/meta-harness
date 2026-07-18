@@ -18,32 +18,32 @@ export type Status =
   | "stale"
   | "interrupted"
   | "unknown"
-  | "binary_not_found"
+  | "binary_not_found";
 
-export const StatusIdle: Status = "idle"
-export const StatusFailed: Status = "failed"
-export const StatusBlockedByCost: Status = "blocked_by_cost"
-export const StatusRetryLater: Status = "retry_later"
-export const StatusAPIError: Status = "api_error"
-export const StatusWaitingForInput: Status = "waiting_for_input"
-export const StatusStale: Status = "stale"
-export const StatusInterrupted: Status = "interrupted"
-export const StatusUnknown: Status = "unknown"
-export const StatusBinaryNotFound: Status = "binary_not_found"
+export const StatusIdle: Status = "idle";
+export const StatusFailed: Status = "failed";
+export const StatusBlockedByCost: Status = "blocked_by_cost";
+export const StatusRetryLater: Status = "retry_later";
+export const StatusAPIError: Status = "api_error";
+export const StatusWaitingForInput: Status = "waiting_for_input";
+export const StatusStale: Status = "stale";
+export const StatusInterrupted: Status = "interrupted";
+export const StatusUnknown: Status = "unknown";
+export const StatusBinaryNotFound: Status = "binary_not_found";
 
 /**
  * One status transition emitted on a wrapper session's event stream. Mirrors
  * wrapper.SessionEvent (only the fields the Watcher copies onto turn Events).
  */
 export interface SessionEvent {
-  at?: Date
-  status: Status
-  reason: string
-  terminated: boolean
+  at?: Date;
+  status: Status;
+  reason: string;
+  terminated: boolean;
   /** Upstream API status code for api_error events; 0/undefined otherwise. */
-  httpCode?: number
+  httpCode?: number;
   /** Parsed "retry after" hint in milliseconds; 0/undefined when absent. */
-  retryAfter?: number
+  retryAfter?: number;
 }
 
 /**
@@ -51,5 +51,5 @@ export interface SessionEvent {
  * of status events. The full Session (Wait/Stop/Snapshot) is owned elsewhere.
  */
 export interface SessionLike {
-  events(): AsyncIterable<SessionEvent>
+  events(): AsyncIterable<SessionEvent>;
 }

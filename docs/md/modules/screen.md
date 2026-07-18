@@ -11,7 +11,12 @@ is showing. It exposes only what that layer needs: rendered text, dimensions, cu
 a monotonic generation counter.
 
 ```ts
-import { newScreen, Screen, type Snapshot, type Notify } from "meta-harness/screen"
+import {
+  newScreen,
+  Screen,
+  type Snapshot,
+  type Notify,
+} from "meta-harness/screen";
 ```
 
 ---
@@ -32,6 +37,7 @@ Construct an emulator of the given cell dimensions. Non-positive inputs fall bac
 ```ts
 write(data: string | Uint8Array): Promise<void>
 ```
+
 Feed raw PTY bytes (ANSI escapes intact) into the emulator. On success it bumps the
 generation counter and signals every subscriber. Writes are serialized behind a mutex, so
 the generation count is exact even under interleaved async writes.
@@ -39,23 +45,27 @@ the generation count is exact even under interleaved async writes.
 ```ts
 snapshot(): Snapshot
 ```
+
 A coherent point-in-time view (see [`Snapshot`](#snapshot)). Lock-free and synchronous —
 safe to call any time; the returned object is plain values, safe to retain.
 
 ```ts
 generation(): number
 ```
+
 The current write counter, without rendering a snapshot. Cheap change-detection.
 
 ```ts
 resize(cols: number, rows: number): void
 ```
+
 Change dimensions, preserving content as best the emulator allows. Bumps generation and
 signals subscribers.
 
 ```ts
 subscribe(): [Notify, () => void]
 ```
+
 Returns a `[notify, unsubscribe]` tuple. `notify` is a coalesced (size-1) channel that
 fires after every successful `write()` or `resize()`; `unsubscribe()` removes and closes
 it. This is how the [`Watcher`](turns.md#the-watcher) reacts to screen changes.
@@ -66,12 +76,12 @@ it. This is how the [`Watcher`](turns.md#the-watcher) reacts to screen changes.
 
 ```ts
 interface Snapshot {
-  text: string        // rendered contents, top-to-bottom, one '\n' per row; trailing whitespace preserved
-  cols: number
-  rows: number
-  cursorCol: number   // 0-indexed
-  cursorRow: number
-  generation: number  // increments on each successful write/resize
+  text: string; // rendered contents, top-to-bottom, one '\n' per row; trailing whitespace preserved
+  cols: number;
+  rows: number;
+  cursorCol: number; // 0-indexed
+  cursorRow: number;
+  generation: number; // increments on each successful write/resize
 }
 ```
 
@@ -85,7 +95,7 @@ mirroring the Go `vt10x` emulator's behavior so recorded corpora stay comparable
 
 ```ts
 interface Notify {
-  receive(): Promise<{ ok: boolean }>
+  receive(): Promise<{ ok: boolean }>;
 }
 ```
 

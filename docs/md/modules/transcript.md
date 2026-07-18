@@ -12,16 +12,42 @@ store when available.
 
 ```ts
 import {
-  SchemaVersion, RoleUser, RoleAssistant, RoleTool, RoleSystem,
-  EventText, EventToolUse, EventToolResult, EventSessionMeta, SourceLive, SourceFile,
-  eventID, turnsFromEvents, envelope, toPublicJSON,
-  type Event, type Turn, type ParsedEvent, type EventEnvelope,
-  marshalParsedEvents, unmarshalParsedEvents,
-  type Reader, ErrEmptySessionID, ErrEmptyWorkingDir, ErrSessionNotFound,
-  ClaudeCodeReader, encodedCWD, claudecodeEvents,
-  CodexReader, codexEvents, parseRollout, locateLatestSession, readSessionMeta,
-  PiReader, slugForCwd,
-} from "meta-harness/transcript"
+  SchemaVersion,
+  RoleUser,
+  RoleAssistant,
+  RoleTool,
+  RoleSystem,
+  EventText,
+  EventToolUse,
+  EventToolResult,
+  EventSessionMeta,
+  SourceLive,
+  SourceFile,
+  eventID,
+  turnsFromEvents,
+  envelope,
+  toPublicJSON,
+  type Event,
+  type Turn,
+  type ParsedEvent,
+  type EventEnvelope,
+  marshalParsedEvents,
+  unmarshalParsedEvents,
+  type Reader,
+  ErrEmptySessionID,
+  ErrEmptyWorkingDir,
+  ErrSessionNotFound,
+  ClaudeCodeReader,
+  encodedCWD,
+  claudecodeEvents,
+  CodexReader,
+  codexEvents,
+  parseRollout,
+  locateLatestSession,
+  readSessionMeta,
+  PiReader,
+  slugForCwd,
+} from "meta-harness/transcript";
 ```
 
 ---
@@ -30,21 +56,21 @@ import {
 
 ```ts
 interface Event {
-  seq?: number
-  timestamp?: Date
-  role?: string        // RoleUser | RoleAssistant | RoleTool | RoleSystem
-  type?: string        // EventText | EventToolUse | EventToolResult | EventSessionMeta
-  text?: string
-  toolName?: string
-  toolUseID?: string
-  toolInput?: string   // raw JSON
-  output?: string      // tool_result text
+  seq?: number;
+  timestamp?: Date;
+  role?: string; // RoleUser | RoleAssistant | RoleTool | RoleSystem
+  type?: string; // EventText | EventToolUse | EventToolResult | EventSessionMeta
+  text?: string;
+  toolName?: string;
+  toolUseID?: string;
+  toolInput?: string; // raw JSON
+  output?: string; // tool_result text
 
   // internal metadata — present in the durable wire form, omitted from the public DTO:
-  uuid?: string        // native message UUID when available
-  schemaVersion?: number
-  source?: string      // SourceLive ("live") | SourceFile ("file")
-  nativeID?: string    // parser-owned primary identity
+  uuid?: string; // native message UUID when available
+  schemaVersion?: number;
+  source?: string; // SourceLive ("live") | SourceFile ("file")
+  nativeID?: string; // parser-owned primary identity
 }
 ```
 
@@ -58,6 +84,7 @@ change).
 ```ts
 eventID(e: Event): string
 ```
+
 A time-stable dedup key, chosen in priority order: parser-owned `nativeID` → `"msg:" +
 uuid` → a **kind-qualified** `toolUseID` (so a `tool_use` and its `tool_result` never
 collapse) → a SHA-256 content hash of `(type, role, timestamp, text, toolInput, output)`.
@@ -70,6 +97,7 @@ acquisition.
 turnsFromEvents(events: Event[]): Turn[]
 interface Turn { role: string; text: string; timestamp?: Date }
 ```
+
 Projects the event stream to the lossy chat view, dropping tool-only events (those with no
 renderable text). This is how the Claude Code and Codex adapters turn `Event[]` into the
 `Turn[]` that [`chat.historyWithSource()`](chat.md#history-source) consumes.
@@ -93,7 +121,7 @@ toPublicJSON(e: Event): Record<string, unknown>                            // DT
 
 ```ts
 interface Reader {
-  read(harnessSessionID: string, workingDir: string): Event[]
+  read(harnessSessionID: string, workingDir: string): Event[];
 }
 ```
 
@@ -106,7 +134,7 @@ interface Reader {
 
 > **Note:** `ClaudeCodeReader` and `CodexReader` satisfy this interface (`read → Event[]`).
 > `PiReader.read` returns `Turn[]` **directly** — it skips the event model and yields the
-> lossy chat view, so it is *not* structurally a `Reader`. Adapters must not call
+> lossy chat view, so it is _not_ structurally a `Reader`. Adapters must not call
 > `turnsFromEvents()` on pi's result.
 
 ---
@@ -183,13 +211,13 @@ because downstream consumers key authority filters on `source` and dedup on `nat
 
 [Sentinels](../concepts.md#sentinel-errors) — match by identity, not message.
 
-| Sentinel | Meaning |
-| --- | --- |
-| `ErrEmptySessionID` | The requested session id was empty. |
-| `ErrEmptyWorkingDir` | A reader that needs a working dir got none. |
+| Sentinel             | Meaning                                              |
+| -------------------- | ---------------------------------------------------- |
+| `ErrEmptySessionID`  | The requested session id was empty.                  |
+| `ErrEmptyWorkingDir` | A reader that needs a working dir got none.          |
 | `ErrSessionNotFound` | No transcript file could be located for the session. |
 
-The chat layer treats `ErrSessionNotFound` and `ErrEmptySessionID` as *"not yet flushed"*
+The chat layer treats `ErrSessionNotFound` and `ErrEmptySessionID` as _"not yet flushed"_
 and [falls back to the store](chat.md#history-source); genuine parse/permission errors
 propagate.
 

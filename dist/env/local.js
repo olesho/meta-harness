@@ -32,7 +32,11 @@ class LocalWorkspace {
         return new Promise((resolve, reject) => {
             // argv is passed as a list to spawn (no shell), so no argument can inject
             // an extra command — no shell metacharacter is ever interpreted here.
-            const child = spawn(cmd, rest, { cwd, env, stdio: ["pipe", "pipe", "pipe"] });
+            const child = spawn(cmd, rest, {
+                cwd,
+                env,
+                stdio: ["pipe", "pipe", "pipe"],
+            });
             let stdout = "";
             let stderr = "";
             let settled = false;
@@ -48,7 +52,9 @@ class LocalWorkspace {
                 onCancel();
                 return;
             }
-            void ctx.done().then(() => onCancel());
+            void ctx.done().then(() => {
+                onCancel();
+            });
             child.stdout.on("data", (d) => (stdout += d.toString()));
             child.stderr.on("data", (d) => (stderr += d.toString()));
             child.on("error", (err) => {

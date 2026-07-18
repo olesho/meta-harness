@@ -13,29 +13,32 @@
  *  Nothing inside single quotes is special to the shell, so quotes, `$`, backticks,
  *  `;`, newlines, and leading `-` are all inert. */
 export function shQuote(arg: string): string {
-  if (arg === "") return "''"
-  return `'${arg.replace(/'/g, "'\\''")}'`
+  if (arg === "") return "''";
+  return `'${arg.replace(/'/g, "'\\''")}'`;
 }
 
 /** Join an argv into a single shell-safe command string. Each token is
  *  independently single-quoted, so no element can inject additional tokens. */
 export function argvToShell(argv: readonly string[]): string {
-  return argv.map(shQuote).join(" ")
+  return argv.map(shQuote).join(" ");
 }
 
 /** Build an in-guest `env K=V … <argv>` prefix as a shell-safe argv-string.
  *  Both keys' values and the command tokens are single-quoted. Used by
  *  containment layers whose exec transport has no dedicated env flag (design
  *  §3: openshell 0.0.53 exec has no --env). */
-export function envPrefixedShell(env: Record<string, string> | undefined, argv: readonly string[]): string {
-  const parts: string[] = ["env"]
+export function envPrefixedShell(
+  env: Record<string, string> | undefined,
+  argv: readonly string[],
+): string {
+  const parts: string[] = ["env"];
   for (const key of Object.keys(env ?? {}).sort()) {
     // The key itself must be a valid identifier; the value is fully quoted.
-    parts.push(`${key}=${shQuote(env![key])}`)
+    parts.push(`${key}=${shQuote(env![key])}`);
   }
-  for (const a of argv) parts.push(shQuote(a))
+  for (const a of argv) parts.push(shQuote(a));
   // "env" with no assignments is a harmless no-op prefix; drop it when unused.
-  return (env && Object.keys(env).length > 0)
+  return env && Object.keys(env).length > 0
     ? parts.join(" ")
-    : argv.map(shQuote).join(" ")
+    : argv.map(shQuote).join(" ");
 }

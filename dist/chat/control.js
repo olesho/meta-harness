@@ -65,7 +65,7 @@ export class ControlQueue {
             if (!this._held)
                 return;
             let next = this.queue.shift();
-            while (next && next.removed)
+            while (next?.removed)
                 next = this.queue.shift();
             if (!next) {
                 this._held = false;

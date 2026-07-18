@@ -54,7 +54,9 @@ export function usageFromClaudeJSONL(data) {
         const usage = msg?.usage;
         if (!usage || typeof usage !== "object")
             continue;
-        const key = typeof msg?.id === "string" && msg.id !== "" ? msg.id : "line:" + line.uuid;
+        const key = typeof msg?.id === "string" && msg.id !== ""
+            ? msg.id
+            : "line:" + line.uuid;
         if (seen.has(key))
             continue;
         seen.add(key);

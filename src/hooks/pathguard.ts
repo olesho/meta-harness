@@ -3,36 +3,36 @@
 // a parallel copy. Consumed by the hook payload parser to reject a `cwd` /
 // transcript path that escapes its expected base directory.
 
-import { existsSync } from "node:fs"
-import path from "node:path"
-import { canonicalDir, cleanPosix } from "../transcript/pathutil.ts"
+import { existsSync } from "node:fs";
+import path from "node:path";
+import { canonicalDir, cleanPosix } from "../transcript/pathutil.ts";
 
 // canonicalize resolves symlinks on the longest existing prefix of `abs` (via
 // canonicalDir, the EvalSymlinks analogue) and re-appends the non-existent
 // remainder. This is what lets us compare a not-yet-created child against a
 // symlinked base (e.g. macOS /var -> /private/var) without falsely flagging it.
 function canonicalize(abs: string): string {
-  const cleaned = cleanPosix(abs)
-  const parts = cleaned.split("/")
+  const cleaned = cleanPosix(abs);
+  const parts = cleaned.split("/");
   for (let i = parts.length; i > 0; i--) {
-    const prefix = parts.slice(0, i).join("/") || "/"
+    const prefix = parts.slice(0, i).join("/") || "/";
     if (existsSync(prefix)) {
-      const canon = cleanPosix(canonicalDir(prefix))
-      const rest = parts.slice(i)
-      return rest.length ? cleanPosix(`${canon}/${rest.join("/")}`) : canon
+      const canon = cleanPosix(canonicalDir(prefix));
+      const rest = parts.slice(i);
+      return rest.length ? cleanPosix(`${canon}/${rest.join("/")}`) : canon;
     }
   }
-  return cleaned
+  return cleaned;
 }
 
 export class PathEscapeError extends Error {
-  readonly baseDir: string
-  readonly candidate: string
+  readonly baseDir: string;
+  readonly candidate: string;
   constructor(baseDir: string, candidate: string) {
-    super(`path escapes base directory: ${candidate} (base ${baseDir})`)
-    this.name = "PathEscapeError"
-    this.baseDir = baseDir
-    this.candidate = candidate
+    super(`path escapes base directory: ${candidate} (base ${baseDir})`);
+    this.name = "PathEscapeError";
+    this.baseDir = baseDir;
+    this.candidate = candidate;
   }
 }
 
@@ -42,27 +42,27 @@ export class PathEscapeError extends Error {
 // `../` escapes — and symlink escapes — are rejected. Returns the canonical
 // resolved path; throws PathEscapeError on escape.
 export function resolveWithinBase(baseDir: string, candidate: string): string {
-  const base = canonicalize(baseDir)
+  const base = canonicalize(baseDir);
 
   const joined = path.posix.isAbsolute(candidate.replace(/\\/g, "/"))
     ? cleanPosix(candidate)
-    : cleanPosix(path.posix.join(base, candidate))
+    : cleanPosix(path.posix.join(base, candidate));
 
-  const resolved = canonicalize(joined)
+  const resolved = canonicalize(joined);
 
   if (resolved !== base && !resolved.startsWith(`${base}/`)) {
-    throw new PathEscapeError(baseDir, candidate)
+    throw new PathEscapeError(baseDir, candidate);
   }
-  return resolved
+  return resolved;
 }
 
 // isWithinBase is the non-throwing predicate form of resolveWithinBase.
 export function isWithinBase(baseDir: string, candidate: string): boolean {
   try {
-    resolveWithinBase(baseDir, candidate)
-    return true
+    resolveWithinBase(baseDir, candidate);
+    return true;
   } catch (err) {
-    if (err instanceof PathEscapeError) return false
-    throw err
+    if (err instanceof PathEscapeError) return false;
+    throw err;
   }
 }

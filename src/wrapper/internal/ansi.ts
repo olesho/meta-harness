@@ -2,22 +2,22 @@
 
 /** Strip ANSI/CSI escape sequences, leaving the printable text. */
 export function stripANSIEscapes(s: string): string {
-  let out = ""
-  let inEscape = false
+  let out = "";
+  let inEscape = false;
   for (let i = 0; i < s.length; i++) {
-    const c = s.charCodeAt(i)
+    const c = s.charCodeAt(i);
     if (inEscape) {
       // A final byte in the @..~ range ends the escape sequence.
-      if (c >= 0x40 && c <= 0x7e) inEscape = false
-      continue
+      if (c >= 0x40 && c <= 0x7e) inEscape = false;
+      continue;
     }
     if (c === 0x1b) {
-      inEscape = true
-      continue
+      inEscape = true;
+      continue;
     }
-    out += s[i]
+    out += s[i];
   }
-  return out
+  return out;
 }
 
 const costQuotaPatterns = [
@@ -35,16 +35,16 @@ const costQuotaPatterns = [
   "limit resets",
   "resets at",
   "extra usage",
-]
+];
 
 /**
  * Report whether output contains a cost/quota/rate fingerprint, returning the
  * matched phrase. Returns "" when nothing matched.
  */
 export function isCostOrQuotaLimited(output: string): string {
-  const normalized = stripANSIEscapes(output).toLowerCase()
+  const normalized = stripANSIEscapes(output).toLowerCase();
   for (const pattern of costQuotaPatterns) {
-    if (normalized.includes(pattern)) return pattern
+    if (normalized.includes(pattern)) return pattern;
   }
-  return ""
+  return "";
 }

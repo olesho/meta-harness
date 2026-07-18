@@ -36,14 +36,18 @@ export class Context {
     /** A child context plus a function to cancel it. */
     static withCancel(parent) {
         const ctx = new Context(parent);
-        const cancel = (cause) => ctx._finish(cause ?? ctxCanceled);
+        const cancel = (cause) => {
+            ctx._finish(cause ?? ctxCanceled);
+        };
         return { ctx, cancel };
     }
     /** A child context that auto-cancels after `ms` with ctxDeadlineExceeded. */
     static withDeadline(parent, ms) {
         const { ctx, cancel } = Context.withCancel(parent);
         if (ctx._err === undefined) {
-            ctx._timer = setTimeout(() => ctx._finish(ctxDeadlineExceeded), ms);
+            ctx._timer = setTimeout(() => {
+                ctx._finish(ctxDeadlineExceeded);
+            }, ms);
         }
         return { ctx, cancel };
     }

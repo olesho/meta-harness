@@ -1,189 +1,710 @@
 <style>
-  :root{
-    --ground:#ECEFF2; --panel:#FFFFFF; --ink:#0F1720; --ink-soft:#4B5A65;
-    --ink-mute:#7C8A94; --line:#D5DCE2; --line-soft:#E4E9EE;
-    --signal:#0B7C88; --signal-deep:#095b64; --signal-lite:#16AEBC;
-    --amber:#B4661A; --amber-soft:#C98A3E;
-    --term:#0E1620; --term-2:#12202C; --term-ink:#CBD6DF; --term-mute:#6E8393; --term-line:#233444;
-    --font-mono:ui-monospace,"SF Mono","JetBrains Mono","Menlo",Consolas,monospace;
-    --font-sans:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",sans-serif;
-    --wrap:1080px;
+  :root {
+    --ground: #eceff2;
+    --panel: #ffffff;
+    --ink: #0f1720;
+    --ink-soft: #4b5a65;
+    --ink-mute: #7c8a94;
+    --line: #d5dce2;
+    --line-soft: #e4e9ee;
+    --signal: #0b7c88;
+    --signal-deep: #095b64;
+    --signal-lite: #16aebc;
+    --amber: #b4661a;
+    --amber-soft: #c98a3e;
+    --term: #0e1620;
+    --term-2: #12202c;
+    --term-ink: #cbd6df;
+    --term-mute: #6e8393;
+    --term-line: #233444;
+    --font-mono:
+      ui-monospace, "SF Mono", "JetBrains Mono", "Menlo", Consolas, monospace;
+    --font-sans:
+      system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+    --wrap: 1080px;
   }
-  *{box-sizing:border-box}
-  body{
-    margin:0;background:var(--ground);color:var(--ink);
-    font-family:var(--font-sans);font-size:16.5px;line-height:1.62;
-    -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;
+  * {
+    box-sizing: border-box;
   }
-  .wrap{max-width:var(--wrap);margin:0 auto;padding:0 28px}
-  a{color:var(--signal);text-decoration:none}
-  a:hover{text-decoration:underline;text-underline-offset:3px}
-  h1,h2,h3{margin:0;text-wrap:balance;letter-spacing:-.01em}
-  p{margin:0}
-  code{font-family:var(--font-mono);font-size:.88em;background:#0b7c8814;color:var(--signal-deep);padding:1px 5px;border-radius:3px}
-  ::selection{background:#0b7c8830}
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    font-size: 16.5px;
+    line-height: 1.62;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  .wrap {
+    max-width: var(--wrap);
+    margin: 0 auto;
+    padding: 0 28px;
+  }
+  a {
+    color: var(--signal);
+    text-decoration: none;
+  }
+  a:hover {
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+  h1,
+  h2,
+  h3 {
+    margin: 0;
+    text-wrap: balance;
+    letter-spacing: -0.01em;
+  }
+  p {
+    margin: 0;
+  }
+  code {
+    font-family: var(--font-mono);
+    font-size: 0.88em;
+    background: #0b7c8814;
+    color: var(--signal-deep);
+    padding: 1px 5px;
+    border-radius: 3px;
+  }
+  ::selection {
+    background: #0b7c8830;
+  }
 
   /* ---- eyebrow / labels ---- */
-  .eyebrow{
-    font-family:var(--font-mono);font-size:11.5px;font-weight:600;
-    letter-spacing:.22em;text-transform:uppercase;color:var(--signal);
-    display:inline-flex;align-items:center;gap:9px;
+  .eyebrow {
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    font-weight: 600;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--signal);
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
   }
-  .eyebrow::before{content:"";width:22px;height:1px;background:var(--signal);opacity:.6}
-  .eyebrow.amber{color:var(--amber)}
-  .eyebrow.amber::before{background:var(--amber)}
+  .eyebrow::before {
+    content: "";
+    width: 22px;
+    height: 1px;
+    background: var(--signal);
+    opacity: 0.6;
+  }
+  .eyebrow.amber {
+    color: var(--amber);
+  }
+  .eyebrow.amber::before {
+    background: var(--amber);
+  }
 
   /* ---- top bar ---- */
-  .topbar{
-    position:sticky;top:0;z-index:20;
-    background:color-mix(in srgb,var(--ground) 82%, transparent);
-    backdrop-filter:saturate(1.4) blur(10px);
-    border-bottom:1px solid var(--line);
+  .topbar {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    background: color-mix(in srgb, var(--ground) 82%, transparent);
+    backdrop-filter: saturate(1.4) blur(10px);
+    border-bottom: 1px solid var(--line);
   }
-  .topbar .row{display:flex;align-items:center;justify-content:space-between;height:56px}
-  .brand{font-family:var(--font-mono);font-weight:700;font-size:15px;letter-spacing:-.02em;color:var(--ink);display:flex;align-items:center;gap:9px}
-  .brand .dot{width:9px;height:9px;border-radius:50%;background:var(--signal);box-shadow:0 0 0 3px #0b7c8822}
-  .navlinks{display:flex;gap:26px;font-family:var(--font-mono);font-size:12.5px;letter-spacing:.02em}
-  .navlinks a{color:var(--ink-soft)}
-  .navlinks a:hover{color:var(--signal);text-decoration:none}
+  .topbar .row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 56px;
+  }
+  .brand {
+    font-family: var(--font-mono);
+    font-weight: 700;
+    font-size: 15px;
+    letter-spacing: -0.02em;
+    color: var(--ink);
+    display: flex;
+    align-items: center;
+    gap: 9px;
+  }
+  .brand .dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: var(--signal);
+    box-shadow: 0 0 0 3px #0b7c8822;
+  }
+  .navlinks {
+    display: flex;
+    gap: 26px;
+    font-family: var(--font-mono);
+    font-size: 12.5px;
+    letter-spacing: 0.02em;
+  }
+  .navlinks a {
+    color: var(--ink-soft);
+  }
+  .navlinks a:hover {
+    color: var(--signal);
+    text-decoration: none;
+  }
 
   /* ---- hero ---- */
-  .hero{padding:74px 0 30px}
-  .hero h1{
-    font-family:var(--font-mono);font-weight:700;font-size:clamp(42px,8vw,86px);
-    line-height:.98;letter-spacing:-.04em;margin:20px 0 0;
+  .hero {
+    padding: 74px 0 30px;
   }
-  .hero h1 .slash{color:var(--signal)}
-  .lede{font-size:clamp(19px,2.4vw,24px);line-height:1.4;max-width:34ch;margin:22px 0 0;color:var(--ink);font-weight:450}
-  .sub{margin-top:20px;max-width:60ch;color:var(--ink-soft);font-size:16.5px}
-
-  .pathstrip{
-    margin-top:34px;display:flex;flex-wrap:wrap;gap:10px 8px;align-items:center;
-    font-family:var(--font-mono);font-size:12.5px;color:var(--ink-soft);
+  .hero h1 {
+    font-family: var(--font-mono);
+    font-weight: 700;
+    font-size: clamp(42px, 8vw, 86px);
+    line-height: 0.98;
+    letter-spacing: -0.04em;
+    margin: 20px 0 0;
   }
-  .pathstrip .st{background:var(--panel);border:1px solid var(--line);border-radius:2px;padding:6px 11px;white-space:nowrap}
-  .pathstrip .ar{color:var(--signal);font-weight:700}
+  .hero h1 .slash {
+    color: var(--signal);
+  }
+  .lede {
+    font-size: clamp(19px, 2.4vw, 24px);
+    line-height: 1.4;
+    max-width: 34ch;
+    margin: 22px 0 0;
+    color: var(--ink);
+    font-weight: 450;
+  }
+  .sub {
+    margin-top: 20px;
+    max-width: 60ch;
+    color: var(--ink-soft);
+    font-size: 16.5px;
+  }
 
-  .stats{display:flex;flex-wrap:wrap;gap:0;margin-top:40px;border:1px solid var(--line);border-radius:4px;background:var(--panel);overflow:hidden}
-  .stat{flex:1 1 150px;padding:18px 20px;border-right:1px solid var(--line-soft)}
-  .stat:last-child{border-right:0}
-  .stat .n{font-family:var(--font-mono);font-size:26px;font-weight:700;letter-spacing:-.03em;color:var(--ink);font-variant-numeric:tabular-nums}
-  .stat .n .u{font-size:14px;color:var(--signal);margin-left:2px}
-  .stat .l{font-family:var(--font-mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-mute);margin-top:5px}
+  .pathstrip {
+    margin-top: 34px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 8px;
+    align-items: center;
+    font-family: var(--font-mono);
+    font-size: 12.5px;
+    color: var(--ink-soft);
+  }
+  .pathstrip .st {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 2px;
+    padding: 6px 11px;
+    white-space: nowrap;
+  }
+  .pathstrip .ar {
+    color: var(--signal);
+    font-weight: 700;
+  }
+
+  .stats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0;
+    margin-top: 40px;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    background: var(--panel);
+    overflow: hidden;
+  }
+  .stat {
+    flex: 1 1 150px;
+    padding: 18px 20px;
+    border-right: 1px solid var(--line-soft);
+  }
+  .stat:last-child {
+    border-right: 0;
+  }
+  .stat .n {
+    font-family: var(--font-mono);
+    font-size: 26px;
+    font-weight: 700;
+    letter-spacing: -0.03em;
+    color: var(--ink);
+    font-variant-numeric: tabular-nums;
+  }
+  .stat .n .u {
+    font-size: 14px;
+    color: var(--signal);
+    margin-left: 2px;
+  }
+  .stat .l {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--ink-mute);
+    margin-top: 5px;
+  }
 
   /* ---- section frame ---- */
-  section{padding:56px 0}
-  .sec-head{max-width:66ch}
-  .sec-head h2{font-size:clamp(24px,3.4vw,33px);margin-top:14px;line-height:1.12}
-  .sec-head p{margin-top:14px;color:var(--ink-soft)}
+  section {
+    padding: 56px 0;
+  }
+  .sec-head {
+    max-width: 66ch;
+  }
+  .sec-head h2 {
+    font-size: clamp(24px, 3.4vw, 33px);
+    margin-top: 14px;
+    line-height: 1.12;
+  }
+  .sec-head p {
+    margin-top: 14px;
+    color: var(--ink-soft);
+  }
 
   /* ---- dark instrument panel ---- */
-  .panel{
-    background:var(--term);border-radius:8px;margin-top:30px;
-    border:1px solid #1c2a38;box-shadow:0 24px 50px -30px #0f172099;
-    overflow:hidden;
+  .panel {
+    background: var(--term);
+    border-radius: 8px;
+    margin-top: 30px;
+    border: 1px solid #1c2a38;
+    box-shadow: 0 24px 50px -30px #0f172099;
+    overflow: hidden;
   }
-  .panel-bar{
-    display:flex;align-items:center;gap:8px;padding:12px 16px;
-    border-bottom:1px solid var(--term-line);
-    font-family:var(--font-mono);font-size:11.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--term-mute);
+  .panel-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--term-line);
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--term-mute);
   }
-  .panel-bar .lamp{width:8px;height:8px;border-radius:50%;background:#2c3d4d}
-  .panel-bar .lamp.on{background:var(--signal-lite);box-shadow:0 0 8px var(--signal-lite)}
-  .panel-bar .title{color:var(--term-ink);letter-spacing:.16em}
-  .panel-bar .spacer{flex:1}
-  .panel-scroll{overflow-x:auto;padding:26px 22px 22px}
-  .diagram{display:block;width:100%;min-width:660px;height:auto}
+  .panel-bar .lamp {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #2c3d4d;
+  }
+  .panel-bar .lamp.on {
+    background: var(--signal-lite);
+    box-shadow: 0 0 8px var(--signal-lite);
+  }
+  .panel-bar .title {
+    color: var(--term-ink);
+    letter-spacing: 0.16em;
+  }
+  .panel-bar .spacer {
+    flex: 1;
+  }
+  .panel-scroll {
+    overflow-x: auto;
+    padding: 26px 22px 22px;
+  }
+  .diagram {
+    display: block;
+    width: 100%;
+    min-width: 660px;
+    height: auto;
+  }
 
   /* svg shared classes */
-  .g-grid{stroke:var(--term-line);stroke-width:1}
-  .n-box{fill:var(--term-2);stroke:#2b3f50;stroke-width:1.4;rx:7}
-  .n-core{fill:#0f2731;stroke:var(--signal);stroke-width:1.8}
-  .n-async{fill:#231a10;stroke:var(--amber);stroke-width:1.5}
-  .n-title{font-family:var(--font-mono);fill:var(--term-ink);font-weight:700;font-size:16px}
-  .n-title.core{fill:#e7f6f8;font-size:19px}
-  .n-sub{font-family:var(--font-mono);fill:var(--term-mute);font-size:11px}
-  .chan-l{font-family:var(--font-mono);fill:#5b7180;font-size:10px;letter-spacing:.16em}
-  .trace{stroke:var(--signal-lite);stroke-width:1.9;fill:none}
-  .trace-a{stroke:var(--amber-soft);stroke-width:1.7;fill:none;stroke-dasharray:4 3}
-  .tlabel{font-family:var(--font-mono);fill:#7f96a4;font-size:10.5px}
-  .leg{font-family:var(--font-mono);fill:var(--term-mute);font-size:11.5px}
+  .g-grid {
+    stroke: var(--term-line);
+    stroke-width: 1;
+  }
+  .n-box {
+    fill: var(--term-2);
+    stroke: #2b3f50;
+    stroke-width: 1.4;
+    rx: 7;
+  }
+  .n-core {
+    fill: #0f2731;
+    stroke: var(--signal);
+    stroke-width: 1.8;
+  }
+  .n-async {
+    fill: #231a10;
+    stroke: var(--amber);
+    stroke-width: 1.5;
+  }
+  .n-title {
+    font-family: var(--font-mono);
+    fill: var(--term-ink);
+    font-weight: 700;
+    font-size: 16px;
+  }
+  .n-title.core {
+    fill: #e7f6f8;
+    font-size: 19px;
+  }
+  .n-sub {
+    font-family: var(--font-mono);
+    fill: var(--term-mute);
+    font-size: 11px;
+  }
+  .chan-l {
+    font-family: var(--font-mono);
+    fill: #5b7180;
+    font-size: 10px;
+    letter-spacing: 0.16em;
+  }
+  .trace {
+    stroke: var(--signal-lite);
+    stroke-width: 1.9;
+    fill: none;
+  }
+  .trace-a {
+    stroke: var(--amber-soft);
+    stroke-width: 1.7;
+    fill: none;
+    stroke-dasharray: 4 3;
+  }
+  .tlabel {
+    font-family: var(--font-mono);
+    fill: #7f96a4;
+    font-size: 10.5px;
+  }
+  .leg {
+    font-family: var(--font-mono);
+    fill: var(--term-mute);
+    font-size: 11.5px;
+  }
 
   /* ---- harness matrix ---- */
-  .tablewrap{overflow-x:auto;margin-top:26px;border:1px solid var(--line);border-radius:6px;background:var(--panel)}
-  table.matrix{border-collapse:collapse;width:100%;min-width:660px;font-size:14.5px}
-  table.matrix th,table.matrix td{padding:13px 16px;text-align:left;border-bottom:1px solid var(--line-soft)}
-  table.matrix thead th{
-    font-family:var(--font-mono);font-size:11px;letter-spacing:.11em;text-transform:uppercase;
-    color:var(--ink-mute);font-weight:600;background:#f5f7f9;border-bottom:1px solid var(--line);
+  .tablewrap {
+    overflow-x: auto;
+    margin-top: 26px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: var(--panel);
   }
-  table.matrix tbody tr:last-child td{border-bottom:0}
-  table.matrix tbody tr:hover{background:#f7f9fa}
-  .hname{font-family:var(--font-mono);font-weight:700;color:var(--ink);font-size:14.5px}
-  .hpkg{font-family:var(--font-mono);font-size:11.5px;color:var(--ink-mute);margin-top:2px}
-  .pin{font-family:var(--font-mono);font-variant-numeric:tabular-nums;color:var(--ink-soft);font-size:13px}
-  .chip{display:inline-flex;align-items:center;gap:7px;font-family:var(--font-mono);font-size:12px;white-space:nowrap}
-  .chip::before{content:"";width:8px;height:8px;border-radius:2px}
-  .chip.full{color:var(--signal-deep)}.chip.full::before{background:var(--signal)}
-  .chip.part{color:var(--amber)}.chip.part::before{background:var(--amber-soft)}
-  .chip.none{color:var(--ink-mute)}.chip.none::before{background:#c2ccd3}
+  table.matrix {
+    border-collapse: collapse;
+    width: 100%;
+    min-width: 660px;
+    font-size: 14.5px;
+  }
+  table.matrix th,
+  table.matrix td {
+    padding: 13px 16px;
+    text-align: left;
+    border-bottom: 1px solid var(--line-soft);
+  }
+  table.matrix thead th {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.11em;
+    text-transform: uppercase;
+    color: var(--ink-mute);
+    font-weight: 600;
+    background: #f5f7f9;
+    border-bottom: 1px solid var(--line);
+  }
+  table.matrix tbody tr:last-child td {
+    border-bottom: 0;
+  }
+  table.matrix tbody tr:hover {
+    background: #f7f9fa;
+  }
+  .hname {
+    font-family: var(--font-mono);
+    font-weight: 700;
+    color: var(--ink);
+    font-size: 14.5px;
+  }
+  .hpkg {
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    color: var(--ink-mute);
+    margin-top: 2px;
+  }
+  .pin {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    color: var(--ink-soft);
+    font-size: 13px;
+  }
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    white-space: nowrap;
+  }
+  .chip::before {
+    content: "";
+    width: 8px;
+    height: 8px;
+    border-radius: 2px;
+  }
+  .chip.full {
+    color: var(--signal-deep);
+  }
+  .chip.full::before {
+    background: var(--signal);
+  }
+  .chip.part {
+    color: var(--amber);
+  }
+  .chip.part::before {
+    background: var(--amber-soft);
+  }
+  .chip.none {
+    color: var(--ink-mute);
+  }
+  .chip.none::before {
+    background: #c2ccd3;
+  }
 
   /* ---- module grid ---- */
-  .mgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px;margin-top:28px}
-  .mcard{
-    background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:18px 18px 17px;
-    position:relative;transition:border-color .16s,transform .16s;
+  .mgrid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 14px;
+    margin-top: 28px;
   }
-  .mcard:hover{border-color:var(--signal);transform:translateY(-2px)}
-  .mcard .mp{font-family:var(--font-mono);font-size:12px;color:var(--signal-deep);font-weight:600}
-  .mcard .mn{font-family:var(--font-mono);font-size:16px;font-weight:700;margin-top:9px;color:var(--ink);letter-spacing:-.01em}
-  .mcard .md{margin-top:8px;font-size:13.5px;line-height:1.5;color:var(--ink-soft)}
-  .mcard .mlayer{position:absolute;top:15px;right:15px;font-family:var(--font-mono);font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-mute);border:1px solid var(--line);border-radius:2px;padding:2px 6px}
+  .mcard {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 18px 18px 17px;
+    position: relative;
+    transition:
+      border-color 0.16s,
+      transform 0.16s;
+  }
+  .mcard:hover {
+    border-color: var(--signal);
+    transform: translateY(-2px);
+  }
+  .mcard .mp {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--signal-deep);
+    font-weight: 600;
+  }
+  .mcard .mn {
+    font-family: var(--font-mono);
+    font-size: 16px;
+    font-weight: 700;
+    margin-top: 9px;
+    color: var(--ink);
+    letter-spacing: -0.01em;
+  }
+  .mcard .md {
+    margin-top: 8px;
+    font-size: 13.5px;
+    line-height: 1.5;
+    color: var(--ink-soft);
+  }
+  .mcard .mlayer {
+    position: absolute;
+    top: 15px;
+    right: 15px;
+    font-family: var(--font-mono);
+    font-size: 9.5px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink-mute);
+    border: 1px solid var(--line);
+    border-radius: 2px;
+    padding: 2px 6px;
+  }
 
   /* ---- concepts ---- */
-  .ccols{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:26px}
-  .ccard{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:22px}
-  .ccard h3{font-family:var(--font-mono);font-size:15px;color:var(--ink);letter-spacing:-.01em}
-  .ccard p{margin-top:10px;font-size:14.5px;color:var(--ink-soft);line-height:1.55}
-  .ccard .two{display:flex;gap:10px;margin-top:15px;flex-wrap:wrap}
-  .ccard .two .b{flex:1 1 130px;border:1px solid var(--line);border-left:2px solid var(--signal);border-radius:2px;padding:10px 12px;background:#fafbfc}
-  .ccard .two .b.amber{border-left-color:var(--amber)}
-  .ccard .two .b .k{font-family:var(--font-mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-mute)}
-  .ccard .two .b .v{font-family:var(--font-mono);font-size:13px;color:var(--ink);margin-top:4px}
-  .ccard .two .b .kk{font-size:11.5px;color:var(--ink-soft);margin-top:7px;line-height:1.36}
+  .ccols {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-top: 26px;
+  }
+  .ccard {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 22px;
+  }
+  .ccard h3 {
+    font-family: var(--font-mono);
+    font-size: 15px;
+    color: var(--ink);
+    letter-spacing: -0.01em;
+  }
+  .ccard p {
+    margin-top: 10px;
+    font-size: 14.5px;
+    color: var(--ink-soft);
+    line-height: 1.55;
+  }
+  .ccard .two {
+    display: flex;
+    gap: 10px;
+    margin-top: 15px;
+    flex-wrap: wrap;
+  }
+  .ccard .two .b {
+    flex: 1 1 130px;
+    border: 1px solid var(--line);
+    border-left: 2px solid var(--signal);
+    border-radius: 2px;
+    padding: 10px 12px;
+    background: #fafbfc;
+  }
+  .ccard .two .b.amber {
+    border-left-color: var(--amber);
+  }
+  .ccard .two .b .k {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-mute);
+  }
+  .ccard .two .b .v {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: var(--ink);
+    margin-top: 4px;
+  }
+  .ccard .two .b .kk {
+    font-size: 11.5px;
+    color: var(--ink-soft);
+    margin-top: 7px;
+    line-height: 1.36;
+  }
 
-  .taxo{margin-top:20px;display:flex;flex-wrap:wrap;gap:8px}
-  .sc{font-family:var(--font-mono);font-size:12px;padding:6px 11px;border-radius:3px;border:1px solid var(--line);background:var(--panel);color:var(--ink-soft);display:inline-flex;align-items:center;gap:8px}
-  .sc::before{content:"";width:7px;height:7px;border-radius:50%;background:#c2ccd3}
-  .sc.ok::before{background:var(--signal)}
-  .sc.warn::before{background:var(--amber-soft)}
-  .sc.stop::before{background:#b23b3b}
+  .taxo {
+    margin-top: 20px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .sc {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    padding: 6px 11px;
+    border-radius: 3px;
+    border: 1px solid var(--line);
+    background: var(--panel);
+    color: var(--ink-soft);
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .sc::before {
+    content: "";
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #c2ccd3;
+  }
+  .sc.ok::before {
+    background: var(--signal);
+  }
+  .sc.warn::before {
+    background: var(--amber-soft);
+  }
+  .sc.stop::before {
+    background: #b23b3b;
+  }
 
   /* ---- code ---- */
-  .codewrap{margin-top:26px;display:grid;grid-template-columns:1fr 1fr;gap:16px}
-  .code{background:var(--term);border:1px solid #1c2a38;border-radius:8px;overflow:hidden;box-shadow:0 22px 44px -30px #0f172099}
-  .code .cbar{display:flex;align-items:center;gap:8px;padding:11px 15px;border-bottom:1px solid var(--term-line);font-family:var(--font-mono);font-size:11.5px;color:var(--term-mute);letter-spacing:.08em}
-  .code .cbar .fn{color:var(--term-ink)}
-  .code pre{margin:0;padding:18px 18px;overflow-x:auto;font-family:var(--font-mono);font-size:12.8px;line-height:1.72;color:var(--term-ink)}
-  .code .cm{color:#5f7787;font-style:italic}
-  .code .st{color:var(--amber-soft)}
-  .code .fn2{color:var(--signal-lite)}
-  .code .kw{color:#8fb4c4}
+  .codewrap {
+    margin-top: 26px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+  .code {
+    background: var(--term);
+    border: 1px solid #1c2a38;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 22px 44px -30px #0f172099;
+  }
+  .code .cbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 11px 15px;
+    border-bottom: 1px solid var(--term-line);
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    color: var(--term-mute);
+    letter-spacing: 0.08em;
+  }
+  .code .cbar .fn {
+    color: var(--term-ink);
+  }
+  .code pre {
+    margin: 0;
+    padding: 18px 18px;
+    overflow-x: auto;
+    font-family: var(--font-mono);
+    font-size: 12.8px;
+    line-height: 1.72;
+    color: var(--term-ink);
+  }
+  .code .cm {
+    color: #5f7787;
+    font-style: italic;
+  }
+  .code .st {
+    color: var(--amber-soft);
+  }
+  .code .fn2 {
+    color: var(--signal-lite);
+  }
+  .code .kw {
+    color: #8fb4c4;
+  }
 
   /* ---- footer ---- */
-  footer{border-top:1px solid var(--line);margin-top:20px;padding:40px 0 60px}
-  .foot{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap;align-items:flex-end}
-  .foot .fbrand{font-family:var(--font-mono);font-weight:700;font-size:15px}
-  .foot .fnote{font-size:13px;color:var(--ink-mute);max-width:52ch;margin-top:8px;line-height:1.5}
-  .foot .fmeta{font-family:var(--font-mono);font-size:11.5px;color:var(--ink-mute);letter-spacing:.06em;text-align:right}
-
-  @media (max-width:760px){
-    .navlinks{display:none}
-    .ccols,.codewrap{grid-template-columns:1fr}
-    .hero{padding:52px 0 20px}
+  footer {
+    border-top: 1px solid var(--line);
+    margin-top: 20px;
+    padding: 40px 0 60px;
   }
-  @media (prefers-reduced-motion:reduce){
-    .packet{display:none}
+  .foot {
+    display: flex;
+    justify-content: space-between;
+    gap: 20px;
+    flex-wrap: wrap;
+    align-items: flex-end;
+  }
+  .foot .fbrand {
+    font-family: var(--font-mono);
+    font-weight: 700;
+    font-size: 15px;
+  }
+  .foot .fnote {
+    font-size: 13px;
+    color: var(--ink-mute);
+    max-width: 52ch;
+    margin-top: 8px;
+    line-height: 1.5;
+  }
+  .foot .fmeta {
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    color: var(--ink-mute);
+    letter-spacing: 0.06em;
+    text-align: right;
+  }
+
+  @media (max-width: 760px) {
+    .navlinks {
+      display: none;
+    }
+    .ccols,
+    .codewrap {
+      grid-template-columns: 1fr;
+    }
+    .hero {
+      padding: 52px 0 20px;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .packet {
+      display: none;
+    }
   }
 </style>
 
@@ -201,14 +722,17 @@
 </div>
 
 <header class="wrap hero">
-  <span class="eyebrow">TypeScript · Node (Bun supported) · ported from Go</span>
+  <span class="eyebrow"
+    >TypeScript · Node (Bun supported) · ported from Go</span
+  >
   <h1>meta<span class="slash">-</span>harness</h1>
   <p class="lede">One uniform API over five terminal-based AI coding agents.</p>
   <p class="sub">
-    Claude Code, Codex, OpenCode, pi, and Cursor each ship as an interactive CLI with its own
-    TUI, output format, and session log. meta-harness supervises any of them under a pseudoterminal
-    and hides the differences — classifying output into a stable status taxonomy, detecting turn
-    boundaries, parsing transcripts, and managing resumable sessions.
+    Claude Code, Codex, OpenCode, pi, and Cursor each ship as an interactive CLI
+    with its own TUI, output format, and session log. meta-harness supervises
+    any of them under a pseudoterminal and hides the differences — classifying
+    output into a stable status taxonomy, detecting turn boundaries, parsing
+    transcripts, and managing resumable sessions.
   </p>
 
   <div class="pathstrip">
@@ -220,10 +744,22 @@
   </div>
 
   <div class="stats">
-    <div class="stat"><div class="n">5<span class="u">harnesses</span></div><div class="l">supervised</div></div>
-    <div class="stat"><div class="n">13<span class="u">modules</span></div><div class="l">package exports</div></div>
-    <div class="stat"><div class="n">10<span class="u">status</span></div><div class="l">classifications</div></div>
-    <div class="stat"><div class="n">2<span class="u">runtimes</span></div><div class="l">Node dist · Bun src</div></div>
+    <div class="stat">
+      <div class="n">5<span class="u">harnesses</span></div>
+      <div class="l">supervised</div>
+    </div>
+    <div class="stat">
+      <div class="n">13<span class="u">modules</span></div>
+      <div class="l">package exports</div>
+    </div>
+    <div class="stat">
+      <div class="n">10<span class="u">status</span></div>
+      <div class="l">classifications</div>
+    </div>
+    <div class="stat">
+      <div class="n">2<span class="u">runtimes</span></div>
+      <div class="l">Node dist · Bun src</div>
+    </div>
   </div>
 </header>
 
@@ -233,31 +769,70 @@
     <span class="eyebrow">The layer cake</span>
     <h2>An acyclic stack, each layer a separate import</h2>
     <p>
-      The core (<code>chat</code>) sits on three surface layers over a <code>screen</code> substrate,
-      over a private async toolkit. Every arrow is a dependency; nothing lower reaches up. The one
-      sanctioned leak: <code>async</code> re-exports only <code>Context</code> from the internal toolkit.
+      The core (<code>chat</code>) sits on three surface layers over a
+      <code>screen</code> substrate, over a private async toolkit. Every arrow
+      is a dependency; nothing lower reaches up. The one sanctioned leak:
+      <code>async</code> re-exports only <code>Context</code> from the internal
+      toolkit.
     </p>
   </div>
 
   <div class="panel">
     <div class="panel-bar">
-      <span class="lamp on"></span><span class="lamp"></span><span class="lamp"></span>
-      <span class="title">module&nbsp;topology</span><span class="spacer"></span><span>ch:9 · dependency&nbsp;trace</span>
+      <span class="lamp on"></span><span class="lamp"></span
+      ><span class="lamp"></span> <span class="title">module&nbsp;topology</span
+      ><span class="spacer"></span><span>ch:9 · dependency&nbsp;trace</span>
     </div>
     <div class="panel-scroll">
-      <svg class="diagram" viewBox="0 0 960 560" role="img" aria-label="Dependency diagram of meta-harness modules">
+      <svg
+        class="diagram"
+        viewBox="0 0 960 560"
+        role="img"
+        aria-label="Dependency diagram of meta-harness modules"
+      >
         <defs>
-          <marker id="ah" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
+          <marker
+            id="ah"
+            markerWidth="9"
+            markerHeight="9"
+            refX="7"
+            refY="3"
+            orient="auto"
+          >
             <path d="M0,0 L7,3 L0,6 Z" fill="var(--signal-lite)"></path>
           </marker>
-          <marker id="aha" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
+          <marker
+            id="aha"
+            markerWidth="9"
+            markerHeight="9"
+            refX="7"
+            refY="3"
+            orient="auto"
+          >
             <path d="M0,0 L7,3 L0,6 Z" fill="var(--amber-soft)"></path>
           </marker>
-          <pattern id="grid" width="32" height="32" patternUnits="userSpaceOnUse">
-            <path d="M32 0 H0 V32" class="g-grid" fill="none" opacity="0.5"></path>
+          <pattern
+            id="grid"
+            width="32"
+            height="32"
+            patternUnits="userSpaceOnUse"
+          >
+            <path
+              d="M32 0 H0 V32"
+              class="g-grid"
+              fill="none"
+              opacity="0.5"
+            ></path>
           </pattern>
         </defs>
-        <rect x="0" y="0" width="960" height="560" fill="url(#grid)" opacity="0.5"></rect>
+        <rect
+          x="0"
+          y="0"
+          width="960"
+          height="560"
+          fill="url(#grid)"
+          opacity="0.5"
+        ></rect>
 
         <!-- channel labels -->
         <text class="chan-l" x="60" y="80" text-anchor="end">ENTRY</text>
@@ -265,8 +840,12 @@
         <text class="chan-l" x="60" y="274" text-anchor="end">SURFACE</text>
         <text class="chan-l" x="60" y="368" text-anchor="end">SCREEN</text>
         <text class="chan-l" x="60" y="457" text-anchor="end">ASYNC</text>
-        <text class="chan-l" x="928" y="120" text-anchor="end">HARNESS OPS</text>
-        <text class="chan-l" x="928" y="316" text-anchor="end">ENVIRONMENTS</text>
+        <text class="chan-l" x="928" y="120" text-anchor="end">
+          HARNESS OPS
+        </text>
+        <text class="chan-l" x="928" y="316" text-anchor="end">
+          ENVIRONMENTS
+        </text>
 
         <!-- traces (drawn under boxes) -->
         <path class="trace" d="M360,77 H372" marker-end="url(#ah)"></path>
@@ -282,75 +861,182 @@
 
         <!-- ENTRY -->
         <g>
-          <rect class="n-box" x="70" y="48" width="290" height="58" rx="7"></rect>
+          <rect
+            class="n-box"
+            x="70"
+            y="48"
+            width="290"
+            height="58"
+            rx="7"
+          ></rect>
           <text class="n-title" x="86" y="75">run</text>
-          <text class="n-sub" x="86" y="93">meta-harness-run · one-shot process</text>
+          <text class="n-sub" x="86" y="93">
+            meta-harness-run · one-shot process
+          </text>
         </g>
         <g>
-          <rect class="n-box" x="372" y="48" width="308" height="58" rx="7"></rect>
+          <rect
+            class="n-box"
+            x="372"
+            y="48"
+            width="308"
+            height="58"
+            rx="7"
+          ></rect>
           <text class="n-title" x="388" y="75">oneshot</text>
           <text class="n-sub" x="388" y="93">prompt → reply → teardown</text>
         </g>
 
         <!-- CORE -->
         <g>
-          <rect class="n-core" x="70" y="140" width="610" height="64" rx="8"></rect>
+          <rect
+            class="n-core"
+            x="70"
+            y="140"
+            width="610"
+            height="64"
+            rx="8"
+          ></rect>
           <text class="n-title core" x="90" y="171">chat</text>
-          <text class="n-sub" x="90" y="190" fill="#8bc7cf">Conversation — one supervised harness + send / answer / history / resume</text>
-          <text class="n-sub" x="662" y="163" text-anchor="end" fill="#4d6b73">meta-harness/chat</text>
+          <text class="n-sub" x="90" y="190" fill="#8bc7cf">
+            Conversation — one supervised harness + send / answer / history /
+            resume
+          </text>
+          <text class="n-sub" x="662" y="163" text-anchor="end" fill="#4d6b73">
+            meta-harness/chat
+          </text>
         </g>
 
         <!-- SURFACES -->
         <g>
-          <rect class="n-box" x="70" y="236" width="190" height="68" rx="7"></rect>
+          <rect
+            class="n-box"
+            x="70"
+            y="236"
+            width="190"
+            height="68"
+            rx="7"
+          ></rect>
           <text class="n-title" x="86" y="266">wrapper</text>
           <text class="n-sub" x="86" y="285">PTY · classify</text>
         </g>
         <g>
-          <rect class="n-box" x="280" y="236" width="190" height="68" rx="7"></rect>
+          <rect
+            class="n-box"
+            x="280"
+            y="236"
+            width="190"
+            height="68"
+            rx="7"
+          ></rect>
           <text class="n-title" x="296" y="266">turns</text>
           <text class="n-sub" x="296" y="285">turn events</text>
         </g>
         <g>
-          <rect class="n-box" x="490" y="236" width="190" height="68" rx="7"></rect>
+          <rect
+            class="n-box"
+            x="490"
+            y="236"
+            width="190"
+            height="68"
+            rx="7"
+          ></rect>
           <text class="n-title" x="506" y="266">transcript</text>
           <text class="n-sub" x="506" y="285">log → events</text>
         </g>
 
         <!-- SCREEN -->
         <g>
-          <rect class="n-box" x="70" y="336" width="610" height="56" rx="7"></rect>
+          <rect
+            class="n-box"
+            x="70"
+            y="336"
+            width="610"
+            height="56"
+            rx="7"
+          ></rect>
           <text class="n-title" x="90" y="371">screen</text>
-          <text class="n-sub" x="182" y="371">headless VT100 → Snapshot + change notify</text>
-          <text class="n-sub" x="662" y="363" text-anchor="end" fill="#4d6b73">meta-harness/screen</text>
+          <text class="n-sub" x="182" y="371">
+            headless VT100 → Snapshot + change notify
+          </text>
+          <text class="n-sub" x="662" y="363" text-anchor="end" fill="#4d6b73">
+            meta-harness/screen
+          </text>
         </g>
 
         <!-- ASYNC -->
         <g>
-          <rect class="n-box" x="70" y="424" width="400" height="58" rx="7"></rect>
+          <rect
+            class="n-box"
+            x="70"
+            y="424"
+            width="400"
+            height="58"
+            rx="7"
+          ></rect>
           <text class="n-title" x="86" y="451">internal/async</text>
-          <text class="n-sub" x="86" y="469">Context · Channel · Mutex · ControlQueue · Sentinel</text>
+          <text class="n-sub" x="86" y="469">
+            Context · Channel · Mutex · ControlQueue · Sentinel
+          </text>
         </g>
         <g>
-          <rect class="n-async" x="494" y="424" width="186" height="58" rx="7"></rect>
+          <rect
+            class="n-async"
+            x="494"
+            y="424"
+            width="186"
+            height="58"
+            rx="7"
+          ></rect>
           <text class="n-title" x="510" y="451" fill="#e8c79a">async</text>
-          <text class="n-sub" x="510" y="469" fill="#a9855b">public bridge</text>
+          <text class="n-sub" x="510" y="469" fill="#a9855b">
+            public bridge
+          </text>
         </g>
-        <text class="tlabel" x="483" y="443" text-anchor="middle" fill="#c98a3e">Context</text>
+        <text
+          class="tlabel"
+          x="483"
+          y="443"
+          text-anchor="middle"
+          fill="#c98a3e"
+        >
+          Context
+        </text>
 
         <!-- HARNESS OPS rail -->
         <g>
-          <rect class="n-box" x="760" y="140" width="168" height="64" rx="7"></rect>
+          <rect
+            class="n-box"
+            x="760"
+            y="140"
+            width="168"
+            height="64"
+            rx="7"
+          ></rect>
           <text class="n-title" x="776" y="169" font-size="15">discovery</text>
           <text class="n-sub" x="776" y="187">probe --version</text>
         </g>
         <g>
-          <rect class="n-box" x="760" y="236" width="168" height="64" rx="7"></rect>
+          <rect
+            class="n-box"
+            x="760"
+            y="236"
+            width="168"
+            height="64"
+            rx="7"
+          ></rect>
           <text class="n-title" x="776" y="265" font-size="15">versions</text>
           <text class="n-sub" x="776" y="283">pinned catalog</text>
         </g>
         <g>
-          <rect class="n-box" x="760" y="336" width="168" height="80" rx="7"></rect>
+          <rect
+            class="n-box"
+            x="760"
+            y="336"
+            width="168"
+            height="80"
+            rx="7"
+          ></rect>
           <text class="n-title" x="776" y="363" font-size="15">env</text>
           <text class="n-sub" x="776" y="381">provision × contain</text>
           <text class="n-sub" x="776" y="397">+ openshell · daytona</text>
@@ -367,90 +1053,326 @@
 </section>
 
 <!-- ============ TURN FLOW ============ -->
-<section id="flow" class="wrap" style="padding-top:8px">
+<section id="flow" class="wrap" style="padding-top: 8px">
   <div class="sec-head">
     <span class="eyebrow amber">The life of a turn</span>
     <h2>From keystroke to classified reply</h2>
     <p>
-      A <code>send()</code> writes keystrokes to the harness PTY. Bytes render into the screen; two
-      pumps in the watcher turn each snapshot and status event into typed turn events; the chat state
-      machine advances the pending turn to <b>complete</b> or <b>errored</b>.
+      A <code>send()</code> writes keystrokes to the harness PTY. Bytes render
+      into the screen; two pumps in the watcher turn each snapshot and status
+      event into typed turn events; the chat state machine advances the pending
+      turn to <b>complete</b> or <b>errored</b>.
     </p>
   </div>
 
   <div class="panel">
     <div class="panel-bar">
-      <span class="lamp on"></span><span class="lamp on"></span><span class="lamp"></span>
-      <span class="title">signal&nbsp;path</span><span class="spacer"></span><span>live&nbsp;capture</span>
+      <span class="lamp on"></span><span class="lamp on"></span
+      ><span class="lamp"></span> <span class="title">signal&nbsp;path</span
+      ><span class="spacer"></span><span>live&nbsp;capture</span>
     </div>
     <div class="panel-scroll">
-      <svg class="diagram" viewBox="0 0 960 265" role="img" aria-label="Signal flow of a single turn, including the input-request branch">
+      <svg
+        class="diagram"
+        viewBox="0 0 960 265"
+        role="img"
+        aria-label="Signal flow of a single turn, including the input-request branch"
+      >
         <defs>
-          <marker id="fh" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+          <marker
+            id="fh"
+            markerWidth="8"
+            markerHeight="8"
+            refX="6"
+            refY="3"
+            orient="auto"
+          >
             <path d="M0,0 L6,3 L0,6 Z" fill="#3c5566"></path>
           </marker>
-          <marker id="fha" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+          <marker
+            id="fha"
+            markerWidth="8"
+            markerHeight="8"
+            refX="6"
+            refY="3"
+            orient="auto"
+          >
             <path d="M0,0 L6,3 L0,6 Z" fill="var(--amber-soft)"></path>
           </marker>
         </defs>
         <!-- spine -->
-        <line x1="70" y1="96" x2="890" y2="96" stroke="#2a3d4e" stroke-width="2"></line>
+        <line
+          x1="70"
+          y1="96"
+          x2="890"
+          y2="96"
+          stroke="#2a3d4e"
+          stroke-width="2"
+        ></line>
         <!-- tick nodes -->
         <g font-family="var(--font-mono)">
           <!-- node template repeated -->
           <g>
-            <circle cx="70" cy="96" r="7" fill="#0f2731" stroke="var(--signal-lite)" stroke-width="2"></circle>
-            <text x="70" y="132" text-anchor="middle" fill="var(--term-ink)" font-size="12.5">control</text>
-            <text x="70" y="150" text-anchor="middle" fill="var(--term-mute)" font-size="10.5">acquire</text>
+            <circle
+              cx="70"
+              cy="96"
+              r="7"
+              fill="#0f2731"
+              stroke="var(--signal-lite)"
+              stroke-width="2"
+            ></circle>
+            <text
+              x="70"
+              y="132"
+              text-anchor="middle"
+              fill="var(--term-ink)"
+              font-size="12.5"
+            >
+              control
+            </text>
+            <text
+              x="70"
+              y="150"
+              text-anchor="middle"
+              fill="var(--term-mute)"
+              font-size="10.5"
+            >
+              acquire
+            </text>
           </g>
           <g>
-            <circle cx="207" cy="96" r="7" fill="#0f2731" stroke="var(--signal-lite)" stroke-width="2"></circle>
-            <text x="207" y="132" text-anchor="middle" fill="var(--term-ink)" font-size="12.5">send</text>
-            <text x="207" y="150" text-anchor="middle" fill="var(--term-mute)" font-size="10.5">keystrokes</text>
+            <circle
+              cx="207"
+              cy="96"
+              r="7"
+              fill="#0f2731"
+              stroke="var(--signal-lite)"
+              stroke-width="2"
+            ></circle>
+            <text
+              x="207"
+              y="132"
+              text-anchor="middle"
+              fill="var(--term-ink)"
+              font-size="12.5"
+            >
+              send
+            </text>
+            <text
+              x="207"
+              y="150"
+              text-anchor="middle"
+              fill="var(--term-mute)"
+              font-size="10.5"
+            >
+              keystrokes
+            </text>
           </g>
           <g>
-            <circle cx="344" cy="96" r="7" fill="#0f2731" stroke="var(--signal-lite)" stroke-width="2"></circle>
-            <text x="344" y="132" text-anchor="middle" fill="var(--term-ink)" font-size="12.5">PTY</text>
-            <text x="344" y="150" text-anchor="middle" fill="var(--term-mute)" font-size="10.5">wrapper</text>
-            <text x="344" y="72" text-anchor="middle" fill="#7f96a4" font-size="10.5">raw bytes</text>
+            <circle
+              cx="344"
+              cy="96"
+              r="7"
+              fill="#0f2731"
+              stroke="var(--signal-lite)"
+              stroke-width="2"
+            ></circle>
+            <text
+              x="344"
+              y="132"
+              text-anchor="middle"
+              fill="var(--term-ink)"
+              font-size="12.5"
+            >
+              PTY
+            </text>
+            <text
+              x="344"
+              y="150"
+              text-anchor="middle"
+              fill="var(--term-mute)"
+              font-size="10.5"
+            >
+              wrapper
+            </text>
+            <text
+              x="344"
+              y="72"
+              text-anchor="middle"
+              fill="#7f96a4"
+              font-size="10.5"
+            >
+              raw bytes
+            </text>
           </g>
           <g>
-            <circle cx="481" cy="96" r="7" fill="#0f2731" stroke="var(--signal-lite)" stroke-width="2"></circle>
-            <text x="481" y="132" text-anchor="middle" fill="var(--term-ink)" font-size="12.5">screen</text>
-            <text x="481" y="150" text-anchor="middle" fill="var(--term-mute)" font-size="10.5">VT100</text>
-            <text x="481" y="72" text-anchor="middle" fill="#7f96a4" font-size="10.5">Snapshot</text>
+            <circle
+              cx="481"
+              cy="96"
+              r="7"
+              fill="#0f2731"
+              stroke="var(--signal-lite)"
+              stroke-width="2"
+            ></circle>
+            <text
+              x="481"
+              y="132"
+              text-anchor="middle"
+              fill="var(--term-ink)"
+              font-size="12.5"
+            >
+              screen
+            </text>
+            <text
+              x="481"
+              y="150"
+              text-anchor="middle"
+              fill="var(--term-mute)"
+              font-size="10.5"
+            >
+              VT100
+            </text>
+            <text
+              x="481"
+              y="72"
+              text-anchor="middle"
+              fill="#7f96a4"
+              font-size="10.5"
+            >
+              Snapshot
+            </text>
           </g>
           <g>
-            <circle cx="618" cy="96" r="7" fill="#0f2731" stroke="var(--signal-lite)" stroke-width="2"></circle>
-            <text x="618" y="132" text-anchor="middle" fill="var(--term-ink)" font-size="12.5">watcher</text>
-            <text x="618" y="150" text-anchor="middle" fill="var(--term-mute)" font-size="10.5">2 pumps</text>
-            <text x="618" y="72" text-anchor="middle" fill="#7f96a4" font-size="10.5">TurnEvent</text>
+            <circle
+              cx="618"
+              cy="96"
+              r="7"
+              fill="#0f2731"
+              stroke="var(--signal-lite)"
+              stroke-width="2"
+            ></circle>
+            <text
+              x="618"
+              y="132"
+              text-anchor="middle"
+              fill="var(--term-ink)"
+              font-size="12.5"
+            >
+              watcher
+            </text>
+            <text
+              x="618"
+              y="150"
+              text-anchor="middle"
+              fill="var(--term-mute)"
+              font-size="10.5"
+            >
+              2 pumps
+            </text>
+            <text
+              x="618"
+              y="72"
+              text-anchor="middle"
+              fill="#7f96a4"
+              font-size="10.5"
+            >
+              TurnEvent
+            </text>
           </g>
           <g>
-            <circle cx="755" cy="96" r="7" fill="#0f2731" stroke="var(--signal-lite)" stroke-width="2"></circle>
-            <text x="755" y="132" text-anchor="middle" fill="var(--term-ink)" font-size="12.5">chat SM</text>
-            <text x="755" y="150" text-anchor="middle" fill="var(--term-mute)" font-size="10.5">turn state</text>
+            <circle
+              cx="755"
+              cy="96"
+              r="7"
+              fill="#0f2731"
+              stroke="var(--signal-lite)"
+              stroke-width="2"
+            ></circle>
+            <text
+              x="755"
+              y="132"
+              text-anchor="middle"
+              fill="var(--term-ink)"
+              font-size="12.5"
+            >
+              chat SM
+            </text>
+            <text
+              x="755"
+              y="150"
+              text-anchor="middle"
+              fill="var(--term-mute)"
+              font-size="10.5"
+            >
+              turn state
+            </text>
           </g>
           <g>
-            <circle cx="890" cy="96" r="8" fill="#0f2b25" stroke="var(--signal)" stroke-width="2.4"></circle>
-            <text x="890" y="132" text-anchor="middle" fill="#7fded0" font-size="12.5">done</text>
-            <text x="890" y="150" text-anchor="middle" fill="var(--term-mute)" font-size="10.5">complete</text>
+            <circle
+              cx="890"
+              cy="96"
+              r="8"
+              fill="#0f2b25"
+              stroke="var(--signal)"
+              stroke-width="2.4"
+            ></circle>
+            <text
+              x="890"
+              y="132"
+              text-anchor="middle"
+              fill="#7fded0"
+              font-size="12.5"
+            >
+              done
+            </text>
+            <text
+              x="890"
+              y="150"
+              text-anchor="middle"
+              fill="var(--term-mute)"
+              font-size="10.5"
+            >
+              complete
+            </text>
           </g>
         </g>
         <!-- input-request branch: a blocking prompt detours the turn until answered -->
         <path class="trace-a" d="M700,100 V168" marker-end="url(#fha)"></path>
         <path class="trace-a" d="M810,168 V104" marker-end="url(#fha)"></path>
         <g font-family="var(--font-mono)">
-          <rect class="n-box" x="555" y="172" width="365" height="72" rx="7"></rect>
-          <text x="571" y="194" fill="var(--term-ink)" font-size="12.5">input_requested — blocking prompt</text>
-          <text x="571" y="212" fill="var(--term-mute)" font-size="10.5">trust_prompt · question · question_review · approval_prompt</text>
-          <text x="571" y="230" fill="#7f96a4" font-size="10.5">answer() → input_resolved → the turn resumes</text>
+          <rect
+            class="n-box"
+            x="555"
+            y="172"
+            width="365"
+            height="72"
+            rx="7"
+          ></rect>
+          <text x="571" y="194" fill="var(--term-ink)" font-size="12.5">
+            input_requested — blocking prompt
+          </text>
+          <text x="571" y="212" fill="var(--term-mute)" font-size="10.5">
+            trust_prompt · question · question_review · approval_prompt
+          </text>
+          <text x="571" y="230" fill="#7f96a4" font-size="10.5">
+            answer() → input_resolved → the turn resumes
+          </text>
         </g>
 
         <!-- animated packet -->
         <circle class="packet" r="5" fill="var(--signal-lite)">
-          <animateMotion path="M70,96 L890,96" dur="3.6s" repeatCount="indefinite"></animateMotion>
-          <animate attributeName="opacity" values="0;1;1;1;0" keyTimes="0;0.06;0.5;0.94;1" dur="3.6s" repeatCount="indefinite"></animate>
+          <animateMotion
+            path="M70,96 L890,96"
+            dur="3.6s"
+            repeatCount="indefinite"
+          ></animateMotion>
+          <animate
+            attributeName="opacity"
+            values="0;1;1;1;0"
+            keyTimes="0;0.06;0.5;0.94;1"
+            dur="3.6s"
+            repeatCount="indefinite"
+          ></animate>
         </circle>
       </svg>
     </div>
@@ -463,8 +1385,9 @@
     <span class="eyebrow">Harness support</span>
     <h2>Five agents, supported at varying depth</h2>
     <p>
-      A short name selects the adapter, the wrapper classifier, and the transcript reader. Some harnesses
-      expose a rich TUI to scrape; others are driven purely by exit status. This is the ground truth.
+      A short name selects the adapter, the wrapper classifier, and the
+      transcript reader. Some harnesses expose a rich TUI to scrape; others are
+      driven purely by exit status. This is the ground truth.
     </p>
   </div>
 
@@ -472,49 +1395,77 @@
     <table class="matrix">
       <thead>
         <tr>
-          <th>Harness</th><th>name</th><th>pinned</th>
-          <th>Chat adapter</th><th>Effort / model</th><th>Transcript history</th>
+          <th>Harness</th>
+          <th>name</th>
+          <th>pinned</th>
+          <th>Chat adapter</th>
+          <th>Effort / model</th>
+          <th>Transcript history</th>
         </tr>
       </thead>
       <tbody>
         <tr>
-          <td><div class="hname">Claude Code</div><div class="hpkg">@anthropic-ai/claude-code</div></td>
-          <td class="pin">claude-code</td><td class="pin">2.1.201</td>
+          <td>
+            <div class="hname">Claude Code</div>
+            <div class="hpkg">@anthropic-ai/claude-code</div>
+          </td>
+          <td class="pin">claude-code</td>
+          <td class="pin">2.1.201</td>
           <td><span class="chip full">full</span></td>
           <td><span class="chip full">yes / yes</span></td>
           <td><span class="chip full">ClaudeCodeReader</span></td>
         </tr>
         <tr>
-          <td><div class="hname">Codex</div><div class="hpkg">@openai/codex</div></td>
-          <td class="pin">codex</td><td class="pin">0.142.5</td>
+          <td>
+            <div class="hname">Codex</div>
+            <div class="hpkg">@openai/codex</div>
+          </td>
+          <td class="pin">codex</td>
+          <td class="pin">0.142.5</td>
           <td><span class="chip full">full</span></td>
           <td><span class="chip full">yes / yes</span></td>
           <td><span class="chip full">CodexReader</span></td>
         </tr>
         <tr>
-          <td><div class="hname">pi</div><div class="hpkg">@earendil-works/pi-coding-agent</div></td>
-          <td class="pin">pi</td><td class="pin">0.76.0</td>
+          <td>
+            <div class="hname">pi</div>
+            <div class="hpkg">@earendil-works/pi-coding-agent</div>
+          </td>
+          <td class="pin">pi</td>
+          <td class="pin">0.76.0</td>
           <td><span class="chip full">full</span></td>
           <td><span class="chip none">— / —</span></td>
           <td><span class="chip full">PiReader · Turn[]</span></td>
         </tr>
         <tr>
-          <td><div class="hname">OpenCode</div><div class="hpkg">opencode-ai</div></td>
-          <td class="pin">opencode</td><td class="pin">unpinned</td>
+          <td>
+            <div class="hname">OpenCode</div>
+            <div class="hpkg">opencode-ai</div>
+          </td>
+          <td class="pin">opencode</td>
+          <td class="pin">unpinned</td>
           <td><span class="chip part">stub</span></td>
           <td><span class="chip none">— / —</span></td>
           <td><span class="chip none">store only</span></td>
         </tr>
         <tr>
-          <td><div class="hname">Cursor</div><div class="hpkg">— no catalog entry</div></td>
-          <td class="pin">cursor</td><td class="pin">—</td>
+          <td>
+            <div class="hname">Cursor</div>
+            <div class="hpkg">— no catalog entry</div>
+          </td>
+          <td class="pin">cursor</td>
+          <td class="pin">—</td>
           <td><span class="chip none">wrapper-only</span></td>
           <td><span class="chip none">— / —</span></td>
           <td><span class="chip none">n/a</span></td>
         </tr>
         <tr>
-          <td><div class="hname">generic</div><div class="hpkg">any launchable CLI</div></td>
-          <td class="pin">generic / ""</td><td class="pin">—</td>
+          <td>
+            <div class="hname">generic</div>
+            <div class="hpkg">any launchable CLI</div>
+          </td>
+          <td class="pin">generic / ""</td>
+          <td class="pin">—</td>
           <td><span class="chip part">status-only</span></td>
           <td><span class="chip none">— / —</span></td>
           <td><span class="chip none">store only</span></td>
@@ -522,11 +1473,19 @@
       </tbody>
     </table>
   </div>
-  <p style="margin-top:14px;font-size:13.5px;color:var(--ink-soft);max-width:80ch">
-    Input requests: Claude Code surfaces <code>trust_prompt</code> and the mid-turn
-    AskUserQuestion dialog (<code>question</code> / <code>question_review</code>); Codex
-    surfaces command / apply-patch approvals as <code>approval_prompt</code> (its startup
-    interstitials are auto-dismissed, never surfaced). Others: none.
+  <p
+    style="
+      margin-top: 14px;
+      font-size: 13.5px;
+      color: var(--ink-soft);
+      max-width: 80ch;
+    "
+  >
+    Input requests: Claude Code surfaces <code>trust_prompt</code> and the
+    mid-turn AskUserQuestion dialog (<code>question</code> /
+    <code>question_review</code>); Codex surfaces command / apply-patch
+    approvals as <code>approval_prompt</code> (its startup interstitials are
+    auto-dismissed, never surfaced). Others: none.
   </p>
 </section>
 
@@ -535,23 +1494,130 @@
   <div class="sec-head">
     <span class="eyebrow">Module reference</span>
     <h2>Thirteen modules, bottom-up</h2>
-    <p>Every public symbol is frozen by a golden-file contract test, so the API you read is the API that ships.</p>
+    <p>
+      Every public symbol is frozen by a golden-file contract test, so the API
+      you read is the API that ships.
+    </p>
   </div>
 
   <div class="mgrid">
-    <div class="mcard"><span class="mlayer">async</span><div class="mp">meta-harness/async</div><div class="mn">async</div><div class="md">The public <code>Context</code> cancellation &amp; deadline primitive — the one sanctioned bridge to the internal toolkit.</div></div>
-    <div class="mcard"><span class="mlayer">screen</span><div class="mp">meta-harness/screen</div><div class="mn">screen</div><div class="md">Headless VT100 emulator: raw PTY bytes → coherent <code>Snapshot</code>s and change notifications.</div></div>
-    <div class="mcard"><span class="mlayer">surface</span><div class="mp">meta-harness/wrapper</div><div class="mn">wrapper</div><div class="md">PTY supervision plus output/exit classification into a normalized <code>Status</code> and <code>ErrorClass</code>.</div></div>
-    <div class="mcard"><span class="mlayer">surface</span><div class="mp">meta-harness/turns</div><div class="mn">turns</div><div class="md">Per-harness adapters that read screen + status into typed turn events, plus a <code>Watcher</code>.</div></div>
-    <div class="mcard"><span class="mlayer">surface</span><div class="mp">meta-harness/transcript</div><div class="mn">transcript</div><div class="md">Parse a harness's on-disk session log into a canonical <code>Event</code> stream, with a durable wire codec.</div></div>
-    <div class="mcard"><span class="mlayer">core</span><div class="mp">meta-harness/chat</div><div class="mn">chat</div><div class="md">The <code>Conversation</code>: one supervised harness with send, answer, history, control, and resume.</div></div>
-    <div class="mcard"><span class="mlayer">entry</span><div class="mp">meta-harness/oneshot</div><div class="mn">oneshot</div><div class="md">Prompt → single reply → teardown, atop chat. Trust prompts auto-accepted; no store to manage.</div></div>
-    <div class="mcard"><span class="mlayer">entry</span><div class="mp">meta-harness-run</div><div class="mn">cli</div><div class="md">The one-shot loop as a disposable process: stdin → stdout, with orchestrator-friendly exit codes.</div></div>
-    <div class="mcard"><span class="mlayer">ops</span><div class="mp">meta-harness/discovery</div><div class="mn">discovery</div><div class="md">Probe which harness CLIs are installed and at what version; flag drift against the pinned catalog.</div></div>
-    <div class="mcard"><span class="mlayer">ops</span><div class="mp">meta-harness/versions</div><div class="mn">versions</div><div class="md">The pinned harness-version catalog binding each adapter's code to a verified upstream release.</div></div>
-    <div class="mcard"><span class="mlayer">env</span><div class="mp">meta-harness/env</div><div class="mn">env</div><div class="md">Pluggable sandboxed environments: Provisioner × Containment composition, credential injectors, structured turns.</div></div>
-    <div class="mcard"><span class="mlayer">env</span><div class="mp">meta-harness/env-openshell</div><div class="mn">env-openshell</div><div class="md">OpenShell containment backend: kernel-level isolation with a generated egress policy (model, fleet, optional scrape lanes).</div></div>
-    <div class="mcard"><span class="mlayer">env</span><div class="mp">meta-harness/env-daytona</div><div class="mn">env-daytona</div><div class="md">Daytona cloud provisioner backend, plus the <code>sweep()</code> reaper for orphaned sandboxes.</div></div>
+    <div class="mcard">
+      <span class="mlayer">async</span>
+      <div class="mp">meta-harness/async</div>
+      <div class="mn">async</div>
+      <div class="md">
+        The public <code>Context</code> cancellation &amp; deadline primitive —
+        the one sanctioned bridge to the internal toolkit.
+      </div>
+    </div>
+    <div class="mcard">
+      <span class="mlayer">screen</span>
+      <div class="mp">meta-harness/screen</div>
+      <div class="mn">screen</div>
+      <div class="md">
+        Headless VT100 emulator: raw PTY bytes → coherent <code>Snapshot</code>s
+        and change notifications.
+      </div>
+    </div>
+    <div class="mcard">
+      <span class="mlayer">surface</span>
+      <div class="mp">meta-harness/wrapper</div>
+      <div class="mn">wrapper</div>
+      <div class="md">
+        PTY supervision plus output/exit classification into a normalized
+        <code>Status</code> and <code>ErrorClass</code>.
+      </div>
+    </div>
+    <div class="mcard">
+      <span class="mlayer">surface</span>
+      <div class="mp">meta-harness/turns</div>
+      <div class="mn">turns</div>
+      <div class="md">
+        Per-harness adapters that read screen + status into typed turn events,
+        plus a <code>Watcher</code>.
+      </div>
+    </div>
+    <div class="mcard">
+      <span class="mlayer">surface</span>
+      <div class="mp">meta-harness/transcript</div>
+      <div class="mn">transcript</div>
+      <div class="md">
+        Parse a harness's on-disk session log into a canonical
+        <code>Event</code> stream, with a durable wire codec.
+      </div>
+    </div>
+    <div class="mcard">
+      <span class="mlayer">core</span>
+      <div class="mp">meta-harness/chat</div>
+      <div class="mn">chat</div>
+      <div class="md">
+        The <code>Conversation</code>: one supervised harness with send, answer,
+        history, control, and resume.
+      </div>
+    </div>
+    <div class="mcard">
+      <span class="mlayer">entry</span>
+      <div class="mp">meta-harness/oneshot</div>
+      <div class="mn">oneshot</div>
+      <div class="md">
+        Prompt → single reply → teardown, atop chat. Trust prompts
+        auto-accepted; no store to manage.
+      </div>
+    </div>
+    <div class="mcard">
+      <span class="mlayer">entry</span>
+      <div class="mp">meta-harness-run</div>
+      <div class="mn">cli</div>
+      <div class="md">
+        The one-shot loop as a disposable process: stdin → stdout, with
+        orchestrator-friendly exit codes.
+      </div>
+    </div>
+    <div class="mcard">
+      <span class="mlayer">ops</span>
+      <div class="mp">meta-harness/discovery</div>
+      <div class="mn">discovery</div>
+      <div class="md">
+        Probe which harness CLIs are installed and at what version; flag drift
+        against the pinned catalog.
+      </div>
+    </div>
+    <div class="mcard">
+      <span class="mlayer">ops</span>
+      <div class="mp">meta-harness/versions</div>
+      <div class="mn">versions</div>
+      <div class="md">
+        The pinned harness-version catalog binding each adapter's code to a
+        verified upstream release.
+      </div>
+    </div>
+    <div class="mcard">
+      <span class="mlayer">env</span>
+      <div class="mp">meta-harness/env</div>
+      <div class="mn">env</div>
+      <div class="md">
+        Pluggable sandboxed environments: Provisioner × Containment composition,
+        credential injectors, structured turns.
+      </div>
+    </div>
+    <div class="mcard">
+      <span class="mlayer">env</span>
+      <div class="mp">meta-harness/env-openshell</div>
+      <div class="mn">env-openshell</div>
+      <div class="md">
+        OpenShell containment backend: kernel-level isolation with a generated
+        egress policy (model, fleet, optional scrape lanes).
+      </div>
+    </div>
+    <div class="mcard">
+      <span class="mlayer">env</span>
+      <div class="mp">meta-harness/env-daytona</div>
+      <div class="mn">env-daytona</div>
+      <div class="md">
+        Daytona cloud provisioner backend, plus the <code>sweep()</code> reaper
+        for orphaned sandboxes.
+      </div>
+    </div>
   </div>
 </section>
 
@@ -565,24 +1631,61 @@
   <div class="ccols">
     <div class="ccard">
       <h3>Two sessions, named from two sides</h3>
-      <p>meta-harness mints its own id the instant you <code>Open()</code> — before the harness has revealed anything. The harness's own id surfaces later and gets captured; that's the one that resumes the session.</p>
+      <p>
+        meta-harness mints its own id the instant you <code>Open()</code> —
+        before the harness has revealed anything. The harness's own id surfaces
+        later and gets captured; that's the one that resumes the session.
+      </p>
       <div class="two">
-        <div class="b"><div class="k">meta-harness mints</div><div class="v">conv.sessionID()</div><div class="kk">Always present — keys the store &amp; your records.</div></div>
-        <div class="b amber"><div class="k">harness assigns</div><div class="v">harnessSessionID</div><div class="kk">Empty until captured — resumes &amp; locates the transcript.</div></div>
+        <div class="b">
+          <div class="k">meta-harness mints</div>
+          <div class="v">conv.sessionID()</div>
+          <div class="kk">
+            Always present — keys the store &amp; your records.
+          </div>
+        </div>
+        <div class="b amber">
+          <div class="k">harness assigns</div>
+          <div class="v">harnessSessionID</div>
+          <div class="kk">
+            Empty until captured — resumes &amp; locates the transcript.
+          </div>
+        </div>
       </div>
     </div>
     <div class="ccard">
       <h3>History has a source</h3>
-      <p><code>historyWithSource()</code> tells you where turns came from. The transcript is authoritative — used only when the adapter has a reader and an id was captured — with a graceful fallback to the store.</p>
+      <p>
+        <code>historyWithSource()</code> tells you where turns came from. The
+        transcript is authoritative — used only when the adapter has a reader
+        and an id was captured — with a graceful fallback to the store.
+      </p>
       <div class="two">
-        <div class="b"><div class="k">authoritative</div><div class="v">HistorySourceTranscript</div></div>
-        <div class="b amber"><div class="k">fallback</div><div class="v">HistorySourceStore</div></div>
+        <div class="b">
+          <div class="k">authoritative</div>
+          <div class="v">HistorySourceTranscript</div>
+        </div>
+        <div class="b amber">
+          <div class="k">fallback</div>
+          <div class="v">HistorySourceStore</div>
+        </div>
       </div>
     </div>
   </div>
 
-  <div style="margin-top:30px">
-    <div style="font-family:var(--font-mono);font-size:11.5px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-mute)">Status taxonomy — the wrapper's verdict</div>
+  <div style="margin-top: 30px">
+    <div
+      style="
+        font-family: var(--font-mono);
+        font-size: 11.5px;
+        font-weight: 600;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: var(--ink-mute);
+      "
+    >
+      Status taxonomy — the wrapper's verdict
+    </div>
     <div class="taxo">
       <span class="sc ok">idle</span>
       <span class="sc stop">failed</span>
@@ -603,13 +1706,27 @@
   <div class="sec-head">
     <span class="eyebrow">Usage</span>
     <h2>Two programming models</h2>
-    <p>A long-lived <code>Conversation</code> you drive turn by turn, or a one-shot call for a single prompt. Both take a <code>Context</code> first.</p>
+    <p>
+      A long-lived <code>Conversation</code> you drive turn by turn, or a
+      one-shot call for a single prompt. Both take a <code>Context</code> first.
+    </p>
   </div>
 
   <div class="codewrap">
     <div class="code">
-      <div class="cbar"><span class="lamp" style="width:8px;height:8px;border-radius:50%;background:var(--signal-lite)"></span><span class="fn">conversation.ts</span></div>
-<pre><span class="kw">import</span> { Open, newMemStore } <span class="kw">from</span> <span class="st">"meta-harness/chat"</span>
+      <div class="cbar">
+        <span
+          class="lamp"
+          style="
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--signal-lite);
+          "
+        ></span
+        ><span class="fn">conversation.ts</span>
+      </div>
+      <pre><span class="kw">import</span> { Open, newMemStore } <span class="kw">from</span> <span class="st">"meta-harness/chat"</span>
 <span class="kw">import</span> { Context } <span class="kw">from</span> <span class="st">"meta-harness/async"</span>
 
 <span class="kw">const</span> conv = <span class="kw">await</span> <span class="fn2">Open</span>(Context.<span class="fn2">background</span>(), {
@@ -628,8 +1745,19 @@
     </div>
 
     <div class="code">
-      <div class="cbar"><span class="lamp" style="width:8px;height:8px;border-radius:50%;background:var(--amber-soft)"></span><span class="fn">one-shot.ts</span></div>
-<pre><span class="kw">import</span> { runOneShot } <span class="kw">from</span> <span class="st">"meta-harness/oneshot"</span>
+      <div class="cbar">
+        <span
+          class="lamp"
+          style="
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--amber-soft);
+          "
+        ></span
+        ><span class="fn">one-shot.ts</span>
+      </div>
+      <pre><span class="kw">import</span> { runOneShot } <span class="kw">from</span> <span class="st">"meta-harness/oneshot"</span>
 <span class="kw">import</span> { Context } <span class="kw">from</span> <span class="st">"meta-harness/async"</span>
 
 <span class="cm">// always bound a one-shot with a deadline</span>
@@ -653,11 +1781,17 @@
 <footer>
   <div class="wrap foot">
     <div>
-      <div class="fbrand">meta<span style="color:var(--signal)">-</span>harness</div>
-      <p class="fnote">A visual overview. The full documentation — architecture, concepts, module reference, and task guides — lives in the repository's <code>docs/</code> tree.</p>
+      <div class="fbrand">
+        meta<span style="color: var(--signal)">-</span>harness
+      </div>
+      <p class="fnote">
+        A visual overview. The full documentation — architecture, concepts,
+        module reference, and task guides — lives in the repository's
+        <code>docs/</code> tree.
+      </p>
     </div>
     <div class="fmeta">
-      supervise · classify · resume<br>
+      supervise · classify · resume<br />
       TypeScript · Bun&nbsp;+&nbsp;Node · ported&nbsp;from&nbsp;Go
     </div>
   </div>

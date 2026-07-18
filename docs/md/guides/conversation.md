@@ -10,17 +10,17 @@ send again, handle errors, read history, close. For the vocabulary, see
 ## 1. Open
 
 ```ts
-import { Open, newMemStore } from "meta-harness/chat"
-import { Context } from "meta-harness/async"
+import { Open, newMemStore } from "meta-harness/chat";
+import { Context } from "meta-harness/async";
 
-const ctx = Context.background()
+const ctx = Context.background();
 
 const conv = await Open(ctx, {
   harness: "claude-code",
   binaryPath: "/usr/local/bin/claude",
   workingDir: process.cwd(),
   store: newMemStore(),
-})
+});
 ```
 
 `harness`, `binaryPath`, and `store` are required. `Open` launches the harness under a
@@ -32,24 +32,32 @@ session id. See [`Options`](../modules/chat.md#options) for every knob.
 
 ## 2. A helper to await a turn
 
-`send` returns the *assistant turn id*; the reply arrives asynchronously through
+`send` returns the _assistant turn id_; the reply arrives asynchronously through
 [`events()`](../modules/chat.md#observing). This small helper waits for a specific turn to
 reach a terminal state — you'll reuse it every turn:
 
 ```ts
-import { EventTurn, TurnStateComplete, TurnStateErrored, type Turn } from "meta-harness/chat"
+import {
+  EventTurn,
+  TurnStateComplete,
+  TurnStateErrored,
+  type Turn,
+} from "meta-harness/chat";
 
 async function awaitTurn(conv, turnID: string): Promise<Turn> {
   for await (const ev of conv.events()) {
     if (ev.type === EventTurn && ev.turn?.id === turnID) {
-      if (ev.turn.state === TurnStateComplete || ev.turn.state === TurnStateErrored) {
-        return ev.turn
+      if (
+        ev.turn.state === TurnStateComplete ||
+        ev.turn.state === TurnStateErrored
+      ) {
+        return ev.turn;
       }
     }
     // ev.type === EventInputRequest here means the harness is blocked on a prompt;
     // see the Handling input guide.
   }
-  throw new Error("event stream ended before the turn completed")
+  throw new Error("event stream ended before the turn completed");
 }
 ```
 
@@ -65,19 +73,19 @@ it, send, and release promptly:
 
 ```ts
 async function ask(conv, ctx, text: string): Promise<Turn> {
-  const release = await conv.acquireControl(ctx)
-  let turnID: string
+  const release = await conv.acquireControl(ctx);
+  let turnID: string;
   try {
-    turnID = await conv.send(ctx, text)
+    turnID = await conv.send(ctx, text);
   } finally {
-    release()               // release BEFORE awaiting the reply, so the harness isn't blocked
+    release(); // release BEFORE awaiting the reply, so the harness isn't blocked
   }
-  return awaitTurn(conv, turnID)
+  return awaitTurn(conv, turnID);
 }
 
-const t1 = await ask(conv, ctx, "List the files in this directory.")
-if (t1.state === TurnStateComplete) console.log(t1.text)
-else console.error("errored:", t1.reason)
+const t1 = await ask(conv, ctx, "List the files in this directory.");
+if (t1.state === TurnStateComplete) console.log(t1.text);
+else console.error("errored:", t1.reason);
 ```
 
 Note the ordering: **release control before awaiting the reply.** `send` only needs
@@ -92,8 +100,8 @@ Because the harness process persists, the next `send` continues the same session
 model keeps its context:
 
 ```ts
-const t2 = await ask(conv, ctx, "Now show me the largest of those files.")
-console.log(t2.text)
+const t2 = await ask(conv, ctx, "Now show me the largest of those files.");
+console.log(t2.text);
 ```
 
 Send them strictly one at a time. `send` throws
@@ -108,21 +116,28 @@ An errored turn carries a [`reason`](../modules/chat.md#turn-vocabulary) and, fo
 blocks, `httpCode` / `retryAfter`:
 
 ```ts
-const t = await ask(conv, ctx, "…")
+const t = await ask(conv, ctx, "…");
 if (t.state === TurnStateErrored) {
-  console.error(`turn failed: ${t.reason}` +
-    (t.httpCode ? ` (HTTP ${t.httpCode}, retry after ${t.retryAfter}ms)` : ""))
+  console.error(
+    `turn failed: ${t.reason}` +
+      (t.httpCode
+        ? ` (HTTP ${t.httpCode}, retry after ${t.retryAfter}ms)`
+        : ""),
+  );
 }
 ```
 
 Bound any call with a deadline so a wedged harness can't hang you:
 
 ```ts
-const { ctx: bounded, cancel } = Context.withDeadline(Context.background(), 120_000)
+const { ctx: bounded, cancel } = Context.withDeadline(
+  Context.background(),
+  120_000,
+);
 try {
-  await ask(conv, bounded, "…")   // acquireControl / send reject if the deadline fires
+  await ask(conv, bounded, "…"); // acquireControl / send reject if the deadline fires
 } finally {
-  cancel()
+  cancel();
 }
 ```
 
@@ -137,10 +152,10 @@ may simply be waiting on one: check `conv.pendingInput()`.
 ## 6. Read history, then close
 
 ```ts
-const turns = await conv.history()
-for (const t of turns) console.log(`${t.role}: ${t.text}`)
+const turns = await conv.history();
+for (const t of turns) console.log(`${t.role}: ${t.text}`);
 
-await conv.close()
+await conv.close();
 ```
 
 `close()` terminates the harness, releases the writer lock, stops the watcher, and unblocks
@@ -153,37 +168,51 @@ use [`historyWithSource()`](reading-history.md).
 ## The whole thing
 
 ```ts
-import { Open, newMemStore, EventTurn, TurnStateComplete, TurnStateErrored } from "meta-harness/chat"
-import { Context } from "meta-harness/async"
+import {
+  Open,
+  newMemStore,
+  EventTurn,
+  TurnStateComplete,
+  TurnStateErrored,
+} from "meta-harness/chat";
+import { Context } from "meta-harness/async";
 
-const ctx = Context.background()
+const ctx = Context.background();
 const conv = await Open(ctx, {
   harness: "claude-code",
   binaryPath: "/usr/local/bin/claude",
   workingDir: process.cwd(),
   store: newMemStore(),
-})
+});
 
 async function awaitTurn(conv, turnID) {
   for await (const ev of conv.events())
-    if (ev.type === EventTurn && ev.turn?.id === turnID &&
-        (ev.turn.state === TurnStateComplete || ev.turn.state === TurnStateErrored))
-      return ev.turn
-  throw new Error("stream ended early")
+    if (
+      ev.type === EventTurn &&
+      ev.turn?.id === turnID &&
+      (ev.turn.state === TurnStateComplete ||
+        ev.turn.state === TurnStateErrored)
+    )
+      return ev.turn;
+  throw new Error("stream ended early");
 }
 
 async function ask(conv, ctx, text) {
-  const release = await conv.acquireControl(ctx)
-  let id
-  try { id = await conv.send(ctx, text) } finally { release() }
-  return awaitTurn(conv, id)
+  const release = await conv.acquireControl(ctx);
+  let id;
+  try {
+    id = await conv.send(ctx, text);
+  } finally {
+    release();
+  }
+  return awaitTurn(conv, id);
 }
 
 try {
-  console.log((await ask(conv, ctx, "List the files here.")).text)
-  console.log((await ask(conv, ctx, "Which is largest?")).text)
+  console.log((await ask(conv, ctx, "List the files here.")).text);
+  console.log((await ask(conv, ctx, "Which is largest?")).text);
 } finally {
-  await conv.close()
+  await conv.close();
 }
 ```
 

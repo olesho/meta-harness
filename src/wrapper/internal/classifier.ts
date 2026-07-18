@@ -1,20 +1,20 @@
 // The classifier resolution + the public one-shot ClassifyOutput entry point.
 
-import { isCostOrQuotaLimited, stripANSIEscapes } from "./ansi.ts"
+import { isCostOrQuotaLimited, stripANSIEscapes } from "./ansi.ts";
 import {
   noClassification,
   type Classification,
   type Classifier,
   type ClassifierInput,
-} from "./classification.ts"
-import { costClass } from "./errorclass.ts"
-import { HarnessAdapter, matchTransportRetry } from "./harnessAdapter.ts"
-import { Patterns as claudePatterns } from "./harness/claude.ts"
-import { Patterns as codexPatterns } from "./harness/codex.ts"
-import { Patterns as cursorPatterns } from "./harness/cursor.ts"
-import { Patterns as opencodePatterns } from "./harness/opencode.ts"
-import { Patterns as piPatterns } from "./harness/pi.ts"
-import { StatusBlockedByCost } from "./status.ts"
+} from "./classification.ts";
+import { costClass } from "./errorclass.ts";
+import { HarnessAdapter, matchTransportRetry } from "./harnessAdapter.ts";
+import { Patterns as claudePatterns } from "./harness/claude.ts";
+import { Patterns as codexPatterns } from "./harness/codex.ts";
+import { Patterns as cursorPatterns } from "./harness/cursor.ts";
+import { Patterns as opencodePatterns } from "./harness/opencode.ts";
+import { Patterns as piPatterns } from "./harness/pi.ts";
+import { StatusBlockedByCost } from "./status.ts";
 
 /**
  * resolveClassifier picks the Classifier for a harness. Order:
@@ -26,21 +26,21 @@ export function resolveClassifier(
   harness: string,
   classifier?: Classifier | null,
 ): Classifier {
-  if (classifier) return classifier
+  if (classifier) return classifier;
   switch (harness.trim().toLowerCase()) {
     case "claude":
     case "claude-code":
-      return new HarnessAdapter(claudePatterns)
+      return new HarnessAdapter(claudePatterns);
     case "codex":
-      return new HarnessAdapter(codexPatterns)
+      return new HarnessAdapter(codexPatterns);
     case "cursor":
-      return new HarnessAdapter(cursorPatterns)
+      return new HarnessAdapter(cursorPatterns);
     case "opencode":
-      return new HarnessAdapter(opencodePatterns)
+      return new HarnessAdapter(opencodePatterns);
     case "pi":
-      return new HarnessAdapter(piPatterns)
+      return new HarnessAdapter(piPatterns);
   }
-  return new DefaultClassifier()
+  return new DefaultClassifier();
 }
 
 /**
@@ -50,8 +50,8 @@ export function resolveClassifier(
  */
 export class DefaultClassifier implements Classifier {
   classify(input: ClassifierInput): Classification {
-    if (!input.idle) return noClassification()
-    const phrase = isCostOrQuotaLimited(input.recentOutput)
+    if (!input.idle) return noClassification();
+    const phrase = isCostOrQuotaLimited(input.recentOutput);
     if (phrase !== "") {
       return {
         ...noClassification(),
@@ -59,13 +59,13 @@ export class DefaultClassifier implements Classifier {
         class: costClass(phrase),
         reason: phrase,
         terminal: true,
-      }
+      };
     }
     const transport = matchTransportRetry(
       stripANSIEscapes(input.recentOutput).toLowerCase(),
-    )
-    if (transport) return transport
-    return noClassification()
+    );
+    if (transport) return transport;
+    return noClassification();
   }
 }
 
@@ -76,10 +76,13 @@ export class DefaultClassifier implements Classifier {
  * process's tail is not misreported as waiting_for_input. Returns the zero
  * Classification when nothing matches.
  */
-export function classifyOutput(harness: string, output: string): Classification {
+export function classifyOutput(
+  harness: string,
+  output: string,
+): Classification {
   return resolveClassifier(harness).classify({
     recentOutput: output,
     idle: true,
     quiet: false,
-  })
+  });
 }

@@ -4,15 +4,15 @@
 // paste leaves the prompt sitting in the composer ("› <text>"), the screen
 // otherwise settled, and no rollout is ever written.
 
-import { describe, expect, test } from "vitest"
-import { newScreen } from "../../../src/screen/index.ts"
-import type { Snapshot } from "../../../src/screen/index.ts"
-import * as codex from "../../../src/turns/harness/codex.ts"
+import { describe, expect, test } from "vitest";
+import { newScreen } from "../../../src/screen/index.ts";
+import type { Snapshot } from "../../../src/screen/index.ts";
+import * as codex from "../../../src/turns/harness/codex.ts";
 
 async function snap(text: string): Promise<Snapshot> {
-  const scr = newScreen(120, 40)
-  await scr.write("\x1b[2J\x1b[H" + text.split("\n").join("\r\n") + "\r\n")
-  return scr.snapshot()
+  const scr = newScreen(120, 40);
+  await scr.write("\x1b[2J\x1b[H" + text.split("\n").join("\r\n") + "\r\n");
+  return scr.snapshot();
 }
 
 const readyScreen = [
@@ -22,7 +22,7 @@ const readyScreen = [
   "",
   "› ",
   "",
-].join("\n")
+].join("\n");
 
 // The live swallow shape: the sent text sits in the composer, the Enter
 // rendered as a newline below it; no assistant output anywhere.
@@ -33,7 +33,7 @@ const swallowedScreen = [
   "",
   "› reply with just: ok",
   "",
-].join("\n")
+].join("\n");
 
 // A genuine reply: assistant output in scrollback, the composer settled EMPTY.
 // The scrollback also echoes the past user prompt as a "›" row — only the LAST
@@ -47,30 +47,30 @@ const replyScreen = [
   "",
   "› ",
   "",
-].join("\n")
+].join("\n");
 
 describe("codex promptNotAccepted", () => {
-  const a = codex.New()
+  const a = codex.New();
 
   test("composer still holding the sent text → swallowed", async () => {
-    const s = await snap(swallowedScreen)
-    const sent = (await snap(readyScreen)).text
-    expect(a.promptNotAccepted(s, sent)).toBe(true)
-  })
+    const s = await snap(swallowedScreen);
+    const sent = (await snap(readyScreen)).text;
+    expect(a.promptNotAccepted(s, sent)).toBe(true);
+  });
 
   test("screen byte-identical to the sent screen → swallowed", async () => {
-    const s = await snap(readyScreen)
-    expect(a.promptNotAccepted(s, s.text)).toBe(true)
-  })
+    const s = await snap(readyScreen);
+    expect(a.promptNotAccepted(s, s.text)).toBe(true);
+  });
 
   test("assistant reply above an empty composer → accepted", async () => {
-    const s = await snap(replyScreen)
-    const sent = (await snap(readyScreen)).text
-    expect(a.promptNotAccepted(s, sent)).toBe(false)
-  })
+    const s = await snap(replyScreen);
+    const sent = (await snap(readyScreen)).text;
+    expect(a.promptNotAccepted(s, sent)).toBe(false);
+  });
 
   test("no composer row at all → not judged swallowed", async () => {
-    const s = await snap(">_ OpenAI Codex (v0.142.5)\n\n  loading…")
-    expect(a.promptNotAccepted(s, "something else")).toBe(false)
-  })
-})
+    const s = await snap(">_ OpenAI Codex (v0.142.5)\n\n  loading…");
+    expect(a.promptNotAccepted(s, "something else")).toBe(false);
+  });
+});

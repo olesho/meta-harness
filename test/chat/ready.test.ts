@@ -1,35 +1,40 @@
 // Port of pkg/chat/ready_test.go — per-harness submit key + pi send-readiness.
-import { describe, expect, test } from "vitest"
+import { describe, expect, test } from "vitest";
 import {
   submitKeyForHarness,
   requiresPromptReadiness,
   readyForInput,
-} from "../../src/chat/ready.ts"
+} from "../../src/chat/ready.ts";
 
-const dec = new TextDecoder()
+const dec = new TextDecoder();
 
 describe("submitKeyForHarness", () => {
-  const csi13u = "\x1b[13u"
-  const cases: Array<[string, string, string, string]> = [
+  const csi13u = "\x1b[13u";
+  const cases: [string, string, string, string][] = [
     ["codex composer", "codex", "›Find and fix a bug in @filename", csi13u],
     ["codex any screen", "codex", "whatever is on screen", csi13u],
     ["claude bypass", "claude-code", "... bypass permissions ...", csi13u],
     ["claude vim hint", "claude-code", "ctrl+g to edit in Vim", csi13u],
-    ["claude auto mode", "claude-code", "Claude Code ❯ ... auto mode on", csi13u],
+    [
+      "claude auto mode",
+      "claude-code",
+      "Claude Code ❯ ... auto mode on",
+      csi13u,
+    ],
     ["pi composer", "pi", "0.0%/131k (auto)  gpt-oss-120b • medium", "\r"],
     ["unknown", "some-other-harness", "anything", "\n"],
-  ]
+  ];
   for (const [name, harness, screen, want] of cases) {
     test(name, () => {
-      expect(dec.decode(submitKeyForHarness(harness, screen))).toBe(want)
-    })
+      expect(dec.decode(submitKeyForHarness(harness, screen))).toBe(want);
+    });
   }
-})
+});
 
 describe("readyForInput(claude-code)", () => {
   test("claude-code requires prompt readiness", () => {
-    expect(requiresPromptReadiness("claude-code")).toBe(true)
-  })
+    expect(requiresPromptReadiness("claude-code")).toBe(true);
+  });
 
   // Idle composer as rendered by 2.1.185 (corpus shape): empty "❯" prompt line
   // between horizontal rules, status hint below.
@@ -44,7 +49,7 @@ describe("readyForInput(claude-code)", () => {
     "❯ ",
     "────────────────────────────────────────",
     "  ⏵⏵ auto mode on (shift+tab to cycle)",
-  ].join("\n")
+  ].join("\n");
 
   // Idle composer as captured live from 2.1.201 (record-pty probe, 2026-07-05):
   // welcome box titled "Claude Code v2.1.201", effort indicator, then the empty
@@ -63,7 +68,7 @@ describe("readyForInput(claude-code)", () => {
     "❯ ",
     "────────────────────────────────────────────────────────────────",
     "  ⏵⏵ auto mode on (shift+tab to cycle) · ← for agents",
-  ].join("\n")
+  ].join("\n");
 
   const bypassDialog = [
     " ▐▛███▜▌   Claude Code v2.1.201",
@@ -79,7 +84,7 @@ describe("readyForInput(claude-code)", () => {
     "│ ❯ 1. No, exit                          │",
     "│   2. Yes, I accept                     │",
     "╰────────────────────────────────────────╯",
-  ].join("\n")
+  ].join("\n");
 
   const trustDialog = [
     " ▐▛███▜▌   Claude Code v2.1.201",
@@ -90,7 +95,7 @@ describe("readyForInput(claude-code)", () => {
     "",
     " ❯ 1. Yes, proceed",
     "   2. No, exit",
-  ].join("\n")
+  ].join("\n");
 
   const trustDialogAlt = [
     " ▐▛███▜▌   Claude Code v2.1.201",
@@ -99,13 +104,13 @@ describe("readyForInput(claude-code)", () => {
     "",
     " ❯ 1. Yes, I created or trust this project",
     "   2. No, exit",
-  ].join("\n")
+  ].join("\n");
 
   const startupSplash = [
     " ▐▛███▜▌   Claude Code v2.1.201",
     "",
     "  Loading…",
-  ].join("\n")
+  ].join("\n");
 
   const busyTurn = [
     " ▐▛███▜▌   Claude Code v2.1.201",
@@ -113,32 +118,40 @@ describe("readyForInput(claude-code)", () => {
     "❯ what is the capital of France",
     "",
     "✻ Pondering… (3s · esc to interrupt)",
-  ].join("\n")
+  ].join("\n");
 
-  test("ready composer 2.1.185", () =>
-    expect(readyForInput("claude-code", readyComposer185)).toBe(true))
-  test("ready composer 2.1.201 (live capture)", () =>
-    expect(readyForInput("claude-code", readyComposer201)).toBe(true))
-  test("submit key on the 2.1.201 ready screen stays CSI 13 u", () =>
-    expect(dec.decode(submitKeyForHarness("claude-code", readyComposer201))).toBe(
-      "\x1b[13u",
-    ))
-  test("bypass permissions dialog not ready", () =>
-    expect(readyForInput("claude-code", bypassDialog)).toBe(false))
-  test("trust dialog not ready", () =>
-    expect(readyForInput("claude-code", trustDialog)).toBe(false))
-  test("trust dialog (created-or-trust variant) not ready", () =>
-    expect(readyForInput("claude-code", trustDialogAlt)).toBe(false))
-  test("startup splash not ready", () =>
-    expect(readyForInput("claude-code", startupSplash)).toBe(false))
-  test("busy turn (past prompt echoes ❯) not ready", () =>
-    expect(readyForInput("claude-code", busyTurn)).toBe(false))
-})
+  test("ready composer 2.1.185", () => {
+    expect(readyForInput("claude-code", readyComposer185)).toBe(true);
+  });
+  test("ready composer 2.1.201 (live capture)", () => {
+    expect(readyForInput("claude-code", readyComposer201)).toBe(true);
+  });
+  test("submit key on the 2.1.201 ready screen stays CSI 13 u", () => {
+    expect(
+      dec.decode(submitKeyForHarness("claude-code", readyComposer201)),
+    ).toBe("\x1b[13u");
+  });
+  test("bypass permissions dialog not ready", () => {
+    expect(readyForInput("claude-code", bypassDialog)).toBe(false);
+  });
+  test("trust dialog not ready", () => {
+    expect(readyForInput("claude-code", trustDialog)).toBe(false);
+  });
+  test("trust dialog (created-or-trust variant) not ready", () => {
+    expect(readyForInput("claude-code", trustDialogAlt)).toBe(false);
+  });
+  test("startup splash not ready", () => {
+    expect(readyForInput("claude-code", startupSplash)).toBe(false);
+  });
+  test("busy turn (past prompt echoes ❯) not ready", () => {
+    expect(readyForInput("claude-code", busyTurn)).toBe(false);
+  });
+});
 
 describe("readyForInput(codex)", () => {
   test("codex requires prompt readiness", () => {
-    expect(requiresPromptReadiness("codex")).toBe(true)
-  })
+    expect(requiresPromptReadiness("codex")).toBe(true);
+  });
 
   // The live 0.144.4 shell-command approval dialog (test/corpus/codex/
   // approval-command), trimmed to the rows the predicate keys on.
@@ -156,7 +169,7 @@ describe("readyForInput(codex)", () => {
     "  3. No, and tell Codex what to do differently (esc)",
     "",
     "  Press enter to confirm or esc to cancel",
-  ].join("\n")
+  ].join("\n");
 
   const applyPatchDialog = [
     "• Added hello.txt (+1 -0)",
@@ -169,7 +182,7 @@ describe("readyForInput(codex)", () => {
     "  3. No, and tell Codex what to do differently (esc)",
     "",
     "  Press enter to confirm or esc to cancel",
-  ].join("\n")
+  ].join("\n");
 
   const readyComposer = [
     "• Ran touch /tmp/codex-approval-probe-marker",
@@ -177,7 +190,7 @@ describe("readyForInput(codex)", () => {
     "› ",
     "",
     "  gpt-5.6-sol default · /private/tmp",
-  ].join("\n")
+  ].join("\n");
 
   const updateInterstitial = [
     "  ✨  Update available! 0.140.0 -> 0.141.0",
@@ -186,21 +199,26 @@ describe("readyForInput(codex)", () => {
     "  2. Skip",
     "",
     "  Press enter to continue",
-  ].join("\n")
+  ].join("\n");
 
-  test("idle composer ready", () =>
-    expect(readyForInput("codex", readyComposer)).toBe(true))
-  test("update interstitial not ready", () =>
-    expect(readyForInput("codex", updateInterstitial)).toBe(false))
+  test("idle composer ready", () => {
+    expect(readyForInput("codex", readyComposer)).toBe(true);
+  });
+  test("update interstitial not ready", () => {
+    expect(readyForInput("codex", updateInterstitial)).toBe(false);
+  });
 
   // Without the approval gate these would read as ready: the dialog's
   // "›"-highlighted menu row satisfies the codex composer regex.
-  test("command approval dialog not ready", () =>
-    expect(readyForInput("codex", approvalDialog)).toBe(false))
-  test("apply-patch approval dialog not ready", () =>
-    expect(readyForInput("codex", applyPatchDialog)).toBe(false))
-  test("ready again once the dialog is answered", () =>
-    expect(readyForInput("codex", readyComposer)).toBe(true))
+  test("command approval dialog not ready", () => {
+    expect(readyForInput("codex", approvalDialog)).toBe(false);
+  });
+  test("apply-patch approval dialog not ready", () => {
+    expect(readyForInput("codex", applyPatchDialog)).toBe(false);
+  });
+  test("ready again once the dialog is answered", () => {
+    expect(readyForInput("codex", readyComposer)).toBe(true);
+  });
 
   // Ready-side adversarial, mirroring the DetectInput one. A bare includes() on
   // the approval anchors would pin this screen not-ready forever: awaitPromptReady
@@ -216,28 +234,38 @@ describe("readyForInput(codex)", () => {
       "    2. No, cancel that",
       "",
       "› ",
-    ].join("\n")
-    expect(readyForInput("codex", prose)).toBe(true)
-  })
+    ].join("\n");
+    expect(readyForInput("codex", prose)).toBe(true);
+  });
 
   test("plain prose asking a yes/no question stays ready", () => {
-    const prose = ["• All done. Would you like to run the tests?", "", "› "].join("\n")
-    expect(readyForInput("codex", prose)).toBe(true)
-  })
-})
+    const prose = [
+      "• All done. Would you like to run the tests?",
+      "",
+      "› ",
+    ].join("\n");
+    expect(readyForInput("codex", prose)).toBe(true);
+  });
+});
 
 describe("readyForInput(pi)", () => {
   test("pi requires prompt readiness", () => {
-    expect(requiresPromptReadiness("pi")).toBe(true)
-  })
+    expect(requiresPromptReadiness("pi")).toBe(true);
+  });
 
   const idle =
-    "────\n~/proj (main)\n↑1.2k ↓32 $0.000 0.9%/131k (auto)   gpt-oss-120b • medium\n"
-  const busy = " ⠧ Working...\n0.0%/131k (auto)   gpt-oss-120b • medium\n"
+    "────\n~/proj (main)\n↑1.2k ↓32 $0.000 0.9%/131k (auto)   gpt-oss-120b • medium\n";
+  const busy = " ⠧ Working...\n0.0%/131k (auto)   gpt-oss-120b • medium\n";
   const startup =
-    " pi v0.76.0\n Press ctrl+o to show full startup help\n ripgrep not found. Downloading...\n"
+    " pi v0.76.0\n Press ctrl+o to show full startup help\n ripgrep not found. Downloading...\n";
 
-  test("idle composer ready", () => expect(readyForInput("pi", idle)).toBe(true))
-  test("busy not ready", () => expect(readyForInput("pi", busy)).toBe(false))
-  test("startup not ready", () => expect(readyForInput("pi", startup)).toBe(false))
-})
+  test("idle composer ready", () => {
+    expect(readyForInput("pi", idle)).toBe(true);
+  });
+  test("busy not ready", () => {
+    expect(readyForInput("pi", busy)).toBe(false);
+  });
+  test("startup not ready", () => {
+    expect(readyForInput("pi", startup)).toBe(false);
+  });
+});

@@ -14,7 +14,7 @@ import { ClaudeCodeReader } from "../../transcript/claudecode/claudecode.js";
 import { turnsFromEvents } from "../../transcript/event.js";
 import { ClaudeHookProvider, ensureSettingsJSONHooks, renderHookCommand, } from "../../hooks/index.js";
 import { GenericAdapter } from "../generic.js";
-import { Errored, InputRequested, InputResolved, TurnComplete } from "../types.js";
+import { Errored, InputRequested, InputResolved, TurnComplete, } from "../types.js";
 const enc = new TextEncoder();
 // thinkingRE matches the end-of-turn thinking-summary line, anchored to its own
 // line so it does not mis-fire when the model echoes the marker shape in prose.
@@ -317,7 +317,11 @@ function defaultDistDir() {
 function managedHooksFromSpec(spec, nodePath, distDir) {
     const managed = {};
     for (const entry of spec.events) {
-        const command = renderHookCommand({ nodePath, distDir, event: entry.event });
+        const command = renderHookCommand({
+            nodePath,
+            distDir,
+            event: entry.event,
+        });
         const matcher = {
             ...(entry.matcher !== undefined ? { matcher: entry.matcher } : {}),
             hooks: [{ type: "command", command }],
@@ -526,7 +530,8 @@ function parseQuestionRegion(lines, from, to) {
         }
         else {
             const cur = options[options.length - 1];
-            cur.description = cur.description === "" ? trimmed : cur.description + " " + trimmed;
+            cur.description =
+                cur.description === "" ? trimmed : cur.description + " " + trimmed;
         }
     }
     return { preamble: preamble.join("\n"), options, multiSelect };
@@ -590,7 +595,11 @@ function containsAny(s, ...subs) {
     return subs.some((sub) => s.includes(sub));
 }
 function inputID(req) {
-    const parts = [req.kind, req.prompt, ...(req.options ?? []).map((o) => o.label)];
+    const parts = [
+        req.kind,
+        req.prompt,
+        ...(req.options ?? []).map((o) => o.label),
+    ];
     const sum = createHash("sha256").update(parts.join("\0")).digest();
     return sum.subarray(0, 8).toString("hex");
 }

@@ -4,10 +4,10 @@ import {
   parseRetryAfter,
   type APIErrorHit,
   type Patterns as PatternSet,
-} from "../detector/detector.ts"
+} from "../detector/detector.ts";
 
 // retryLimitRE captures "exceeded retry limit, last status: NNN".
-const retryLimitRE = /exceeded retry limit,\s*last status:\s*(\d{3})/i
+const retryLimitRE = /exceeded retry limit,\s*last status:\s*(\d{3})/i;
 
 // codexPhraseHits maps known Codex error-display phrases to inferred HTTP codes.
 const codexPhraseHits: { phrase: string; code: number }[] = [
@@ -17,33 +17,33 @@ const codexPhraseHits: { phrase: string; code: number }[] = [
   { phrase: "you're out of credits", code: 429 },
   { phrase: "quota exceeded", code: 429 },
   { phrase: "stream disconnected before completion", code: 0 },
-]
+];
 
 /** MatchAPIError implements an APIErrorMatcher for Codex CLI. */
 export function matchAPIError(stripped: string): APIErrorHit | null {
-  const lower = stripped.toLowerCase()
+  const lower = stripped.toLowerCase();
 
-  const m = retryLimitRE.exec(stripped)
+  const m = retryLimitRE.exec(stripped);
   if (m) {
     return {
       code: parseInt(m[1], 10),
       message: "exceeded retry limit, last status: " + m[1],
       retryAfter: parseRetryAfter(stripped),
-    }
+    };
   }
 
   for (const p of codexPhraseHits) {
-    const idx = lower.indexOf(p.phrase)
+    const idx = lower.indexOf(p.phrase);
     if (idx >= 0) {
       return {
         code: p.code,
         message: stripped.slice(idx, idx + p.phrase.length),
         retryAfter: parseRetryAfter(stripped),
-      }
+      };
     }
   }
 
-  return null
+  return null;
 }
 
 /** Codex harness fingerprint set. */
@@ -63,4 +63,4 @@ export const Patterns: PatternSet = {
     "temporary failure",
   ],
   prompt: ["(y/n)", "(yes/no)", "continue?", "approve change?", "apply patch?"],
-}
+};

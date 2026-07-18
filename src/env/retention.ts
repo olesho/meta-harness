@@ -1,7 +1,7 @@
 // Retention resolution + error aggregation — shared by the local provisioner,
 // compose(), and the env() lifecycle engine.
 
-import type { Outcome, Retention } from "./types.ts"
+import type { Outcome, Retention } from "./types.ts";
 
 /** Whether a resource is KEPT (not destroyed) for the given retention + outcome.
  *
@@ -11,11 +11,14 @@ import type { Outcome, Retention } from "./types.ts"
  *  - `"always"`          ⇒ keep on success and run-failure.
  *  - `"keep-on-failure"` ⇒ keep only on a failed RUN.
  *  - ABSENT              ⇒ destroy on both success and failure (the common case). */
-export function shouldKeep(retention: Retention | undefined, outcome: Outcome): boolean {
-  if (outcome === "setup-failure") return false
-  if (retention === "always") return true
-  if (retention === "keep-on-failure") return outcome === "failure"
-  return false
+export function shouldKeep(
+  retention: Retention | undefined,
+  outcome: Outcome,
+): boolean {
+  if (outcome === "setup-failure") return false;
+  if (retention === "always") return true;
+  if (retention === "keep-on-failure") return outcome === "failure";
+  return false;
 }
 
 /** An error that aggregates several teardown failures without short-circuiting
@@ -23,25 +26,29 @@ export function shouldKeep(retention: Retention | undefined, outcome: Outcome): 
  *  the shape of the platform `AggregateError` but carries a stable name and a
  *  readable message so callers can log it directly. */
 export class TeardownError extends Error {
-  readonly errors: unknown[]
+  readonly errors: unknown[];
   constructor(errors: unknown[], context?: string) {
-    const detail = errors.map((e) => (e instanceof Error ? e.message : String(e))).join("; ")
-    super(context ? `${context}: ${detail}` : detail)
-    this.name = "TeardownError"
-    this.errors = errors
+    const detail = errors
+      .map((e) => (e instanceof Error ? e.message : String(e)))
+      .join("; ");
+    super(context ? `${context}: ${detail}` : detail);
+    this.name = "TeardownError";
+    this.errors = errors;
   }
 }
 
 /** Run every cleanup thunk in order, collecting (never re-throwing) failures.
  *  Returns the collected errors so the caller decides how to surface them. */
-export async function runAll(thunks: Array<() => Promise<void>>): Promise<unknown[]> {
-  const errs: unknown[] = []
+export async function runAll(
+  thunks: (() => Promise<void>)[],
+): Promise<unknown[]> {
+  const errs: unknown[] = [];
   for (const t of thunks) {
     try {
-      await t()
+      await t();
     } catch (e) {
-      errs.push(e)
+      errs.push(e);
     }
   }
-  return errs
+  return errs;
 }

@@ -21,10 +21,13 @@ export function argsContainConfigKey(args, key) {
                 return true;
             continue;
         }
-        if (arg.startsWith("-c") && arg.length > 2 && configArgHasKey(arg.slice(2), key)) {
+        if (arg.startsWith("-c") &&
+            arg.length > 2 &&
+            configArgHasKey(arg.slice(2), key)) {
             return true;
         }
-        if (arg.startsWith("--config=") && configArgHasKey(arg.slice("--config=".length), key)) {
+        if (arg.startsWith("--config=") &&
+            configArgHasKey(arg.slice("--config=".length), key)) {
             return true;
         }
     }

@@ -9,10 +9,10 @@
 //
 // Port of pkg/turns/turns.go.
 
-import type { ParsedEvent } from "../transcript/event.ts"
-import type { Snapshot } from "../screen/index.ts"
-import type { Status } from "./wrapper.ts"
-import type { HookProvider } from "../hooks/provider.ts"
+import type { ParsedEvent } from "../transcript/event.ts";
+import type { Snapshot } from "../screen/index.ts";
+import type { Status } from "./wrapper.ts";
+import type { HookProvider } from "../hooks/provider.ts";
 
 /**
  * Kind is the categorical type of a turn event. The vocabulary is intentionally
@@ -25,20 +25,20 @@ export type Kind =
   | "blocked"
   | "errored"
   | "input_requested"
-  | "input_resolved"
+  | "input_resolved";
 
 /** Assistant finished its turn; the caller may send the next user message. */
-export const TurnComplete: Kind = "turn_complete"
+export const TurnComplete: Kind = "turn_complete";
 /** Harness is invoking a tool. Informational; the turn is still in progress. */
-export const ToolCall: Kind = "tool_call"
+export const ToolCall: Kind = "tool_call";
 /** Transient block (cost/quota/rate-limit). Back off and retry. */
-export const Blocked: Kind = "blocked"
+export const Blocked: Kind = "blocked";
 /** Terminal failure; the turn did not complete and is unlikely to recover. */
-export const Errored: Kind = "errored"
+export const Errored: Kind = "errored";
 /** Harness is blocked on an interactive prompt; see Event.input. */
-export const InputRequested: Kind = "input_requested"
+export const InputRequested: Kind = "input_requested";
 /** A previously-requested interactive prompt is no longer on screen. */
-export const InputResolved: Kind = "input_resolved"
+export const InputResolved: Kind = "input_resolved";
 
 /**
  * AcquisitionMode selects HOW live transcript events are acquired for a run.
@@ -55,47 +55,49 @@ export const InputResolved: Kind = "input_resolved"
  * concrete mode in planAcquisition (a later subtask) directly, so there is no
  * un-latched Auto value here to leak into the event path.
  */
-export type AcquisitionMode = "off" | "stream" | "hooks"
+export type AcquisitionMode = "off" | "stream" | "hooks";
 
 /** No live acquisition; fall back to the on-disk transcript. */
-export const AcquisitionModeOff: AcquisitionMode = "off"
+export const AcquisitionModeOff: AcquisitionMode = "off";
 /** Parse events from stream-json interleaved with the interactive TUI. */
-export const AcquisitionModeStream: AcquisitionMode = "stream"
+export const AcquisitionModeStream: AcquisitionMode = "stream";
 /** Acquire events from the harness hooks side-channel. */
-export const AcquisitionModeHooks: AcquisitionMode = "hooks"
+export const AcquisitionModeHooks: AcquisitionMode = "hooks";
 
 /**
  * describeAcquisitionMode renders an AcquisitionMode for logs — the
  * `String()`-equivalent of Go's Mode.String(). Returns the canonical lowercase
  * label ("off" | "stream" | "hooks").
  */
-export function describeAcquisitionMode(m: AcquisitionMode): "off" | "stream" | "hooks" {
+export function describeAcquisitionMode(
+  m: AcquisitionMode,
+): "off" | "stream" | "hooks" {
   switch (m) {
     case "off":
-      return "off"
+      return "off";
     case "stream":
-      return "stream"
+      return "stream";
     case "hooks":
-      return "hooks"
+      return "hooks";
   }
 }
 
 /** One observation about the conversation flow. Mirrors turns.Event. */
 export interface Event {
   /** Categorizes the event. */
-  kind: Kind
+  kind: Kind;
   /** When observed; the Watcher backfills from the originating event. */
-  at?: Date
+  at?: Date;
   /** Short human-readable description; not stable for parsing. */
-  reason: string
+  reason: string;
   /** Screen snapshot at the moment a screen-derived event fired. */
-  snap?: Snapshot
+  snap?: Snapshot;
   /** Upstream API status code, copied from the SessionEvent by the Watcher. */
-  httpCode?: number
+  httpCode?: number;
   /** Parsed retry hint (ms), copied from the SessionEvent by the Watcher. */
-  retryAfter?: number
+  retryAfter?: number;
   /** Structured interactive prompt for input_requested / input_resolved. */
-  input?: InputRequest
+  input?: InputRequest;
 }
 
 /**
@@ -104,47 +106,47 @@ export interface Event {
  */
 export interface InputRequest {
   /** Stable across redraws of the SAME prompt; changes for a new prompt. */
-  id: string
+  id: string;
   /**
    * "trust_prompt" | "menu_select" | "confirm" | "text_input" | "question"
    * (the harness asked the user a clarifying question mid-turn) |
    * "question_review" (the submit/cancel confirmation after the last
    * question of a multi-question or multi-select dialog) | harness kinds.
    */
-  kind: string
+  kind: string;
   /** The question text shown to the user. */
-  prompt: string
+  prompt: string;
   /** Selectable choices for menu/confirm/trust prompts; undefined for text. */
-  options?: InputOption[]
+  options?: InputOption[];
   /** For kind "question": the dialog's header/tab label, when rendered. */
-  header?: string
+  header?: string;
   /**
    * For kind "question": true when the dialog accepts MULTIPLE selections
    * (checkbox rows). Each option's keys then TOGGLE that choice; write
    * submitKeys after toggling to commit (which surfaces a "question_review"
    * request for the final confirmation).
    */
-  multiSelect?: boolean
+  multiSelect?: boolean;
   /** Bytes that commit a multi-select answer after toggles (server-side only). */
-  submitKeys?: Uint8Array
+  submitKeys?: Uint8Array;
 }
 
 /** One selectable choice in an InputRequest. */
 export interface InputOption {
   /** Stable identifier the answer references (e.g. "1"). */
-  id: string
+  id: string;
   /**
    * Portable intent: "proceed" | "deny" | "yes" | "no" | "other" (free-text
    * escape hatch — selecting it declines the structured question and returns
    * control to the composer) | "" (none).
    */
-  alias: string
+  alias: string;
   /** Human-readable choice text ("Yes, proceed"). */
-  label: string
+  label: string;
   /** Bytes to write to the PTY to select this option (server-side only). */
-  keys: Uint8Array
+  keys: Uint8Array;
   /** Explanatory text rendered under the label, when the dialog shows one. */
-  description?: string
+  description?: string;
   /**
    * True when the menu rendered this row as the currently-selected choice (the
    * codex "›" highlight marker). Server-side only — stripped by
@@ -153,7 +155,7 @@ export interface InputOption {
    * quoted-prose spoof (no live highlight) cannot false-positive. Absent on
    * harnesses/menus that do not render a selector.
    */
-  highlighted?: boolean
+  highlighted?: boolean;
 }
 
 /**
@@ -162,11 +164,11 @@ export interface InputOption {
  */
 export interface Adapter {
   /** Identifies the adapter ("generic", "codex", "claude-code", …). */
-  name(): string
+  name(): string;
   /** Called after every successful screen write; returns any turn events. */
-  onScreen(snap: Snapshot): Event[]
+  onScreen(snap: Snapshot): Event[];
   /** Called on every wrapper status event; returns any turn events. */
-  onWrapperStatus(status: Status, reason: string): Event[]
+  onWrapperStatus(status: Status, reason: string): Event[];
 }
 
 // ── Optional capability interfaces ──────────────────────────────────────────
@@ -175,44 +177,44 @@ export interface Adapter {
 /** Surfaces the harness session ID by scraping the rendered screen. */
 export interface SessionIDExtractor {
   /** Returns [id, true] when the ID is visible, else ["", false]. */
-  extractSessionID(snap: Snapshot): [string, boolean]
+  extractSessionID(snap: Snapshot): [string, boolean];
 }
 
 /** Surfaces the harness session ID from a single RAW PTY output line. */
 export interface RawSessionIDExtractor {
-  extractSessionIDFromLine(line: string): [string, boolean]
+  extractSessionIDFromLine(line: string): [string, boolean];
 }
 
 /** Recovers the harness session ID from on-disk state, keyed on workingDir. */
 export interface SessionIDLocator {
-  locateSessionID(workingDir: string): [string, boolean]
+  locateSessionID(workingDir: string): [string, boolean];
 }
 
 /** Supplies keystrokes that make the harness print its session id on screen. */
 export interface SessionIDPrimer {
   /** Full keystrokes (command + submit) that surface the session id once. */
-  primeSessionIDKeys(): Uint8Array
+  primeSessionIDKeys(): Uint8Array;
 }
 
 /** Provides access to the harness's persisted conversation log. */
 export interface TranscriptReader {
-  readTranscript(harnessSessionID: string, workingDir: string): Turn[]
+  readTranscript(harnessSessionID: string, workingDir: string): Turn[];
 }
 
 /** Surfaces the key sequence that makes the harness exit gracefully. */
 export interface Quitter {
-  quitSequence(): Uint8Array
+  quitSequence(): Uint8Array;
 }
 
 /** Recovers the assistant's reply text from the rendered screen. */
 export interface MessageExtractor {
   /** Returns [message, true] or ["", false] when it can't isolate one. */
-  extractMessage(snap: Snapshot): [string, boolean]
+  extractMessage(snap: Snapshot): [string, boolean];
 }
 
 /** Reports whether the harness is still working on the current turn. */
 export interface BusyDetector {
-  busy(snap: Snapshot): boolean
+  busy(snap: Snapshot): boolean;
 }
 
 /**
@@ -223,25 +225,25 @@ export interface BusyDetector {
  * as the "reply". `sentScreenText` is the rendered screen at submit time.
  */
 export interface SwallowedPromptDetector {
-  promptNotAccepted(snap: Snapshot, sentScreenText: string): boolean
+  promptNotAccepted(snap: Snapshot, sentScreenText: string): boolean;
 }
 
 /** Builds the launch args that make the harness resume a prior session. */
 export interface SessionResumer {
   /** Returns the argv fragment resuming the given harness session id. */
-  resumeArgs(harnessSessionID: string): string[]
+  resumeArgs(harnessSessionID: string): string[];
 }
 
 /** Mints a fresh harness session id and the launch args that pin it. */
 export interface SessionInitializer {
   /** Returns [args, id]: an argv fragment that creates session <id>, plus <id>. */
-  initSession(): [string[], string]
+  initSession(): [string[], string];
 }
 
 /** Lists caller argv flags that conflict with chat-managed session control. */
 export interface SessionControlFlags {
   /** Flags (e.g. "--session", "--fork") that must not appear in Options.args. */
-  sessionControlFlags(): string[]
+  sessionControlFlags(): string[];
 }
 
 /**
@@ -252,7 +254,7 @@ export interface SessionControlFlags {
  * entirely means "does not fork" (the common case).
  */
 export interface SessionForkResumer {
-  resumeForksSessionID(): boolean
+  resumeForksSessionID(): boolean;
 }
 
 /**
@@ -274,7 +276,7 @@ export interface SessionForkResumer {
  *     monotonic seq from arrival order; the parser leaves those unset.
  */
 export interface StreamParser {
-  parseStreamLine(line: string): ParsedEvent[]
+  parseStreamLine(line: string): ParsedEvent[];
 }
 
 /**
@@ -288,7 +290,7 @@ export interface StreamParser {
  * interface entirely means "not interleaved" (the conservative default).
  */
 export interface StreamInterleaved {
-  streamInterleaved(): boolean
+  streamInterleaved(): boolean;
 }
 
 /**
@@ -304,7 +306,7 @@ export interface StreamInterleaved {
  */
 export interface HookProviderCapability {
   /** Returns the harness's HookProvider (config-ensure + payload-parse). */
-  hookProvider(): HookProvider
+  hookProvider(): HookProvider;
 }
 
 /**
@@ -313,9 +315,9 @@ export interface HookProviderCapability {
  */
 export interface Turn {
   /** "user", "assistant", or "system". */
-  role: string
+  role: string;
   /** The message body; multi-block messages joined with "\n\n". */
-  text: string
+  text: string;
   /** When the message was recorded; undefined if the log had no timestamp. */
-  timestamp?: Date
+  timestamp?: Date;
 }

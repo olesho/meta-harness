@@ -15,7 +15,7 @@
 //
 // The table is EXPLICIT and ORDERED. Each entry maps a sentinel to {status,code}.
 
-import type { ServerResponse } from "node:http"
+import type { ServerResponse } from "node:http";
 
 import {
   ErrClosed,
@@ -29,24 +29,24 @@ import {
   ErrUnknownHarness,
   ErrUnknownOption,
   isSentinel,
-} from "../chat/errors.ts"
+} from "../chat/errors.ts";
 import {
   ctxCanceled,
   ctxDeadlineExceeded,
   type Sentinel,
-} from "../internal/async/index.ts"
+} from "../internal/async/index.ts";
 
 /** An HTTP outcome: numeric status + stable machine-readable code. */
 export interface ErrorMapping {
-  status: number
-  code: string
+  status: number;
+  code: string;
 }
 
 /** One row of the ordered sentinel→mapping table. */
 interface SentinelRow {
-  sentinel: Sentinel
-  status: number
-  code: string
+  sentinel: Sentinel;
+  status: number;
+  code: string;
 }
 
 // Ordered sentinel→{status,code} table shared by both writers. Order is honored
@@ -65,56 +65,63 @@ const CHAT_ERROR_TABLE: readonly SentinelRow[] = [
   { sentinel: ErrUnknownOption, status: 400, code: "unknown_option" },
   // MH-ONLY — DO NOT OMIT. Keeps a malformed multi-select answer off the 500 path.
   { sentinel: ErrNotMultiSelect, status: 400, code: "not_multi_select" },
-]
+];
 
 // Context sentinels writeRunTurnError maps in ADDITION to the chat table, ahead
 // of it (a run-turn timeout/cancel is not a chat sentinel).
 const RUN_TURN_TABLE: readonly SentinelRow[] = [
   { sentinel: ctxDeadlineExceeded, status: 504, code: "timeout" },
   { sentinel: ctxCanceled, status: 408, code: "canceled" },
-]
+];
 
 /** Fallback for any error matching no sentinel row. */
-const FALLBACK: ErrorMapping = { status: 500, code: "internal" }
+const FALLBACK: ErrorMapping = { status: 500, code: "internal" };
 
 /** Extract a human-readable message from a thrown value. */
 function messageOf(err: unknown): string {
-  if (err instanceof Error) return err.message
-  if (typeof err === "string") return err
-  return String(err)
+  if (err instanceof Error) return err.message;
+  if (typeof err === "string") return err;
+  return String(err);
 }
 
 /** First-match lookup over an ordered table using isSentinel (cause-chain aware). */
-function lookup(err: unknown, table: readonly SentinelRow[]): ErrorMapping | undefined {
+function lookup(
+  err: unknown,
+  table: readonly SentinelRow[],
+): ErrorMapping | undefined {
   for (const row of table) {
     if (isSentinel(err, row.sentinel)) {
-      return { status: row.status, code: row.code }
+      return { status: row.status, code: row.code };
     }
   }
-  return undefined
+  return undefined;
 }
 
 /** Map a chat-path error to its HTTP outcome (exported for testing/reuse). */
 export function mapChatError(err: unknown): ErrorMapping {
-  return lookup(err, CHAT_ERROR_TABLE) ?? FALLBACK
+  return lookup(err, CHAT_ERROR_TABLE) ?? FALLBACK;
 }
 
 /** Map a run-turn-path error: context sentinels first, then the chat table. */
 export function mapRunTurnError(err: unknown): ErrorMapping {
-  return lookup(err, RUN_TURN_TABLE) ?? mapChatError(err)
+  return lookup(err, RUN_TURN_TABLE) ?? mapChatError(err);
 }
 
 /** Write a JSON error body `{ code, message }` with the given status. */
-function writeError(res: ServerResponse, mapping: ErrorMapping, message: string): void {
-  const body = JSON.stringify({ code: mapping.code, message })
-  res.statusCode = mapping.status
-  res.setHeader("Content-Type", "application/json")
-  res.end(body)
+function writeError(
+  res: ServerResponse,
+  mapping: ErrorMapping,
+  message: string,
+): void {
+  const body = JSON.stringify({ code: mapping.code, message });
+  res.statusCode = mapping.status;
+  res.setHeader("Content-Type", "application/json");
+  res.end(body);
 }
 
 /** writeChatError: map a thrown chat error and write its JSON body. */
 export function writeChatError(res: ServerResponse, err: unknown): void {
-  writeError(res, mapChatError(err), messageOf(err))
+  writeError(res, mapChatError(err), messageOf(err));
 }
 
 /**
@@ -123,5 +130,5 @@ export function writeChatError(res: ServerResponse, err: unknown): void {
  * table. Ported from Go's writeRunTurnError.
  */
 export function writeRunTurnError(res: ServerResponse, err: unknown): void {
-  writeError(res, mapRunTurnError(err), messageOf(err))
+  writeError(res, mapRunTurnError(err), messageOf(err));
 }

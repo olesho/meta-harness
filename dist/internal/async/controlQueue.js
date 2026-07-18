@@ -30,7 +30,7 @@ export class ControlQueue {
         return new Promise((resolve, reject) => {
             const waiter = { resolve, reject, settled: false };
             this._waiters.push(waiter);
-            ctx.done().then(() => {
+            void ctx.done().then(() => {
                 if (waiter.settled)
                     return;
                 waiter.settled = true;
@@ -46,7 +46,7 @@ export class ControlQueue {
         if (!this._held)
             return;
         let next = this._waiters.shift();
-        while (next && next.settled)
+        while (next?.settled)
             next = this._waiters.shift();
         if (next) {
             next.settled = true;

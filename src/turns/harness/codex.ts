@@ -14,36 +14,31 @@
 // transcript reader (readTranscript / CodexReader) still reads disk, but that is
 // keyed on an already-captured id and is a separate concern.
 
-import { createHash } from "node:crypto"
-import type { TranscriptTurn } from "../../chat/deps.ts"
-import type { Snapshot } from "../../screen/index.ts"
-import { CodexReader, turnsFromEvents } from "../../transcript/index.ts"
-import { GenericAdapter } from "../generic.ts"
-import type {
-  Adapter,
-  Event,
-  InputOption,
-  InputRequest,
-} from "../types.ts"
-import { InputRequested, InputResolved, TurnComplete } from "../types.ts"
-import type { Status } from "../wrapper.ts"
-import { StatusWaitingForInput } from "../wrapper.ts"
+import { createHash } from "node:crypto";
+import type { TranscriptTurn } from "../../chat/deps.ts";
+import type { Snapshot } from "../../screen/index.ts";
+import { CodexReader, turnsFromEvents } from "../../transcript/index.ts";
+import { GenericAdapter } from "../generic.ts";
+import type { Adapter, Event, InputOption, InputRequest } from "../types.ts";
+import { InputRequested, InputResolved, TurnComplete } from "../types.ts";
+import type { Status } from "../wrapper.ts";
+import { StatusWaitingForInput } from "../wrapper.ts";
 
-const enc = new TextEncoder()
+const enc = new TextEncoder();
 
 // tokenUsageRE matches the per-turn Token usage footer Codex printed on ≤0.141.
 // Kept strict (anchored full footer) so it cannot false-fire on reply prose.
 const tokenUsageRE =
-  /Token usage: total=[\d,]+ input=[\d,]+ \(\+ [\d,]+ cached\) output=[\d,]+(?: \(reasoning \d+\))?/g
+  /Token usage: total=[\d,]+ input=[\d,]+ \(\+ [\d,]+ cached\) output=[\d,]+(?: \(reasoning \d+\))?/g;
 
 // resumeRE matches the "codex resume <uuid>" hint — the legacy ≤0.141 footer AND
 // the 0.142+ `/quit` / `/exit` hint ("To continue this session, run codex resume
 // <uuid>"). Already-specific text, low spoof risk, so it is scanned ungated.
 const resumeRE =
-  /codex resume ([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})/
+  /codex resume ([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})/;
 
 const UUID_RE_SRC =
-  "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
+  "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}";
 
 // statusSessionRE matches the `Session: <uuid>` row INSIDE the `/status` box,
 // anchored on the vertical box borders (│ … │) on the SAME physical row. Only the
@@ -51,15 +46,13 @@ const UUID_RE_SRC =
 // bare `Session: <uuid>` string appearing in reply prose. It assumes the row
 // renders unwrapped on one screen line — see CODEX_STATUS_MIN_COLS.
 const statusSessionRE = new RegExp(
-  "│[^\\S\\r\\n]*Session:[^\\S\\r\\n]+(" +
-    UUID_RE_SRC +
-    ")[^\\S\\r\\n]*│",
-)
+  "│[^\\S\\r\\n]*Session:[^\\S\\r\\n]+(" + UUID_RE_SRC + ")[^\\S\\r\\n]*│",
+);
 
 // statusBoxHeaderRE gates statusSessionRE on the `/status` box header so a lone
 // spoofed box row (borders around a "Session:" line in some other context) cannot
 // match. The header is the Codex banner the `/status` box renders above the rows.
-const statusBoxHeaderRE = />_ OpenAI Codex \(v/
+const statusBoxHeaderRE = />_ OpenAI Codex \(v/;
 
 /**
  * CODEX_STATUS_MIN_COLS is the minimum terminal width at which the `/status` box
@@ -71,19 +64,19 @@ const statusBoxHeaderRE = />_ OpenAI Codex \(v/
  * (records a `too_narrow` outcome) and leaves the `/quit` hint as the backstop.
  * Set from the observed box width during the manual smoke.
  */
-export const CODEX_STATUS_MIN_COLS = 60
+export const CODEX_STATUS_MIN_COLS = 60;
 
 /** Adapter implements turns.Adapter for Codex CLI. */
 export class CodexAdapter extends GenericAdapter implements Adapter {
   /** Overrides ~/.codex/sessions for the transcript reader (readTranscript). */
-  sessionsRoot = ""
+  sessionsRoot = "";
 
-  private lastFingerprint = ""
-  private lastInputID = ""
-  private lastInput: InputRequest | null = null
+  private lastFingerprint = "";
+  private lastInputID = "";
+  private lastInput: InputRequest | null = null;
 
   override name(): string {
-    return "codex"
+    return "codex";
   }
 
   /**
@@ -93,7 +86,7 @@ export class CodexAdapter extends GenericAdapter implements Adapter {
    * later interleaving adapter.
    */
   streamInterleaved(): boolean {
-    return false
+    return false;
   }
 
   /**
@@ -114,51 +107,51 @@ export class CodexAdapter extends GenericAdapter implements Adapter {
    * mid-dialog: a crash during a dialog must still error the turn.
    */
   override onWrapperStatus(status: Status, reason: string): Event[] {
-    if (status === StatusWaitingForInput && this.lastInputID !== "") return []
-    return super.onWrapperStatus(status, reason)
+    if (status === StatusWaitingForInput && this.lastInputID !== "") return [];
+    return super.onWrapperStatus(status, reason);
   }
 
   override onScreen(snap: Snapshot): Event[] {
-    const out: Event[] = []
+    const out: Event[] = [];
 
     // Turn-complete detection — newest Token usage footer differs from last.
-    const matches = snap.text.match(tokenUsageRE)
+    const matches = snap.text.match(tokenUsageRE);
     if (matches && matches.length > 0) {
-      const latest = matches[matches.length - 1]!
+      const latest = matches[matches.length - 1];
       if (latest !== this.lastFingerprint) {
-        this.lastFingerprint = latest
-        out.push({ kind: TurnComplete, reason: "codex: " + latest })
+        this.lastFingerprint = latest;
+        out.push({ kind: TurnComplete, reason: "codex: " + latest });
       }
     }
 
     // Blocking startup interstitial — transition on the request ID.
-    const req = DetectInput(snap.text)
+    const req = DetectInput(snap.text);
     if (req) {
       if (req.id !== this.lastInputID) {
-        this.lastInputID = req.id
-        this.lastInput = req
+        this.lastInputID = req.id;
+        this.lastInput = req;
         out.push({
           kind: InputRequested,
           reason: "codex: " + req.prompt,
           input: req,
-        })
+        });
       }
     } else if (this.lastInputID !== "") {
       const resolved = this.lastInput ?? {
         id: this.lastInputID,
         kind: "",
         prompt: "",
-      }
-      this.lastInputID = ""
-      this.lastInput = null
+      };
+      this.lastInputID = "";
+      this.lastInput = null;
       out.push({
         kind: InputResolved,
         reason: "codex: input resolved",
         input: resolved,
-      })
+      });
     }
 
-    return out
+    return out;
   }
 
   /**
@@ -175,13 +168,13 @@ export class CodexAdapter extends GenericAdapter implements Adapter {
    * `Session: <uuid>`-shaped string in reply prose.
    */
   extractSessionID(snap: Snapshot): [string, boolean] {
-    const m = resumeRE.exec(snap.text)
-    if (m) return [m[1]!, true]
-    if (statusBoxHeaderRE.test(snap.text)) {
-      const s = statusSessionRE.exec(snap.text)
-      if (s) return [s[1]!, true]
+    const m = resumeRE.exec(snap.text);
+    if (m) return [m[1], true];
+    if (snap.text.includes(">_ OpenAI Codex (v")) {
+      const s = statusSessionRE.exec(snap.text);
+      if (s) return [s[1], true];
     }
-    return ["", false]
+    return ["", false];
   }
 
   /**
@@ -191,7 +184,7 @@ export class CodexAdapter extends GenericAdapter implements Adapter {
    * submitKeyForHarness("codex") and the quit sequence's hardcoded submit).
    */
   primeSessionIDKeys(): Uint8Array {
-    return enc.encode("/status" + "\x1b[13u")
+    return enc.encode("/status" + "\x1b[13u");
   }
 
   /**
@@ -206,18 +199,18 @@ export class CodexAdapter extends GenericAdapter implements Adapter {
    *      actually ran the turn settles with an EMPTY "› " composer.
    */
   promptNotAccepted(snap: Snapshot, sentScreenText: string): boolean {
-    if (snap.text === sentScreenText) return true
-    const lines = snap.text.split("\n")
+    if (snap.text === sentScreenText) return true;
+    const lines = snap.text.split("\n");
     for (let i = lines.length - 1; i >= 0; i--) {
-      const m = composerRowRE.exec(lines[i]!)
-      if (m) return m[1]!.trim() !== ""
+      const m = composerRowRE.exec(lines[i]);
+      if (m) return m[1].trim() !== "";
     }
-    return false
+    return false;
   }
 
   /** Implements turns.SessionResumer — `codex resume <uuid>`. */
   resumeArgs(harnessSessionID: string): string[] {
-    return ["resume", harnessSessionID]
+    return ["resume", harnessSessionID];
   }
 
   /**
@@ -228,7 +221,7 @@ export class CodexAdapter extends GenericAdapter implements Adapter {
    * resume, the chat layer must NOT arm its one-shot provisional id refresh.
    */
   resumeForksSessionID(): boolean {
-    return false
+    return false;
   }
 
   /** Implements turns.TranscriptReader. */
@@ -239,25 +232,25 @@ export class CodexAdapter extends GenericAdapter implements Adapter {
     const events = new CodexReader(this.sessionsRoot).read(
       harnessSessionID,
       workingDir,
-    )
+    );
     return turnsFromEvents(events).map((t) => ({
       role: t.role,
       text: t.text,
       timestamp: t.timestamp ?? new Date(0),
-    }))
+    }));
   }
 }
 
 /** Constructs a Codex adapter. */
 export function New(): CodexAdapter {
-  return new CodexAdapter()
+  return new CodexAdapter();
 }
 
 // ── Interstitial detection (input.go) ────────────────────────────────────────
 
-const updateAnchor = "Update available!"
-const migrationAnchor = "Choose how you'd like Codex to proceed"
-const continueAnchor = "Press enter to continue"
+const updateAnchor = "Update available!";
+const migrationAnchor = "Choose how you'd like Codex to proceed";
+const continueAnchor = "Press enter to continue";
 
 // approvalAnchors are the full-sentence questions codex renders at the top of a
 // genuine command / apply-patch approval dialog. Captured live from codex-cli
@@ -266,27 +259,27 @@ const continueAnchor = "Press enter to continue"
 const approvalAnchors = [
   "Would you like to run the following command?",
   "Would you like to make the following edits?",
-]
+];
 
-export const KindUpdateNotice = "codex_update_notice"
-export const KindModelMigration = "codex_model_migration"
-export const KindNotice = "codex_notice"
+export const KindUpdateNotice = "codex_update_notice";
+export const KindModelMigration = "codex_model_migration";
+export const KindNotice = "codex_notice";
 // KindApproval marks a genuine command / apply-patch approval prompt. This exact
 // string is pinned by the chat contract fixture (test/chat/codex_dismiss.test.ts)
 // and by orche's default handler contract — do not rename.
-export const KindApproval = "approval_prompt"
+export const KindApproval = "approval_prompt";
 
 // menuRE matches a Codex numbered menu row. Group 1 captures the "›" highlight
 // marker on the currently-selected row (undefined when absent); group 2 the
 // digit; group 3 the label.
-const menuRE = /^[^\S\r\n]*(›)?[^\S\r\n]*(\d+)\.[^\S\r\n]+(.+?)[^\S\r\n]*$/gm
+const menuRE = /^[^\S\r\n]*(›)?[^\S\r\n]*(\d+)\.[^\S\r\n]+(.+?)[^\S\r\n]*$/gm;
 
 // promptRE matches the idle composer prompt indicator — the "›" glyph alone.
-const promptRE = /^[^\S\r\n]*›/m
+const promptRE = /^[^\S\r\n]*›/m;
 
 // composerRowRE matches one "›"-prefixed screen row, capturing what follows the
 // glyph. Applied per-line, last match wins (the composer sits below scrollback).
-const composerRowRE = /^[^\S\r\n]*›(.*)$/
+const composerRowRE = /^[^\S\r\n]*›(.*)$/;
 
 /**
  * DetectInput recognizes a blocking startup interstitial in the rendered screen
@@ -306,20 +299,20 @@ export function DetectInput(text: string): InputRequest | null {
   //      gate fails — an approval body mentioning "Update available!" would be
   //      swallowed to null, silently reviving the false-TurnComplete failure
   //      this detection exists to kill.
-  const approval = detectApproval(text)
-  if (approval) return approval
+  const approval = detectApproval(text);
+  if (approval) return approval;
   if (text.includes(updateAnchor)) {
-    const opts = parseMenuOptions(text)
+    const opts = parseMenuOptions(text);
     const req: InputRequest = {
       id: "",
       kind: KindUpdateNotice,
       prompt: updateAnchor,
       options: opts,
-    }
+    };
     // Require a parsed "Skip" row to confirm this is the live update menu.
-    if (findByAlias(req, "skip") === null) return null
-    req.id = inputID(req)
-    return req
+    if (findByAlias(req, "skip") === null) return null;
+    req.id = inputID(req);
+    return req;
   }
   if (text.includes(migrationAnchor)) {
     const req: InputRequest = {
@@ -327,23 +320,23 @@ export function DetectInput(text: string): InputRequest | null {
       kind: KindModelMigration,
       prompt: migrationAnchor,
       options: continueOption(),
-    }
-    req.id = inputID(req)
-    return req
+    };
+    req.id = inputID(req);
+    return req;
   }
   if (text.includes(continueAnchor)) {
-    let opts = parseMenuOptions(text)
-    if (opts.length === 0) opts = continueOption()
+    let opts = parseMenuOptions(text);
+    if (opts.length === 0) opts = continueOption();
     const req: InputRequest = {
       id: "",
       kind: KindNotice,
       prompt: continueAnchor,
       options: opts,
-    }
-    req.id = inputID(req)
-    return req
+    };
+    req.id = inputID(req);
+    return req;
   }
-  return null
+  return null;
 }
 
 /**
@@ -381,26 +374,26 @@ export function DetectInput(text: string): InputRequest | null {
  * ready-side gate (src/chat/ready.ts) is independent of it.
  */
 function detectApproval(text: string): InputRequest | null {
-  const anchor = approvalAnchors.find((a) => text.includes(a))
-  if (!anchor) return null
-  const tail = text.slice(text.indexOf(anchor) + anchor.length)
-  const opts = parseMenuOptions(tail)
+  const anchor = approvalAnchors.find((a) => text.includes(a));
+  if (!anchor) return null;
+  const tail = text.slice(text.indexOf(anchor) + anchor.length);
+  const opts = parseMenuOptions(tail);
   const req: InputRequest = {
     id: "",
     kind: KindApproval,
     prompt: anchor,
     options: opts,
-  }
-  if (findByAlias(req, "proceed") === null) return null
-  if (findByAlias(req, "deny") === null) return null
-  if (!opts.some((o) => o.highlighted)) return null
-  req.id = inputID(req)
-  return req
+  };
+  if (findByAlias(req, "proceed") === null) return null;
+  if (findByAlias(req, "deny") === null) return null;
+  if (!opts.some((o) => o.highlighted)) return null;
+  req.id = inputID(req);
+  return req;
 }
 
 /** Reports whether the idle composer prompt is on screen (gate behind DetectInput). */
 export function PromptReady(text: string): boolean {
-  return promptRE.test(text)
+  return promptRE.test(text);
 }
 
 /**
@@ -410,12 +403,12 @@ export function PromptReady(text: string): boolean {
 export function AutoDismissKeys(
   req: InputRequest | null,
 ): [Uint8Array | null, boolean] {
-  if (!req) return [null, false]
+  if (!req) return [null, false];
   switch (req.kind) {
     case KindUpdateNotice: {
-      const o = findByAlias(req, "skip")
-      if (o) return [o.keys, true]
-      return [null, false]
+      const o = findByAlias(req, "skip");
+      if (o) return [o.keys, true];
+      return [null, false];
     }
     case KindNotice:
       // A KindNotice is classified only when the screen shows the "Press enter
@@ -428,85 +421,107 @@ export function AutoDismissKeys(
       // blocked the codex plan-critic on its first send. Genuine
       // command-approval prompts are a different kind and are never classified as
       // KindNotice, so they still surface and are not auto-answered.
-      return [enc.encode("\r"), true]
+      return [enc.encode("\r"), true];
     case KindModelMigration:
-      return [enc.encode("\r"), true]
+      return [enc.encode("\r"), true];
     default:
-      return [null, false]
+      return [null, false];
   }
 }
 
 function continueOption(): InputOption[] {
   return [
-    { id: "continue", alias: "continue", label: "Continue", keys: enc.encode("\r") },
-  ]
+    {
+      id: "continue",
+      alias: "continue",
+      label: "Continue",
+      keys: enc.encode("\r"),
+    },
+  ];
 }
 
 function parseMenuOptions(text: string): InputOption[] {
-  const opts: InputOption[] = []
-  const seen = new Set<string>()
+  const opts: InputOption[] = [];
+  const seen = new Set<string>();
   for (const m of text.matchAll(menuRE)) {
-    const highlighted = m[1] !== undefined
-    const num = m[2]!
-    const label = cleanLabel(m[3]!)
+    const highlighted = m[1] !== undefined;
+    const num = m[2];
+    const label = cleanLabel(m[3]);
     // Dedup keeps the FIRST occurrence of a digit, so a scrollback echo that
     // collides with an already-parsed menu digit is dropped. Note this is NOT by
     // itself a defense against echoes lending a spurious "›" highlight to the
     // approval gate (a non-colliding digit survives) — detectApproval parses from
     // the anchor tail for that; see its comment.
-    if (seen.has(num) || label === "") continue
-    seen.add(num)
+    if (seen.has(num) || label === "") continue;
+    seen.add(num);
     opts.push({
       id: num,
       alias: aliasForLabel(label),
       label,
       keys: enc.encode(num + "\r"),
       highlighted,
-    })
+    });
   }
-  return opts
+  return opts;
 }
 
 function cleanLabel(s: string): string {
-  const i = s.indexOf("  ")
-  if (i >= 0) s = s.slice(0, i)
-  return s.trim()
+  const i = s.indexOf("  ");
+  if (i >= 0) s = s.slice(0, i);
+  return s.trim();
 }
 
 function aliasForLabel(label: string): string {
-  const l = label.toLowerCase()
+  const l = label.toLowerCase();
   // Interstitial tokens first so classification of update / notice menus is
   // unchanged ("Skip" must not become deny-adjacent). Notice/menu option aliases
   // may shift (a "Continue" row now aliases "proceed" where it had ""), but
   // nothing downstream acts on notice option aliases.
-  if (l.includes("skip")) return "skip"
-  if (l.includes("update")) return "update"
+  if (l.includes("skip")) return "skip";
+  if (l.includes("update")) return "update";
   // Yes/No approval vocabulary, mirroring claudecode.ts aliasForLabel.
-  if (containsAny(l, "proceed", "accept", "trust", "yes", "continue")) return "proceed"
+  if (containsAny(l, "proceed", "accept", "trust", "yes", "continue"))
+    return "proceed";
   // The deny tokens are comma/space-suffixed ("no,", "no ") on purpose so they
   // never match "now"/"notice"; that leaves a bare "No" (lowercasing to exactly
   // "no") matching neither, so an exact-match case is added codex-side — the
   // approval gate REQUIRES a deny row, and real dialogs render a bare "2. No".
-  if (l === "no") return "deny"
-  if (containsAny(l, "exit", "deny", "reject", "cancel", "no,", "no ", "don't", "do not")) {
-    return "deny"
+  if (l === "no") return "deny";
+  if (
+    containsAny(
+      l,
+      "exit",
+      "deny",
+      "reject",
+      "cancel",
+      "no,",
+      "no ",
+      "don't",
+      "do not",
+    )
+  ) {
+    return "deny";
   }
-  return ""
+  return "";
 }
 
 function containsAny(s: string, ...subs: string[]): boolean {
-  return subs.some((sub) => s.includes(sub))
+  return subs.some((sub) => s.includes(sub));
 }
 
 function findByAlias(req: InputRequest, alias: string): InputOption | null {
   for (const o of req.options ?? []) {
-    if (o.alias === alias) return o
+    if (o.alias === alias) return o;
   }
-  return null
+  return null;
 }
 
 function inputID(req: InputRequest): string {
-  const parts = [req.kind, req.prompt, ...(req.options ?? []).map((o) => o.label)]
-  const sum = createHash("sha256").update(parts.join("\0")).digest()
-  return sum.subarray(0, 8).toString("hex")
+  const parts = [
+    req.kind,
+    req.prompt,
+    ...(req.options ?? []).map((o) => o.label),
+  ];
+  const sum = createHash("sha256").update(parts.join("\0")).digest();
+  return sum.subarray(0, 8).toString("hex");
 }

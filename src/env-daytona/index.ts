@@ -9,12 +9,12 @@
 // `Context` type is referenced through the sanctioned public seam
 // (`meta-harness/async`); it is erased at runtime.
 
-export type { DaytonaConfig } from "./daytona.ts"
-export { daytona } from "./daytona.ts"
-export { fileCredentialInjector } from "./file-injector.ts"
+export type { DaytonaConfig } from "./daytona.ts";
+export { daytona } from "./daytona.ts";
+export { fileCredentialInjector } from "./file-injector.ts";
 export {
   CREDENTIAL_SENSITIVE_ENV_NAMES,
   credentialLeakProbe,
-} from "./leak-probe.ts"
-export { sweep } from "./sweep.ts"
-export type { SweepResult } from "./sweep.ts"
+} from "./leak-probe.ts";
+export { sweep } from "./sweep.ts";
+export type { SweepResult } from "./sweep.ts";

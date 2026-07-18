@@ -29,7 +29,7 @@ A conversation can be relaunched against a harness that supports resuming a prio
 session (currently `claude-code` and `codex`). Two entry points, both in
 `src/chat`:
 
-- `Open(ctx, { ..., resume })` — low level. `resume` names the *harness* session
+- `Open(ctx, { ..., resume })` — low level. `resume` names the _harness_ session
   id (not the chat session id). The resolved adapter's resume args are prepended
   to `args` at launch and the new chat session's `harnessSessionID` is seeded.
   Throws `ErrResumeUnsupported` when the harness has no resume sequence.
@@ -57,10 +57,14 @@ turn resumes once it is answered:
 for await (const ev of conv.events()) {
   if (ev.type === EventInputRequest && ev.input?.kind === "question") {
     // ev.input.prompt = "Which color should I use?", ev.input.options = Red/Blue/…
-    const release = await conv.acquireControl(ctx)
-    try { await conv.answer(ctx, ev.input.id, { optionID: "Blue" }) } finally { release() }
+    const release = await conv.acquireControl(ctx);
+    try {
+      await conv.answer(ctx, ev.input.id, { optionID: "Blue" });
+    } finally {
+      release();
+    }
   }
-  if (ev.type === EventTurn && ev.turn?.state === TurnStateComplete) break
+  if (ev.type === EventTurn && ev.turn?.state === TurnStateComplete) break;
 }
 ```
 
@@ -83,10 +87,14 @@ plan", or check agents with "are the agents running?".
 conversation's turns together with a tag saying where they came from:
 
 ```ts
-import { Open, HistorySourceStore, HistorySourceTranscript } from "meta-harness/chat"
+import {
+  Open,
+  HistorySourceStore,
+  HistorySourceTranscript,
+} from "meta-harness/chat";
 
-const conv = await Open(ctx, { harness: "claude-code", workingDir, store })
-const [turns, source] = await conv.historyWithSource()
+const conv = await Open(ctx, { harness: "claude-code", workingDir, store });
+const [turns, source] = await conv.historyWithSource();
 
 if (source === HistorySourceTranscript) {
   // history was parsed from the harness's on-disk transcript
@@ -123,10 +131,10 @@ import {
   ErrEmptySessionID,
   ErrEmptyWorkingDir,
   ErrSessionNotFound,
-} from "meta-harness/transcript"
+} from "meta-harness/transcript";
 
-const reader: Reader = new ClaudeCodeReader()
-const events = reader.read(harnessSessionID, workingDir)
+const reader: Reader = new ClaudeCodeReader();
+const events = reader.read(harnessSessionID, workingDir);
 ```
 
 `read(harnessSessionID, workingDir)` returns the parsed `Event[]` and throws on
@@ -135,12 +143,12 @@ missing or malformed input — including the sentinels `ErrEmptySessionID`,
 
 ### Support matrix
 
-| Harness      | Transcript reader class (`meta-harness/transcript`) | Chat-history adapter integration (`historyWithSource()` transcript path) |
-| ------------ | :-------------------------------------------------: | :----------------------------------------------------------------------: |
-| Claude Code  | ✓ `ClaudeCodeReader`                                | ✓ `readTranscript` reads the on-disk log                                 |
-| Codex        | ✓ `CodexReader`                                     | ✓ `readTranscript` reads the on-disk log                                 |
-| pi           | ✓ `PiReader`                                        | ✓ `readTranscript` reads the on-disk log                                 |
-| OpenCode     | ✗                                                   | n/a — no `readTranscript`, always uses the store                         |
+| Harness     | Transcript reader class (`meta-harness/transcript`) | Chat-history adapter integration (`historyWithSource()` transcript path) |
+| ----------- | :-------------------------------------------------: | :----------------------------------------------------------------------: |
+| Claude Code |                ✓ `ClaudeCodeReader`                 |                 ✓ `readTranscript` reads the on-disk log                 |
+| Codex       |                   ✓ `CodexReader`                   |                 ✓ `readTranscript` reads the on-disk log                 |
+| pi          |                    ✓ `PiReader`                     |                 ✓ `readTranscript` reads the on-disk log                 |
+| OpenCode    |                          ✗                          |             n/a — no `readTranscript`, always uses the store             |
 
 Claude Code, Codex, and pi read history from the harness's on-disk transcript
 once a `harnessSessionID` has been captured, falling back to the `Store` when the

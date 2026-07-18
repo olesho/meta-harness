@@ -9,31 +9,37 @@
 //   - teardown    → [] (nothing to tear down)
 // This makes `none` the correct baseline for the Tier-2 conformance suite.
 
-import type { Context } from "../async/index.ts"
-import type { Containment, ContainmentLayer, ExecOpts, PolicySpec, Workspace } from "./types.ts"
+import type { Context } from "../async/index.ts";
+import type {
+  Containment,
+  ContainmentLayer,
+  ExecOpts,
+  PolicySpec,
+  Workspace,
+} from "./types.ts";
 
 const identityLayer: ContainmentLayer = {
   execWrap(argv: string[], opts: ExecOpts): [string[], ExecOpts] {
-    return [argv, opts]
+    return [argv, opts];
   },
   crossUpload(): string[] {
-    return []
+    return [];
   },
   crossDownload(): string[] {
-    return []
+    return [];
   },
   pathMap(): string {
-    return ""
+    return "";
   },
   teardown(): string[] {
-    return []
+    return [];
   },
   // No aliasMap: host-URL rewriting defers entirely to the inner workspace.
-}
+};
 
 class NoneContainment implements Containment {
   name(): string {
-    return "none"
+    return "none";
   }
 
   async preflight(_ctx: Context, _ws: Workspace): Promise<void> {
@@ -41,11 +47,11 @@ class NoneContainment implements Containment {
   }
 
   layer(_policy: PolicySpec): ContainmentLayer {
-    return identityLayer
+    return identityLayer;
   }
 }
 
 /** Construct the `none` (identity) containment. */
 export function none(): Containment {
-  return new NoneContainment()
+  return new NoneContainment();
 }

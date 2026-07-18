@@ -74,11 +74,11 @@ those knobs into each CLI's flags. See [`wrapper`](modules/wrapper.md).
 
 ### `turns` — turn detection
 
-Interprets the pair *(screen snapshots, wrapper status events)* into a small vocabulary
+Interprets the pair _(screen snapshots, wrapper status events)_ into a small vocabulary
 of typed turn [`Event`](modules/turns.md#the-event-vocabulary)s: `ToolCall`,
 `TurnComplete`, `Blocked`, `Errored`, `InputRequested`, `InputResolved`. Each harness
 gets an **Adapter**; a `Watcher` runs two pumps (screen + status) and emits the merged
-event stream. Adapters also carry the *optional capabilities* — session-id extraction,
+event stream. Adapters also carry the _optional capabilities_ — session-id extraction,
 resume args, quit sequence, transcript reading — that the chat layer probes. See
 [`turns`](modules/turns.md).
 
@@ -101,7 +101,7 @@ narrow interfaces (see [The Backend/Adapter seam](#the-backendadapter-seam)).
 
 ### `oneshot` + `cli` — the entry points
 
-[`oneshot`](modules/oneshot.md) wraps `chat` into *prompt → single reply → teardown*.
+[`oneshot`](modules/oneshot.md) wraps `chat` into _prompt → single reply → teardown_.
 [`cli`](modules/cli.md) (`meta-harness-run`) is that loop as a disposable process:
 stdin → stdout, with orchestrator-friendly exit codes. These are what an orchestrator
 actually `exec`s per turn.
@@ -117,8 +117,8 @@ catalog (`versions.json`) tying each adapter's code to a known-good upstream rel
 
 A side stack (not part of the live turn path) for running turns inside **sandboxed
 workspaces**: [`env`](../env/README.md) is the two-axis plugin model — a
-**Provisioner** answers *where the machine comes from* (local, Daytona cloud), a
-**Containment** answers *what the agent may touch* (none, OpenShell kernel-level
+**Provisioner** answers _where the machine comes from_ (local, Daytona cloud), a
+**Containment** answers _what the agent may touch_ (none, OpenShell kernel-level
 isolation), and `compose()` pairs any provisioner with any containment. It also carries
 the credential injectors and `runStructuredTurn`, the host-side driver that executes one
 structured turn over any `Workspace`. `env-openshell` and `env-daytona` are the shipped
@@ -135,20 +135,20 @@ Here is what happens end-to-end when you `send()` a message to a `Conversation`:
 1. **You acquire control** (`acquireControl`) — a FIFO turnstile
    ([`ControlQueue`](modules/async.md)) guarantees only one `send`/`answer`/`quit` is in
    flight at a time.
-2. **`send` records turns and writes keystrokes.** It appends a *user* turn (state
-   `complete`) and a *pending assistant* turn to the [`Store`](modules/chat.md#the-store),
+2. **`send` records turns and writes keystrokes.** It appends a _user_ turn (state
+   `complete`) and a _pending assistant_ turn to the [`Store`](modules/chat.md#the-store),
    waits for the composer to be [ready](concepts.md#readiness) for harnesses that need it,
    then `writeStdin`s your text plus the harness's submit key.
 3. **The harness runs.** Its PTY bytes flow through the `wrapper` read loop into the
    `screen`, bumping the screen's `generation` and firing its subscription.
 4. **Two pumps observe it.** The `turns` [`Watcher`](modules/turns.md#the-watcher) runs a
-   *screen pump* (each snapshot → `adapter.onScreen`) and a *status pump* (each
+   _screen pump_ (each snapshot → `adapter.onScreen`) and a _status pump_ (each
    `wrapper` `SessionEvent` → `adapter.onWrapperStatus`), merging both into one
    `TurnEvent` stream.
 5. **chat drives the state machine.** Each `TurnEvent` moves the pending assistant turn:
    `ToolCall` keeps it streaming, `Blocked`/`Errored` mark it errored (with
    `httpCode`/`retryAfter`), `InputRequested` surfaces a prompt, and `TurnComplete` (or,
-   for some harnesses, an *idle-completion* fallback) marks it complete and extracts the
+   for some harnesses, an _idle-completion_ fallback) marks it complete and extracts the
    clean reply text.
 6. **Session id gets captured.** The first time the harness reveals its own session id —
    scraped from the screen, recovered from a raw output line, or located on disk — chat
@@ -158,7 +158,7 @@ Here is what happens end-to-end when you `send()` a message to a `Conversation`:
 Two subtleties worth calling out, because they explain a lot of the code:
 
 - **Turn completion is not always a single marker.** Claude Code, for example, defers
-  completion: chat sees the end-of-turn marker, then waits for the screen to *settle*
+  completion: chat sees the end-of-turn marker, then waits for the screen to _settle_
   (an idle window) before declaring the turn done. See
   [Concepts › Quiescence](concepts.md#quiescence--idle-completion).
 - **Interactive prompts are resolved through a policy ladder.** A surfaced
@@ -177,10 +177,10 @@ implementations. It depends only on a set of **structural interfaces** declared 
 
 - **`WrapperSession`** — the slice of a `wrapper` session chat needs: `writeStdin`,
   `acquireWriter`, `resize`, `stop`.
-- **`Adapter`** — a turns adapter expressed as a bag of *optional* methods
+- **`Adapter`** — a turns adapter expressed as a bag of _optional_ methods
   (`extractSessionID?`, `resumeArgs?`, `readTranscript?`, `busy?`, `quitSequence?`, …).
-  An adapter that implements none still drives a conversation (that is the *generic*
-  harness); each method it *does* implement lights up a capability.
+  An adapter that implements none still drives a conversation (that is the _generic_
+  harness); each method it _does_ implement lights up a capability.
 - **`Watcher`** — the turn-event stream (`events()` + `close()`).
 - **`Backend`** — the three injected dependencies bundled together: `resolveAdapter`,
   `start`, and `watch`.
@@ -189,7 +189,7 @@ This is the TypeScript analogue of Go's optional-interface pattern (`turns.Quitt
 `turns.BusyDetector`, …): capabilities are discovered by structural presence, not by a
 class hierarchy. The payoff is testability — the production path wires the real
 PTY-backed session, while the test suite wires an in-process fake harness against the
-*same* `Conversation` logic, unchanged. It is also the extension point: teaching
+_same_ `Conversation` logic, unchanged. It is also the extension point: teaching
 meta-harness a new harness is largely a matter of implementing more of these optional
 methods (see [Guides › Adding a harness](guides/adding-a-harness.md)).
 
@@ -202,7 +202,7 @@ Two ideas are load-bearing enough that the test suite freezes them.
 ### No internal leakage
 
 Public barrels (`src/*/index.ts`) may **never** re-export anything from
-`src/internal/**`. The one exception is `meta-harness/async`, which surfaces *exactly*
+`src/internal/**`. The one exception is `meta-harness/async`, which surfaces _exactly_
 `Context`, `ctxCanceled`, `ctxDeadlineExceeded`, and `fromAbortSignal` — and nothing
 else from the internal toolkit (not `Channel`, not `Mutex`, not `isSentinel`).
 
@@ -234,20 +234,20 @@ what ships**, because CI won't let it drift silently.
 meta-harness is a port of a Go codebase, and the port is faithful rather than
 idiomatic-at-all-costs. Recognizing the Go shapes makes the TypeScript easier to read:
 
-| Go concept | TypeScript port |
-| --- | --- |
-| `context.Context` | [`Context`](modules/async.md) with `background()` / `withCancel()` / `withDeadline()` |
-| `chan T` | `Channel<T>` (`send`/`receive`/`close`, async-iterable) |
-| `sync.Mutex` | `Mutex` (`lock`/`unlock`/`withLock`) |
-| `errors.Is(err, ErrX)` | `isSentinel(err, ErrX)` walking the `cause` chain |
-| sentinel errors (`var ErrX = errors.New(...)`) | `Sentinel` objects via `defineSentinel` |
-| optional interfaces (`v, ok := x.(turns.Quitter)`) | optional methods probed via `typeof x.method === "function"` |
-| `//go:embed versions.json` | `versions.json` read at module load |
-| package `init()` | side-effect import (`import "./probes.ts"`) registering defaults |
-| package-per-harness layout | adapter namespaces (`turns.claudecode`, `turns.codex`, …) |
+| Go concept                                         | TypeScript port                                                                       |
+| -------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| `context.Context`                                  | [`Context`](modules/async.md) with `background()` / `withCancel()` / `withDeadline()` |
+| `chan T`                                           | `Channel<T>` (`send`/`receive`/`close`, async-iterable)                               |
+| `sync.Mutex`                                       | `Mutex` (`lock`/`unlock`/`withLock`)                                                  |
+| `errors.Is(err, ErrX)`                             | `isSentinel(err, ErrX)` walking the `cause` chain                                     |
+| sentinel errors (`var ErrX = errors.New(...)`)     | `Sentinel` objects via `defineSentinel`                                               |
+| optional interfaces (`v, ok := x.(turns.Quitter)`) | optional methods probed via `typeof x.method === "function"`                          |
+| `//go:embed versions.json`                         | `versions.json` read at module load                                                   |
+| package `init()`                                   | side-effect import (`import "./probes.ts"`) registering defaults                      |
+| package-per-harness layout                         | adapter namespaces (`turns.claudecode`, `turns.codex`, …)                             |
 
 The `Context` model is the one to internalize: cancellation and deadlines propagate
-parent→child down a tree, a cancelled parent cancels its descendants, and the *cause*
+parent→child down a tree, a cancelled parent cancels its descendants, and the _cause_
 (`ctxCanceled` vs `ctxDeadlineExceeded`) is recoverable so callers can tell an abort
 from a timeout. This is why every blocking chat/oneshot method takes a `Context` as its
 first argument.

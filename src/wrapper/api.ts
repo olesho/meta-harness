@@ -5,13 +5,13 @@
 // keeping its own source free of any `internal` import path (the boundary the
 // exports-guard test enforces).
 
-export { classifyOutput } from "./internal/classifier.ts"
+export { classifyOutput } from "./internal/classifier.ts";
 
 export type {
   Classification,
   Classifier,
   ClassifierInput,
-} from "./internal/classification.ts"
+} from "./internal/classification.ts";
 
 export {
   ErrNone,
@@ -25,7 +25,7 @@ export {
   ErrUnknown,
   errorClassString,
   type ErrorClass,
-} from "./internal/errorclass.ts"
+} from "./internal/errorclass.ts";
 
 export {
   StatusIdle,
@@ -39,7 +39,7 @@ export {
   StatusUnknown,
   StatusBinaryNotFound,
   type Status,
-} from "./internal/status.ts"
+} from "./internal/status.ts";
 
 export {
   ErrInvalidConfig,
@@ -47,17 +47,17 @@ export {
   isBinaryNotFound,
   validateConfig,
   type Config,
-} from "./internal/config.ts"
+} from "./internal/config.ts";
 
 export {
   argsWithHarnessEffort,
   harnessSupportsEffort,
   isSupportedEffort,
-} from "./internal/effort.ts"
-export { argsWithHarnessModel } from "./internal/mode.ts"
+} from "./internal/effort.ts";
+export { argsWithHarnessModel } from "./internal/mode.ts";
 
 // PTY supervision surface.
-export { start, run, type RunContext } from "./internal/run.ts"
+export { start, run, type RunContext } from "./internal/run.ts";
 export {
   Session,
   ClassifierFunc,
@@ -68,5 +68,5 @@ export {
   type SessionEvent,
   type StdoutSink,
   type EventRecv,
-} from "./internal/session.ts"
-export { ErrPTYAllocation, ErrPTYRead } from "./internal/pty.ts"
+} from "./internal/session.ts";
+export { ErrPTYAllocation, ErrPTYRead } from "./internal/pty.ts";

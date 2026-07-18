@@ -32,52 +32,52 @@ import {
   SourceLive,
   type EventEnvelope,
   type ParsedEvent,
-} from "../../transcript/index.ts"
+} from "../../transcript/index.ts";
 import {
   AcquisitionModeStream,
   type AcquisitionMode,
-} from "../../turns/index.ts"
-import { admitParent } from "./filter.ts"
-import type { DisplaySink } from "./display.ts"
+} from "../../turns/index.ts";
+import { admitParent } from "./filter.ts";
+import type { DisplaySink } from "./display.ts";
 
 /** parseStreamLine, structurally bound off the resolved turns.Adapter. */
-export type StreamLineParser = (line: string) => ParsedEvent[]
+export type StreamLineParser = (line: string) => ParsedEvent[];
 
 /** Config wiring a StreamTap to its run-level identity and consumers. */
 export interface StreamTapConfig {
   /** Canonical harness key stamped onto every envelope. */
-  harness: string
+  harness: string;
   /** Run identity stamped onto every envelope (the chat session id in MH). */
-  runID: string
+  runID: string;
   /**
    * The LATCHED acquisition mode for the run (as chosen by planAcquisition).
    * Live stream events are emitted ONLY when this is Stream; under Hooks/Off the
    * live fan-off is inert (display still runs). Passed to `admitParent` as the
    * effective parent-source authority.
    */
-  mode: AcquisitionMode
+  mode: AcquisitionMode;
   /**
    * adapter.parseStreamLine (bound), or null/undefined when the adapter carries
    * no StreamParser — in which case no live events are ever produced.
    */
-  parser?: StreamLineParser | null
+  parser?: StreamLineParser | null;
   /**
    * The acquisition event bridge. Admitted, stamped envelopes are delivered here.
    * Absent ⇒ events are stamped/seq'd but not delivered (display-only runs).
    */
-  onEvent?: (env: EventEnvelope) => void
+  onEvent?: (env: EventEnvelope) => void;
   /** Best-effort bounded display sink (every raw line, never blocking). */
-  display?: DisplaySink | null
+  display?: DisplaySink | null;
   /**
    * Reads the chat-owned, already-captured harness session id ("" until capture
    * completes). StreamTap reads it to stamp events; it NEVER writes it.
    */
-  sessionID: () => string
+  sessionID: () => string;
   /**
    * Invoked once when an onEvent delivery throws. The run is being torn down;
    * StreamTap goes inert after the first failure (mirrors the Go cancel seam).
    */
-  onDeliverError?: (err: unknown) => void
+  onDeliverError?: (err: unknown) => void;
 }
 
 /**
@@ -90,18 +90,18 @@ export interface StreamTapConfig {
  * invoked serially by the LineSplitter, so the mutable fields need no locking.
  */
 export class StreamTap {
-  private readonly cfg: StreamTapConfig
-  private seq = 0
-  private deliverErr = false
+  private readonly cfg: StreamTapConfig;
+  private seq = 0;
+  private deliverErr = false;
   /**
    * Envelopes emitted before the session id was known, retained so their id can
    * be backfilled in place once capture completes. Holds the SAME object handed
    * to onEvent (the consumer sees the backfill through its reference).
    */
-  private readonly pending: EventEnvelope[] = []
+  private readonly pending: EventEnvelope[] = [];
 
   constructor(cfg: StreamTapConfig) {
-    this.cfg = cfg
+    this.cfg = cfg;
   }
 
   /**
@@ -112,12 +112,15 @@ export class StreamTap {
    * EITHER consumer needs it.
    */
   installs(): boolean {
-    return (this.cfg.parser != null && this.cfg.onEvent != null) || this.cfg.display != null
+    return (
+      (this.cfg.parser != null && this.cfg.onEvent != null) ||
+      this.cfg.display != null
+    );
   }
 
   /** True once live stream events should be emitted (Stream mode + a parser). */
   private emitLive(): boolean {
-    return this.cfg.mode === AcquisitionModeStream && this.cfg.parser != null
+    return this.cfg.mode === AcquisitionModeStream && this.cfg.parser != null;
   }
 
   /**
@@ -127,13 +130,13 @@ export class StreamTap {
    * Once a delivery has failed it becomes inert (the run is being torn down).
    */
   onLine(line: string): void {
-    this.cfg.display?.push(line)
-    if (this.deliverErr) return
-    if (!this.emitLive()) return
-    const parser = this.cfg.parser
-    if (!parser) return
+    this.cfg.display?.push(line);
+    if (this.deliverErr) return;
+    if (!this.emitLive()) return;
+    const parser = this.cfg.parser;
+    if (!parser) return;
     for (const pe of parser(line)) {
-      if (!this.emit(pe)) return
+      if (!this.emit(pe)) return;
     }
   }
 
@@ -144,21 +147,28 @@ export class StreamTap {
    * returns true. Events whose id is not yet known are recorded for backfill.
    */
   private emit(pe: ParsedEvent): boolean {
-    const source = pe.event.source ?? SourceLive
-    const isSubagent = (pe.parentSessionID ?? "") !== ""
-    if (!admitParent(this.cfg.mode, source as "live" | "file", pe.event.type ?? "", isSubagent)) {
-      return true
+    const source = pe.event.source ?? SourceLive;
+    const isSubagent = (pe.parentSessionID ?? "") !== "";
+    if (
+      !admitParent(
+        this.cfg.mode,
+        source as "live" | "file",
+        pe.event.type ?? "",
+        isSubagent,
+      )
+    ) {
+      return true;
     }
 
-    const ev = { ...pe.event }
-    ev.seq = this.seq
-    ev.schemaVersion = SchemaVersion
-    this.seq++
+    const ev = { ...pe.event };
+    ev.seq = this.seq;
+    ev.schemaVersion = SchemaVersion;
+    this.seq++;
 
     // hsid precedence: the parser-supplied id wins; else backfill from the
     // chat-captured id; else leave EMPTY and retain for after-the-fact backfill.
-    const parsedID = pe.harnessSessionID ?? ""
-    const hsid = parsedID !== "" ? parsedID : this.cfg.sessionID()
+    const parsedID = pe.harnessSessionID ?? "";
+    const hsid = parsedID !== "" ? parsedID : this.cfg.sessionID();
 
     const env: EventEnvelope = {
       runID: this.cfg.runID,
@@ -166,22 +176,22 @@ export class StreamTap {
       harnessSessionID: hsid,
       parentSessionID: pe.parentSessionID,
       event: ev,
-    }
+    };
     // Retain for backfill ONLY when the id is still unknown AND the parser did
     // not supply one (a parser-supplied id is final and never re-stamped).
     if (hsid === "" && parsedID === "") {
-      this.pending.push(env)
+      this.pending.push(env);
     }
 
-    if (!this.cfg.onEvent) return true
+    if (!this.cfg.onEvent) return true;
     try {
-      this.cfg.onEvent(env)
+      this.cfg.onEvent(env);
     } catch (err) {
-      this.deliverErr = true
-      this.cfg.onDeliverError?.(err)
-      return false
+      this.deliverErr = true;
+      this.cfg.onDeliverError?.(err);
+      return false;
     }
-    return true
+    return true;
   }
 
   /**
@@ -193,23 +203,23 @@ export class StreamTap {
    * backfill through the reference it already holds.
    */
   backfill(): void {
-    if (this.pending.length === 0) return
-    const id = this.cfg.sessionID()
-    if (id === "") return
+    if (this.pending.length === 0) return;
+    const id = this.cfg.sessionID();
+    if (id === "") return;
     for (const env of this.pending) {
-      if (env.harnessSessionID === "") env.harnessSessionID = id
+      if (env.harnessSessionID === "") env.harnessSessionID = id;
     }
-    this.pending.length = 0
+    this.pending.length = 0;
   }
 
   /** Test/diagnostic: the count of events still awaiting an id backfill. */
   pendingCount(): number {
-    return this.pending.length
+    return this.pending.length;
   }
 
   /** Test/diagnostic: the next arrival-order seq (i.e. the count emitted so far). */
   seqCount(): number {
-    return this.seq
+    return this.seq;
   }
 }
 
@@ -221,9 +231,10 @@ export class StreamTap {
  * the parser into the StreamTap.
  */
 export function adapterStreamParser(adapter: unknown): StreamLineParser | null {
-  const a = adapter as Record<string, unknown>
+  const a = adapter as Record<string, unknown>;
   if (a && typeof a.parseStreamLine === "function") {
-    return (line: string) => (a.parseStreamLine as StreamLineParser).call(a, line)
+    return (line: string) =>
+      (a.parseStreamLine as StreamLineParser).call(a, line);
   }
-  return null
+  return null;
 }

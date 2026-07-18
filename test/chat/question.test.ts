@@ -5,9 +5,9 @@
 // pty with the scriptable fake harness (screen shapes verified live against
 // claude-code 2.1.210; the live twin is test/chat/live_question.test.ts).
 
-import { afterEach, describe, expect, test } from "vitest"
+import { afterEach, describe, expect, test } from "vitest";
 
-import { Context } from "../../src/internal/async/index.ts"
+import { Context } from "../../src/internal/async/index.ts";
 import {
   DispositionAnswer,
   EventInputRequest,
@@ -20,43 +20,47 @@ import {
   type ConversationEvent,
   type InputAnswer,
   type Turn,
-} from "../../src/chat/index.ts"
-import { New, openFake, sendOneTurn } from "./fakeharness.ts"
+} from "../../src/chat/index.ts";
+import { New, openFake, sendOneTurn } from "./fakeharness.ts";
 
-const open = new Set<Conversation>()
+const open = new Set<Conversation>();
 
 async function openTracked(
   script: Parameters<typeof openFake>[0],
   overrides: Parameters<typeof openFake>[1] = {},
 ): Promise<Conversation> {
-  const conv = await openFake(script, overrides)
-  open.add(conv)
-  return conv
+  const conv = await openFake(script, overrides);
+  open.add(conv);
+  return conv;
 }
 
 afterEach(async () => {
   for (const conv of open) {
-    const { ctx } = Context.withDeadline(Context.background(), 2000)
-    await conv.close(ctx)
+    const { ctx } = Context.withDeadline(Context.background(), 2000);
+    await conv.close(ctx);
   }
-  open.clear()
-})
+  open.clear();
+});
 
 /** Answers the given request under the control token. */
-async function answerRequest(conv: Conversation, id: string, ans: InputAnswer): Promise<void> {
-  const ctx = Context.background()
-  const release = await conv.acquireControl(ctx)
+async function answerRequest(
+  conv: Conversation,
+  id: string,
+  ans: InputAnswer,
+): Promise<void> {
+  const ctx = Context.background();
+  const release = await conv.acquireControl(ctx);
   try {
-    await conv.answer(ctx, id, ans)
+    await conv.answer(ctx, id, ans);
   } finally {
-    release()
+    release();
   }
 }
 
 interface DrainResult {
-  turn: Turn
-  requests: ConversationEvent[]
-  resolutions: ConversationEvent[]
+  turn: Turn;
+  requests: ConversationEvent[];
+  resolutions: ConversationEvent[];
 }
 
 /**
@@ -69,35 +73,38 @@ async function driveToTerminalTurn(
   respond: (ev: ConversationEvent) => InputAnswer | null,
   timeoutMs: number,
 ): Promise<DrainResult> {
-  const bus = conv.events()
-  const requests: ConversationEvent[] = []
-  const resolutions: ConversationEvent[] = []
+  const bus = conv.events();
+  const requests: ConversationEvent[] = [];
+  const resolutions: ConversationEvent[] = [];
   const deadline = new Promise<never>((_, reject) =>
-    setTimeout(() => reject(new Error(`timed out after ${timeoutMs}ms`)), timeoutMs),
-  )
+    setTimeout(() => {
+      reject(new Error(`timed out after ${timeoutMs}ms`));
+    }, timeoutMs),
+  );
   for (;;) {
     const next = (async () => {
-      const { value, ok } = await bus.receive()
-      if (!ok) throw new Error("event channel closed before a terminal turn")
-      return value!
-    })()
-    const ev = await Promise.race([next, deadline])
+      const { value, ok } = await bus.receive();
+      if (!ok) throw new Error("event channel closed before a terminal turn");
+      return value!;
+    })();
+    const ev = await Promise.race([next, deadline]);
     if (ev.type === EventInputRequest) {
-      requests.push(ev)
-      const ans = respond(ev)
-      if (ans) await answerRequest(conv, ev.input!.id, ans)
-      continue
+      requests.push(ev);
+      const ans = respond(ev);
+      if (ans) await answerRequest(conv, ev.input!.id, ans);
+      continue;
     }
     if (ev.type === EventInputResolved) {
-      resolutions.push(ev)
-      continue
+      resolutions.push(ev);
+      continue;
     }
     if (
       ev.type === EventTurn &&
       ev.turn?.role === RoleAssistant &&
-      (ev.turn.state === TurnStateComplete || ev.turn.state === TurnStateErrored)
+      (ev.turn.state === TurnStateComplete ||
+        ev.turn.state === TurnStateErrored)
     ) {
-      return { turn: ev.turn, requests, resolutions }
+      return { turn: ev.turn, requests, resolutions };
     }
   }
 }
@@ -118,43 +125,43 @@ describe("question flow (real pty + fake harness)", () => {
       .AwaitDigit()
       .QuestionAnswered(30, [["Which color should I use?", "Blue"]])
       .Reply(40, "CHOSEN: Blue", "Synthesized", "5s")
-      .Build()
+      .Build();
 
-    const conv = await openTracked(script)
-    await sendOneTurn(conv, "Ask me which color to use")
+    const conv = await openTracked(script);
+    await sendOneTurn(conv, "Ask me which color to use");
 
     const { turn, requests, resolutions } = await driveToTerminalTurn(
       conv,
       (ev) => (ev.input!.kind === "question" ? { optionID: "Blue" } : null),
       8000,
-    )
+    );
 
-    expect(requests.length).toBe(1)
-    const req = requests[0]!.input!
-    expect(req.kind).toBe("question")
-    expect(req.prompt).toBe("Which color should I use?")
-    expect(req.header).toBe("Color")
+    expect(requests.length).toBe(1);
+    const req = requests[0].input!;
+    expect(req.kind).toBe("question");
+    expect(req.prompt).toBe("Which color should I use?");
+    expect(req.header).toBe("Color");
     expect(req.options!.map((o) => o.label)).toEqual([
       "Red",
       "Blue",
       "Type something.",
       "Chat about this",
-    ])
-    expect(req.options![1]!.description).toBe("Use blue.")
+    ]);
+    expect(req.options![1].description).toBe("Use blue.");
 
-    expect(resolutions.length).toBe(1)
-    expect(resolutions[0]!.input!.id).toBe(req.id)
+    expect(resolutions.length).toBe(1);
+    expect(resolutions[0].input!.id).toBe(req.id);
 
-    expect(turn.state).toBe(TurnStateComplete)
-    expect(turn.text).toContain("CHOSEN: Blue")
-  })
+    expect(turn.state).toBe(TurnStateComplete);
+    expect(turn.text).toContain("CHOSEN: Blue");
+  });
 
   // A two-question dialog: each question surfaces in sequence (the second
   // supersedes the first), the review pane surfaces as question_review, and
   // answering it completes the round trip.
   test("multi-question dialog: question, question, review, done", async () => {
-    const colorQ = "Which color should I use?"
-    const sizeQ = "Which size should I use?"
+    const colorQ = "Which color should I use?";
+    const sizeQ = "Which size should I use?";
     const script = New("claude-code")
       .Idle()
       .AwaitSubmit()
@@ -179,38 +186,40 @@ describe("question flow (real pty + fake harness)", () => {
         [sizeQ, "Small"],
       ])
       .Reply(40, "CHOSEN: Blue,Small", "Synthesized", "7s")
-      .Build()
+      .Build();
 
-    const conv = await openTracked(script)
-    await sendOneTurn(conv, "Ask me two questions")
+    const conv = await openTracked(script);
+    await sendOneTurn(conv, "Ask me two questions");
 
     const answers: Record<string, InputAnswer> = {
       [colorQ]: { optionID: "Blue" },
       [sizeQ]: { optionID: "Small" },
-    }
+    };
     const { turn, requests, resolutions } = await driveToTerminalTurn(
       conv,
       (ev) =>
         ev.input!.kind === "question_review"
           ? { optionID: "proceed" }
-          : answers[ev.input!.prompt] ?? null,
+          : (answers[ev.input!.prompt] ?? null),
       8000,
-    )
+    );
 
     expect(requests.map((r) => r.input!.kind)).toEqual([
       "question",
       "question",
       "question_review",
-    ])
-    expect(requests[0]!.input!.header).toBe("Color")
-    expect(requests[1]!.input!.header).toBe("Size")
-    expect(requests[2]!.input!.prompt).toContain("Ready to submit your answers?")
+    ]);
+    expect(requests[0].input!.header).toBe("Color");
+    expect(requests[1].input!.header).toBe("Size");
+    expect(requests[2].input!.prompt).toContain(
+      "Ready to submit your answers?",
+    );
     // Every request resolves: two superseded, one answered away.
-    expect(resolutions.length).toBe(3)
+    expect(resolutions.length).toBe(3);
 
-    expect(turn.state).toBe(TurnStateComplete)
-    expect(turn.text).toContain("CHOSEN: Blue,Small")
-  })
+    expect(turn.state).toBe(TurnStateComplete);
+    expect(turn.text).toContain("CHOSEN: Blue,Small");
+  });
 
   // An InputPolicy can resolve questions without a live client — nothing
   // surfaces, the turn just runs to completion.
@@ -219,20 +228,29 @@ describe("question flow (real pty + fake harness)", () => {
       .Idle()
       .AwaitSubmit()
       .Working(30, "Thinking")
-      .Question(30, " ☐ Color", "Which color should I use?", [["Red"], ["Blue"]])
+      .Question(30, " ☐ Color", "Which color should I use?", [
+        ["Red"],
+        ["Blue"],
+      ])
       .AwaitDigit()
       .QuestionAnswered(30, [["Which color should I use?", "Red"]])
       .Reply(40, "CHOSEN: Red", "Synthesized", "5s")
-      .Build()
+      .Build();
 
     const conv = await openTracked(script, {
-      inputPolicy: { byKind: { question: { kind: DispositionAnswer, optionID: "1" } } },
-    })
-    await sendOneTurn(conv, "Ask me which color to use")
+      inputPolicy: {
+        byKind: { question: { kind: DispositionAnswer, optionID: "1" } },
+      },
+    });
+    await sendOneTurn(conv, "Ask me which color to use");
 
-    const { turn, requests } = await driveToTerminalTurn(conv, () => null, 8000)
-    expect(requests.length).toBe(0)
-    expect(turn.state).toBe(TurnStateComplete)
-    expect(turn.text).toContain("CHOSEN: Red")
-  })
-})
+    const { turn, requests } = await driveToTerminalTurn(
+      conv,
+      () => null,
+      8000,
+    );
+    expect(requests.length).toBe(0);
+    expect(turn.state).toBe(TurnStateComplete);
+    expect(turn.text).toContain("CHOSEN: Red");
+  });
+});

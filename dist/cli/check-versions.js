@@ -13,7 +13,7 @@
 // This is DELIBERATELY a different scheme from the 0/1/2/124 turnproto codes the
 // `run` CLI (src/cli/run.ts) uses — do not conflate them.
 import { pathToFileURL } from "node:url";
-import { checkAll, hasDrift, errFetch, errParse } from "../drift/sentry.js";
+import { checkAll, hasDrift, errFetch, errParse, } from "../drift/sentry.js";
 import { isSentinel } from "../internal/async/index.js";
 export const ExitOK = 0;
 export const ExitError = 1;
@@ -41,7 +41,9 @@ export async function main() {
                 "\n");
             return ExitError;
         }
-        process.stderr.write("check-versions: " + (err instanceof Error ? err.message : String(err)) + "\n");
+        process.stderr.write("check-versions: " +
+            (err instanceof Error ? err.message : String(err)) +
+            "\n");
         return ExitError;
     }
     for (const r of rows) {

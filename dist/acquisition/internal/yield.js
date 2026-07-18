@@ -5,7 +5,7 @@
 // running harness: it owns a private yield file, `request(reason)` writes it
 // atomically, and the yield-guard PreToolUse hook checks it before each tool —
 // sub-minute cooperative preemption for any hook-capable harness.
-import { mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync, } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import path from "node:path";
 // HW_* env var names — the orchestrator SETS them in the harness launch env; the

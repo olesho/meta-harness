@@ -9,4 +9,4 @@
 // subpath barrel (./screen, ./wrapper, ./turns, ./transcript, ./chat,
 // ./discovery, ./versions) exposes anything from `src/internal/**`.
 
-export const VERSION = "0.0.0"
+export const VERSION = "0.0.0";

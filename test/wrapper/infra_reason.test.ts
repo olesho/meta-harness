@@ -4,30 +4,30 @@
 // /spawn .* failed/i. These assertions freeze the meta-harness wording so a
 // refactor can't silently break that classification on the orchestrator side.
 
-import { describe, expect, test } from "vitest"
+import { describe, expect, test } from "vitest";
 import {
   ErrBinaryNotFound,
   ErrPTYAllocation,
   run,
-} from "../../src/wrapper/index.ts"
-import { newScreen } from "../../src/screen/index.ts"
+} from "../../src/wrapper/index.ts";
+import { newScreen } from "../../src/screen/index.ts";
 
 describe("infra-failure reasons match the orchestrator INFRA_CAUSE_PATTERNS", () => {
   test("ErrBinaryNotFound message contains 'not found'", () => {
-    expect(ErrBinaryNotFound.message.toLowerCase()).toContain("not found")
-  })
+    expect(ErrBinaryNotFound.message.toLowerCase()).toContain("not found");
+  });
 
   test("ErrPTYAllocation message contains 'pty'", () => {
-    expect(ErrPTYAllocation.message.toLowerCase()).toContain("pty")
-  })
+    expect(ErrPTYAllocation.message.toLowerCase()).toContain("pty");
+  });
 
   test("run() with a missing binary surfaces a reason containing 'not found'", async () => {
     const { result, err } = await run(undefined, {
       binaryPath: "/nonexistent/definitely-not-a-real-harness-xyz",
       stdout: newScreen(80, 24),
       harness: "generic",
-    })
-    expect(err).not.toBeNull()
-    expect(result.reason.toLowerCase()).toContain("not found")
-  })
-})
+    });
+    expect(err).not.toBeNull();
+    expect(result.reason.toLowerCase()).toContain("not found");
+  });
+});

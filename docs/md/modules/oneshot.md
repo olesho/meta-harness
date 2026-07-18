@@ -8,11 +8,17 @@ separate-process [`run` CLI](cli.md).
 
 ```ts
 import {
-  runOneShot, runOneShotDetailed,
-  type OneShotConfig, type OneShotOutcome,
-  DeadlineError, TurnErroredError, EmptyPromptError,
-  cleanEnv, isLeakedClaudeEnv, AutoAcceptTrust,
-} from "meta-harness/oneshot"
+  runOneShot,
+  runOneShotDetailed,
+  type OneShotConfig,
+  type OneShotOutcome,
+  DeadlineError,
+  TurnErroredError,
+  EmptyPromptError,
+  cleanEnv,
+  isLeakedClaudeEnv,
+  AutoAcceptTrust,
+} from "meta-harness/oneshot";
 ```
 
 ---
@@ -32,20 +38,20 @@ always tearing down first. Throws on the expected failure modes:
 - otherwise, the underlying error from `Open`/`send`.
 
 ```ts
-import { runOneShot } from "meta-harness/oneshot"
-import { Context } from "meta-harness/async"
+import { runOneShot } from "meta-harness/oneshot";
+import { Context } from "meta-harness/async";
 
-const { ctx, cancel } = Context.withDeadline(Context.background(), 120_000)
+const { ctx, cancel } = Context.withDeadline(Context.background(), 120_000);
 try {
   const reply = await runOneShot(ctx, {
     harness: "claude-code",
     binaryPath: "/usr/local/bin/claude",
     prompt: "Summarize README.md in one sentence.",
     workingDir: process.cwd(),
-  })
-  console.log(reply)
+  });
+  console.log(reply);
 } finally {
-  cancel()
+  cancel();
 }
 ```
 
@@ -61,14 +67,29 @@ error — so you can read the transcript back afterward.
 
 ```ts
 type OneShotOutcome =
-  | { status: "completed";     reply: string;  harnessSessionID: string;  workingDir: string }
-  | { status: "errored";       reason: string; harnessSessionID: string;  workingDir: string }
-  | { status: "deadline";                      harnessSessionID: string;  workingDir: string }
-  | { status: "startup_error"; reason: string; harnessSessionID?: string; workingDir: string }
+  | {
+      status: "completed";
+      reply: string;
+      harnessSessionID: string;
+      workingDir: string;
+    }
+  | {
+      status: "errored";
+      reason: string;
+      harnessSessionID: string;
+      workingDir: string;
+    }
+  | { status: "deadline"; harnessSessionID: string; workingDir: string }
+  | {
+      status: "startup_error";
+      reason: string;
+      harnessSessionID?: string;
+      workingDir: string;
+    };
 ```
 
 The first three guarantee a `harnessSessionID` (the session became durable);
-`startup_error` covers failures *before* a session existed (blank prompt, launch failure,
+`startup_error` covers failures _before_ a session existed (blank prompt, launch failure,
 early PTY error, or a deadline during `Open`).
 
 ---
@@ -77,18 +98,18 @@ early PTY error, or a deadline during `Open`).
 
 ```ts
 interface OneShotConfig {
-  harness: string          // adapter name, e.g. "claude-code", "codex"
-  binaryPath: string       // absolute path to the harness binary
-  prompt: string           // the text to submit
-  args?: string[]
-  workingDir?: string
-  env?: string[]           // KEY=VALUE; run through cleanEnv() unless you handle it
-  effort?: string
-  model?: string
-  cols?: number            // default 120
-  rows?: number            // default 40
-  idleGap?: number         // test-only ms overrides
-  markerGap?: number
+  harness: string; // adapter name, e.g. "claude-code", "codex"
+  binaryPath: string; // absolute path to the harness binary
+  prompt: string; // the text to submit
+  args?: string[];
+  workingDir?: string;
+  env?: string[]; // KEY=VALUE; run through cleanEnv() unless you handle it
+  effort?: string;
+  model?: string;
+  cols?: number; // default 120
+  rows?: number; // default 40
+  idleGap?: number; // test-only ms overrides
+  markerGap?: number;
 }
 ```
 
@@ -101,9 +122,11 @@ from you.
 ## Errors
 
 ```ts
-class DeadlineError extends Error {}                 // "one-shot: context deadline exceeded"
-class TurnErroredError extends Error { reason: string }   // "one-shot: turn errored: <reason>"
-class EmptyPromptError extends Error {}              // "one-shot: empty prompt"
+class DeadlineError extends Error {} // "one-shot: context deadline exceeded"
+class TurnErroredError extends Error {
+  reason: string;
+} // "one-shot: turn errored: <reason>"
+class EmptyPromptError extends Error {} // "one-shot: empty prompt"
 ```
 
 `runOneShot` throws these; `runOneShotDetailed` maps them to the `deadline` / `errored` /

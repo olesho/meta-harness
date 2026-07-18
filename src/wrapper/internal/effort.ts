@@ -6,7 +6,7 @@ import {
   argsContainFlag,
   normHarness,
   prependArgs,
-} from "./harnessargs.ts"
+} from "./harnessargs.ts";
 
 export function isSupportedEffort(effort: string): boolean {
   switch (effort) {
@@ -15,9 +15,9 @@ export function isSupportedEffort(effort: string): boolean {
     case "high":
     case "xhigh":
     case "max":
-      return true
+      return true;
     default:
-      return false
+      return false;
   }
 }
 
@@ -26,14 +26,14 @@ export function harnessSupportsEffort(harness: string): boolean {
     case "claude":
     case "claude-code":
     case "codex":
-      return true
+      return true;
     default:
-      return false
+      return false;
   }
 }
 
 function codexEffort(effort: string): string {
-  return effort === "max" ? "xhigh" : effort
+  return effort === "max" ? "xhigh" : effort;
 }
 
 /** Prepend a per-harness effort flag/config override. An existing one wins. */
@@ -42,20 +42,20 @@ export function argsWithHarnessEffort(
   args: string[],
   effort: string,
 ): string[] {
-  if (effort === "") return args
+  if (effort === "") return args;
   switch (normHarness(harness)) {
     case "claude":
     case "claude-code":
-      if (argsContainFlag(args, "--effort")) return args
-      return prependArgs(args, "--effort", effort)
+      if (argsContainFlag(args, "--effort")) return args;
+      return prependArgs(args, "--effort", effort);
     case "codex":
-      if (argsContainConfigKey(args, "model_reasoning_effort")) return args
+      if (argsContainConfigKey(args, "model_reasoning_effort")) return args;
       return prependArgs(
         args,
         "-c",
         `model_reasoning_effort="${codexEffort(effort)}"`,
-      )
+      );
     default:
-      return args
+      return args;
   }
 }

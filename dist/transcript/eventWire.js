@@ -28,7 +28,10 @@ function toWire(pe) {
         w.source = e.source;
     if (e.nativeID)
         w.native_id = e.nativeID;
-    const out = { harness_session_id: pe.harnessSessionID, event: w };
+    const out = {
+        harness_session_id: pe.harnessSessionID,
+        event: w,
+    };
     if (pe.parentSessionID)
         out.parent_session_id = pe.parentSessionID;
     return out;

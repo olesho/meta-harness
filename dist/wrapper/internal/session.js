@@ -237,7 +237,9 @@ export class Session {
         }
         const ctxErr = await Promise.race([
             this.donePromise.then(() => null),
-            ctx.done().then(() => (ctx.err?.() ?? new Error("context cancelled"))),
+            ctx
+                .done()
+                .then(() => (ctx.err?.() ?? new Error("context cancelled"))),
         ]);
         return ctxErr;
     }
@@ -290,7 +292,9 @@ export class Session {
     // --- internal supervision ------------------------------------------------
     /** Begin supervising; wires PTY callbacks and the classifier timer. */
     start(ctx) {
-        this.pty.onData((d) => this.onOutput(d));
+        this.pty.onData((d) => {
+            this.onOutput(d);
+        });
         this.pty.onExit((e) => {
             if (this.exitInfo)
                 return;
@@ -302,7 +306,9 @@ export class Session {
             // Capture the cancellation cause (deadline vs cancel) at fire time — the
             // Context sets err() before resolving done() — so classifyExit can tell a
             // real timeout from an abort.
-            void ctx.done().then(() => this.q.push({ kind: "ctx", err: ctx.err?.() }));
+            void ctx.done().then(() => {
+                this.q.push({ kind: "ctx", err: ctx.err?.() });
+            });
         }
         if (this.cfg.stdin != null) {
             void this.forwardStdin(this.cfg.stdin);
@@ -396,7 +402,11 @@ export class Session {
             clearTimeout(this.escalateTimer);
         this.lineSplitter?.flush();
         this.pty.closeStdin();
-        this.trace.emit({ at: new Date(), kind: "pty_closed", fields: { pid: this._pid } });
+        this.trace.emit({
+            at: new Date(),
+            kind: "pty_closed",
+            fields: { pid: this._pid },
+        });
         const exit = this.exitInfo ?? { exitCode: -1, signal: 0 };
         const result = {
             status: StatusUnknown,
@@ -525,7 +535,10 @@ export class Session {
                 this.trace.emit({
                     at: new Date(),
                     kind: "output_quiet",
-                    fields: { since_last_output_ms: sinceLast, threshold_ms: cfg.idleQuiet },
+                    fields: {
+                        since_last_output_ms: sinceLast,
+                        threshold_ms: cfg.idleQuiet,
+                    },
                 });
                 quietEmitted = true;
             }
@@ -533,7 +546,10 @@ export class Session {
                 this.trace.emit({
                     at: new Date(),
                     kind: "output_classify_threshold",
-                    fields: { since_last_output_ms: sinceLast, threshold_ms: cfg.idleClassify },
+                    fields: {
+                        since_last_output_ms: sinceLast,
+                        threshold_ms: cfg.idleClassify,
+                    },
                 });
                 classifyEmitted = true;
             }
@@ -541,7 +557,10 @@ export class Session {
                 this.trace.emit({
                     at: new Date(),
                     kind: "harness_stale",
-                    fields: { since_last_output_ms: sinceLast, threshold_ms: cfg.staleThreshold },
+                    fields: {
+                        since_last_output_ms: sinceLast,
+                        threshold_ms: cfg.staleThreshold,
+                    },
                 });
                 this.recordStatusChange({
                     status: StatusStale,
@@ -565,7 +584,10 @@ export class Session {
             if (classification.status === "")
                 return;
             this.emitClassifierTrace(classification);
-            this.q.push({ kind: "class", c: toInternalClassification(classification) });
+            this.q.push({
+                kind: "class",
+                c: toInternalClassification(classification),
+            });
             if (classification.terminal)
                 dispatched = true;
         }, tick);

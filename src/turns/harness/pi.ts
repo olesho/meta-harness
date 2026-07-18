@@ -4,43 +4,43 @@
 // via pi's --session-id/--session flags, a graceful "/quit", and a BusyDetector +
 // PromptReady keyed off pi's status line. Port of pkg/turns/harness/pi.
 
-import { randomUUID } from "node:crypto"
-import { homedir } from "node:os"
-import path from "node:path"
+import { randomUUID } from "node:crypto";
+import { homedir } from "node:os";
+import path from "node:path";
 
-import type { Snapshot } from "../../screen/index.ts"
-import { PiReader } from "../../transcript/pi/pi.ts"
-import { GenericAdapter } from "../generic.ts"
-import type { Adapter, Turn } from "../types.ts"
+import type { Snapshot } from "../../screen/index.ts";
+import { PiReader } from "../../transcript/pi/pi.ts";
+import { GenericAdapter } from "../generic.ts";
+import type { Adapter, Turn } from "../types.ts";
 
-const enc = new TextEncoder()
+const enc = new TextEncoder();
 
 // quitCommand is pi's "/quit" slash command followed by Enter (pi's submit key).
-const quitCommand = enc.encode("/quit\r")
+const quitCommand = enc.encode("/quit\r");
 
 // busyTexts are the status-line labels pi paints while a turn is in flight.
 // Matching the trailing ellipsis avoids a false hit on the "Thinking Level" menu.
-const busyTexts = ["Working...", "Working…", "Thinking...", "Thinking…"]
+const busyTexts = ["Working...", "Working…", "Thinking...", "Thinking…"];
 
 // statusLineRE matches pi's idle status-line context-usage indicator (e.g.
 // "0.0%/131k"). Painted once pi's composer is accepting input.
-const statusLineRE = /\d+(?:\.\d+)?%\/\d+[kK]/
+const statusLineRE = /\d+(?:\.\d+)?%\/\d+[kK]/;
 
 function busy(text: string): boolean {
-  return busyTexts.some((m) => text.includes(m))
+  return busyTexts.some((m) => text.includes(m));
 }
 
 /** Adapter implements turns.Adapter for the pi coding agent. */
 export class PiAdapter extends GenericAdapter implements Adapter {
   // root overrides the pi agent config directory for the reader/tests (the
   // ~/.pi/agent equivalent). Empty means use the pinned/env-derived dir.
-  root = ""
+  root = "";
   // pinnedSessionsDir is the absolute sessions dir resolved from the launch env
   // + cwd at Open (see bindLaunchEnv). Empty until bound.
-  pinnedSessionsDir = ""
+  pinnedSessionsDir = "";
 
   override name(): string {
-    return "pi"
+    return "pi";
   }
 
   /**
@@ -52,7 +52,7 @@ export class PiAdapter extends GenericAdapter implements Adapter {
    * adapter.
    */
   streamInterleaved(): boolean {
-    return false
+    return false;
   }
 
   /**
@@ -61,18 +61,18 @@ export class PiAdapter extends GenericAdapter implements Adapter {
    * launched with (see PI_CODING_AGENT_* precedence).
    */
   bindLaunchEnv(env: string[], workingDir: string): void {
-    this.pinnedSessionsDir = piSessionsDirFromEnv(env, workingDir)
+    this.pinnedSessionsDir = piSessionsDirFromEnv(env, workingDir);
   }
 
   /** Implements turns.SessionInitializer — `pi --session-id <uuid>`. */
   initSession(): [string[], string] {
-    const id = randomUUID()
-    return [["--session-id", id], id]
+    const id = randomUUID();
+    return [["--session-id", id], id];
   }
 
   /** Implements turns.SessionResumer — `pi --session <uuid>`. */
   resumeArgs(id: string): string[] {
-    return ["--session", id]
+    return ["--session", id];
   }
 
   /** Implements turns.SessionControlFlags — flags chat manages, banned from args. */
@@ -87,24 +87,27 @@ export class PiAdapter extends GenericAdapter implements Adapter {
       "--resume",
       "--no-session",
       "--session-dir",
-    ]
+    ];
   }
 
   /** Implements turns.TranscriptReader. Timestamp is forwarded as-is (may be undefined). */
   readTranscript(harnessSessionID: string, workingDir: string): Turn[] {
-    return new PiReader({ root: this.root, sessionsDir: this.pinnedSessionsDir })
+    return new PiReader({
+      root: this.root,
+      sessionsDir: this.pinnedSessionsDir,
+    })
       .read(harnessSessionID, workingDir)
-      .map((t) => ({ role: t.role, text: t.text, timestamp: t.timestamp }))
+      .map((t) => ({ role: t.role, text: t.text, timestamp: t.timestamp }));
   }
 
   /** Implements turns.Quitter. */
   quitSequence(): Uint8Array {
-    return quitCommand
+    return quitCommand;
   }
 
   /** Implements turns.BusyDetector. */
   busy(snap: Snapshot): boolean {
-    return busy(snap.text)
+    return busy(snap.text);
   }
 }
 
@@ -118,29 +121,29 @@ export class PiAdapter extends GenericAdapter implements Adapter {
 function piSessionsDirFromEnv(env: string[], workingDir: string): string {
   const lookup = (key: string): string | undefined => {
     for (let i = env.length - 1; i >= 0; i--) {
-      const e = env[i]!
-      const eq = e.indexOf("=")
-      if (eq < 0) continue
-      if (e.slice(0, eq) === key) return e.slice(eq + 1)
+      const e = env[i];
+      const eq = e.indexOf("=");
+      if (eq < 0) continue;
+      if (e.slice(0, eq) === key) return e.slice(eq + 1);
     }
-    return undefined
-  }
+    return undefined;
+  };
   const anchor = (p: string): string =>
-    path.isAbsolute(p) ? p : path.resolve(workingDir || ".", p)
+    path.isAbsolute(p) ? p : path.resolve(workingDir || ".", p);
 
-  const direct = lookup("PI_CODING_AGENT_SESSION_DIR")
-  if (direct) return anchor(direct)
+  const direct = lookup("PI_CODING_AGENT_SESSION_DIR");
+  if (direct) return anchor(direct);
 
-  const agentDir = lookup("PI_CODING_AGENT_DIR")
-  if (agentDir) return path.join(anchor(agentDir), "sessions")
+  const agentDir = lookup("PI_CODING_AGENT_DIR");
+  if (agentDir) return path.join(anchor(agentDir), "sessions");
 
-  const home = lookup("HOME") ?? homedir()
-  return path.join(anchor(home), ".pi", "agent", "sessions")
+  const home = lookup("HOME") ?? homedir();
+  return path.join(anchor(home), ".pi", "agent", "sessions");
 }
 
 /** Constructs a pi adapter. */
 export function New(): PiAdapter {
-  return new PiAdapter()
+  return new PiAdapter();
 }
 
 /**
@@ -148,5 +151,5 @@ export function New(): PiAdapter {
  * line is painted and no turn is in flight.
  */
 export function PromptReady(text: string): boolean {
-  return !busy(text) && statusLineRE.test(text)
+  return !busy(text) && statusLineRE.test(text);
 }

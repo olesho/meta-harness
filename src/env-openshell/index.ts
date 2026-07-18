@@ -11,52 +11,52 @@
 //  - deterministic sandbox naming for crash recovery
 //  - retention semantics mirroring orche's sandboxRetention
 
-import { createHash } from "node:crypto"
-import { spawnSync } from "node:child_process"
-import { argvToShell, shQuote } from "../env/argv.ts"
-import type { Context } from "../async/index.ts"
+import { createHash } from "node:crypto";
+import { spawnSync } from "node:child_process";
+import { argvToShell, shQuote } from "../env/argv.ts";
+import type { Context } from "../async/index.ts";
 import type {
   Containment,
   ContainmentLayer,
   ExecOpts,
   PolicySpec,
   Workspace,
-} from "../env/types.ts"
+} from "../env/types.ts";
 
 /** CLI runner result shape. */
 export interface CliResult {
-  code: number
-  stdout: string
-  stderr: string
+  code: number;
+  stdout: string;
+  stderr: string;
 }
 
 /** Injectable host runner for `openshell …` invocations. Tests script the daemon
  *  without a live gateway; default spawns via node:child_process. */
-export type CliRunner = (argv: string[]) => CliResult
+export type CliRunner = (argv: string[]) => CliResult;
 
 function spawnOpenShellCli(argv: string[]): CliResult {
   try {
-    const p = spawnSync(argv[0]!, argv.slice(1), {
+    const p = spawnSync(argv[0], argv.slice(1), {
       stdio: ["ignore", "pipe", "pipe"],
       encoding: "utf-8",
-    })
+    });
     return {
       code: p.status ?? -1,
       stdout: p.stdout ?? "",
       stderr: p.stderr ?? "",
-    }
+    };
   } catch (err) {
     return {
       code: -1,
       stdout: "",
       stderr: err instanceof Error ? err.message : String(err),
-    }
+    };
   }
 }
 
 /** Strip ANSI SGR color escapes from CLI output. */
 function stripAnsi(s: string): string {
-  return s.replace(/\x1b\[[0-9;]*m/g, "")
+  return s.replace(/\x1b\[[0-9;]*m/g, "");
 }
 
 /** Normalize an agentId into an OpenShell sandbox name: `openshell-` + lowercased,
@@ -66,28 +66,28 @@ export function sandboxName(agentId: string): string {
   const slug = agentId
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-  const MAX = 40
-  const prefix = "openshell-"
-  if (slug.length + prefix.length <= MAX) return `${prefix}${slug}`
-  const hash = createHash("sha256").update(agentId).digest("hex").slice(0, 8)
-  const keep = MAX - prefix.length - 1 - hash.length
-  return `${prefix}${slug.slice(0, Math.max(1, keep))}-${hash}`
+    .replace(/^-+|-+$/g, "");
+  const MAX = 40;
+  const prefix = "openshell-";
+  if (slug.length + prefix.length <= MAX) return `${prefix}${slug}`;
+  const hash = createHash("sha256").update(agentId).digest("hex").slice(0, 8);
+  const keep = MAX - prefix.length - 1 - hash.length;
+  return `${prefix}${slug.slice(0, Math.max(1, keep))}-${hash}`;
 }
 
 /** Loopback hosts that cannot reach a host gateway. */
-const LOOPBACK = new Set(["127.0.0.1", "localhost", "::1", "0.0.0.0"])
+const LOOPBACK = new Set(["127.0.0.1", "localhost", "::1", "0.0.0.0"]);
 
 /** Host-gateway aliases per container driver. */
 function hostGatewayAlias(driver: string): string | undefined {
   switch (driver) {
     case "container":
     case "docker":
-      return "host.docker.internal"
+      return "host.docker.internal";
     case "podman":
-      return "host.containers.internal"
+      return "host.containers.internal";
     default:
-      return undefined
+      return undefined;
   }
 }
 
@@ -98,28 +98,28 @@ export function resolveGuestUrl(
   driver: string,
   guestOverride?: string,
 ): string {
-  if (guestOverride?.trim()) return guestOverride.trim()
-  let u: URL
+  if (guestOverride?.trim()) return guestOverride.trim();
+  let u: URL;
   try {
-    u = new URL(hostUrl)
+    u = new URL(hostUrl);
   } catch {
-    throw new Error(`invalid URL ${JSON.stringify(hostUrl)}`)
+    throw new Error(`invalid URL ${JSON.stringify(hostUrl)}`);
   }
-  if (!LOOPBACK.has(u.hostname)) return hostUrl
-  const alias = hostGatewayAlias(driver)
+  if (!LOOPBACK.has(u.hostname)) return hostUrl;
+  const alias = hostGatewayAlias(driver);
   if (!alias) {
     throw new Error(
       `URL is loopback (${u.hostname}) and driver ${JSON.stringify(driver)} ` +
         "cannot route it",
-    )
+    );
   }
-  u.hostname = alias
+  u.hostname = alias;
   // Remove trailing slash if pathname is empty or just "/"
-  let result = u.toString()
+  let result = u.toString();
   if (result.endsWith("/") && u.pathname === "/") {
-    result = result.slice(0, -1)
+    result = result.slice(0, -1);
   }
-  return result
+  return result;
 }
 
 /** An extra egress target the guest may reach (e.g. a scrape site), bound to the
@@ -130,140 +130,142 @@ export function resolveGuestUrl(
  *  (the proxy's ancestor-integrity check stats the libkrun PID-1 init); without it
  *  every lane is denied regardless of this policy. */
 export interface ScrapeEndpoint {
-  host: string
+  host: string;
   /** Defaults to 443. */
-  port?: number
+  port?: number;
   /** Absolute guest paths of the processes allowed to reach `host` (e.g. a browser
    *  binary). openshell matches the CONNECTING process's exe + ancestor chain. */
-  binaries: string[]
+  binaries: string[];
 }
 
 /** Policy generation: per-tier filesystem sets, landlock, per-binary egress.
  *  Pure function, no I/O. */
 export interface PolicyScopes {
-  tier: string
-  modelHost: string
-  modelPort?: number
-  fleetHost: string
-  fleetPort: number
-  harnessPath: string
+  tier: string;
+  modelHost: string;
+  modelPort?: number;
+  fleetHost: string;
+  fleetPort: number;
+  harnessPath: string;
   /** OPTIONAL extra egress targets. Absent/empty ⇒ NO scrape lane is emitted and the
    *  generated policy is byte-for-byte unchanged (additive; existing consumers unaffected). */
-  scrapeEndpoints?: ScrapeEndpoint[]
+  scrapeEndpoints?: ScrapeEndpoint[];
 }
 
 function tierKnobs(tier: string): {
-  readOnly: string[]
-  enforcement: "enforce" | "observe"
+  readOnly: string[];
+  enforcement: "enforce" | "observe";
 } {
   switch (tier) {
     case "untrusted":
       return {
         readOnly: ["/usr", "/lib", "/lib64", "/etc", "/bin", "/sbin", "/opt"],
         enforcement: "enforce",
-      }
+      };
     case "semi-trusted":
       return {
         readOnly: ["/usr", "/lib", "/etc", "/bin"],
         enforcement: "enforce",
-      }
+      };
     case "trusted-internal":
       return {
         readOnly: ["/usr", "/lib"],
         enforcement: "observe",
-      }
+      };
     default:
-      throw new Error(`unknown tier ${JSON.stringify(tier)}`)
+      throw new Error(`unknown tier ${JSON.stringify(tier)}`);
   }
 }
 
 export function generatePolicy(scopes: PolicyScopes): string {
-  const { readOnly, enforcement } = tierKnobs(scopes.tier)
-  const modelPort = scopes.modelPort ?? 443
+  const { readOnly, enforcement } = tierKnobs(scopes.tier);
+  const modelPort = scopes.modelPort ?? 443;
 
-  const lines: string[] = []
-  lines.push("version: 1")
-  lines.push("filesystem_policy:")
-  lines.push("  include_workdir: false")
-  lines.push(`  read_only: [${readOnly.map((p) => `'${p}'`).join(", ")}]`)
-  lines.push("  read_write: [/sandbox, /tmp]")
-  lines.push("process: { run_as_user: sandbox, run_as_group: sandbox }")
-  lines.push("landlock: { compatibility: best_effort }")
-  lines.push("network_policies:")
-  lines.push("  model:")
+  const lines: string[] = [];
+  lines.push("version: 1");
+  lines.push("filesystem_policy:");
+  lines.push("  include_workdir: false");
+  lines.push(`  read_only: [${readOnly.map((p) => `'${p}'`).join(", ")}]`);
+  lines.push("  read_write: [/sandbox, /tmp]");
+  lines.push("process: { run_as_user: sandbox, run_as_group: sandbox }");
+  lines.push("landlock: { compatibility: best_effort }");
+  lines.push("network_policies:");
+  lines.push("  model:");
   lines.push(
     `    endpoints: [{ host: ${scopes.modelHost}, port: ${modelPort}, protocol: rest, access: full, enforcement: ${enforcement} }]`,
-  )
-  lines.push("    binaries: [{ path: /usr/local/bin/claude }]")
-  lines.push("  fleet:")
+  );
+  lines.push("    binaries: [{ path: /usr/local/bin/claude }]");
+  lines.push("  fleet:");
   lines.push(
     `    endpoints: [{ host: ${scopes.fleetHost}, port: ${scopes.fleetPort}, protocol: rest, access: full, enforcement: ${enforcement} }]`,
-  )
+  );
   lines.push(
     `    binaries: [{ path: ${scopes.harnessPath} }, { path: /usr/local/bin/orche }]`,
-  )
+  );
   // Optional scrape lanes — one per endpoint so each host is bound to exactly its own
   // binaries (a shared lane would let any listed binary reach any listed host). Bare
   // `{host, port}` endpoints (plain CONNECT tunnel), no name field — same shape the
   // model/fleet lanes use above, which relies on the key as the lane name.
-  ;(scopes.scrapeEndpoints ?? []).forEach((e, i) => {
-    lines.push(`  scrape_${i}:`)
-    lines.push(`    endpoints: [{ host: ${e.host}, port: ${e.port ?? 443} }]`)
-    lines.push(`    binaries: [${e.binaries.map((b) => `{ path: ${b} }`).join(", ")}]`)
-  })
-  lines.push("  # git hub: bundle-out ⇒ NO network endpoint")
-  return `${lines.join("\n")}\n`
+  (scopes.scrapeEndpoints ?? []).forEach((e, i) => {
+    lines.push(`  scrape_${i}:`);
+    lines.push(`    endpoints: [{ host: ${e.host}, port: ${e.port ?? 443} }]`);
+    lines.push(
+      `    binaries: [${e.binaries.map((b) => `{ path: ${b} }`).join(", ")}]`,
+    );
+  });
+  lines.push("  # git hub: bundle-out ⇒ NO network endpoint");
+  return `${lines.join("\n")}\n`;
 }
 
 /** OpenShell containment implementation. */
 export class OpenShellContainment implements Containment {
-  private driver: string
-  private provider: string
-  private guestPath: string
+  private driver: string;
+  private provider: string;
+  private guestPath: string;
 
   constructor(
     private opts: {
-      driver?: string
-      provider?: string
-      guestPath?: string
+      driver?: string;
+      provider?: string;
+      guestPath?: string;
       /** Default agentId for sandbox naming when policy.agentId is absent. */
-      agentId?: string
+      agentId?: string;
       /** Image/Dockerfile ref for `sandbox create --from` (e.g. a node-bearing
        *  image when the gateway's default image lacks node). */
-      from?: string
+      from?: string;
     },
     private cli: CliRunner = spawnOpenShellCli,
   ) {
-    this.driver = opts.driver ?? "container"
-    this.provider = opts.provider ?? "anthropic"
-    this.guestPath = opts.guestPath ?? "/sandbox/repo"
+    this.driver = opts.driver ?? "container";
+    this.provider = opts.provider ?? "anthropic";
+    this.guestPath = opts.guestPath ?? "/sandbox/repo";
   }
 
   name(): string {
-    return "openshell"
+    return "openshell";
   }
 
   async preflight(_ctx: Context, _ws: Workspace): Promise<void> {
     // Check gateway connectivity
-    const st = this.cli(["openshell", "status"])
+    const st = this.cli(["openshell", "status"]);
     if (st.code !== 0) {
       throw new Error(
         `openshell gateway not available: ${(st.stderr || st.stdout).trim().slice(0, 300)}`,
-      )
+      );
     }
-    const statusText = stripAnsi(st.stdout)
+    const statusText = stripAnsi(st.stdout);
     if (!/\bconnected\b/i.test(statusText)) {
       throw new Error(
         `openshell gateway not Connected: ${statusText.trim().slice(0, 300)}`,
-      )
+      );
     }
 
     // Check provider registration
-    const pr = this.cli(["openshell", "provider", "get", this.provider])
+    const pr = this.cli(["openshell", "provider", "get", this.provider]);
     if (pr.code !== 0) {
       throw new Error(
         `openshell provider ${JSON.stringify(this.provider)} not registered`,
-      )
+      );
     }
   }
 
@@ -271,57 +273,64 @@ export class OpenShellContainment implements Containment {
     // Unit-test seam: a caller that already owns a sandbox names it explicitly.
     // Production goes through acquire(), which creates the sandbox and returns
     // a layer closed over the real name.
-    const name = policy.sandboxName
+    const name = policy.sandboxName;
     if (typeof name !== "string" || name.length === 0) {
       throw new Error(
         "openshell.layer: no sandbox name — use acquire() (production path) or " +
           "pass policy.sandboxName (unit-test seam)",
-      )
+      );
     }
-    return buildLayer(name, this.guestPath, this.driver)
+    return buildLayer(name, this.guestPath, this.driver);
   }
 
   /** Create the sandbox (lifecycle step 4 — containment resources exist from
    *  here) and return a layer closed over its name. All commands run via the
    *  INNER workspace's exec (containment runs where inner runs, §5.1). */
-  async acquire(ctx: Context, ws: Workspace, policy: PolicySpec): Promise<ContainmentLayer> {
-    const agentId = (policy.agentId as string | undefined) ?? this.opts.agentId
+  async acquire(
+    ctx: Context,
+    ws: Workspace,
+    policy: PolicySpec,
+  ): Promise<ContainmentLayer> {
+    const agentId = (policy.agentId as string | undefined) ?? this.opts.agentId;
     if (!agentId) {
       throw new Error(
         "openshell.acquire: no agentId — set policy.agentId or openshell({ agentId })",
-      )
+      );
     }
-    const name = sandboxName(agentId)
+    const name = sandboxName(agentId);
 
     // Crash recovery: best-effort delete of a leftover sandbox under the same
     // deterministic name from a crashed prior run.
     try {
-      await ws.exec(ctx, ["openshell", "sandbox", "delete", name])
+      await ws.exec(ctx, ["openshell", "sandbox", "delete", name]);
     } catch {
       // best-effort only
     }
 
     // Explicit tier ⇒ stage a generated policy file; absent ⇒ gateway default.
-    let policyPath: string | undefined
+    let policyPath: string | undefined;
     if (typeof policy.tier === "string") {
       const yaml = generatePolicy({
         tier: policy.tier,
-        modelHost: (policy.modelHost as string) ?? "api.anthropic.com",
-        modelPort: (policy.modelPort as number) ?? 443,
-        fleetHost: (policy.fleetHost as string) ?? "localhost",
-        fleetPort: (policy.fleetPort as number) ?? 53343,
-        harnessPath: (policy.harnessPath as string) ?? "/usr/local/bin/harness-wrapper",
+        modelHost:
+          (policy.modelHost as string | undefined) ?? "api.anthropic.com",
+        modelPort: (policy.modelPort as number | undefined) ?? 443,
+        fleetHost: (policy.fleetHost as string | undefined) ?? "localhost",
+        fleetPort: (policy.fleetPort as number | undefined) ?? 53343,
+        harnessPath:
+          (policy.harnessPath as string | undefined) ??
+          "/usr/local/bin/harness-wrapper",
         scrapeEndpoints: policy.scrapeEndpoints as ScrapeEndpoint[] | undefined,
-      })
-      policyPath = `${ws.guestPath("tmp")}/openshell-policy-${name}.yaml`
+      });
+      policyPath = `${ws.guestPath("tmp")}/openshell-policy-${name}.yaml`;
       const staged = await ws.exec(ctx, ["sh", "-c", `cat > '${policyPath}'`], {
         stdin: yaml,
-      })
+      });
       if (staged.code !== 0) {
         throw new Error(
           `openshell.acquire: staging policy file failed (exit ${staged.code}): ` +
-            `${staged.stderr || staged.stdout}`,
-        )
+            (staged.stderr || staged.stdout),
+        );
       }
     }
 
@@ -340,12 +349,12 @@ export class OpenShellContainment implements Containment {
       "--no-tty",
       "--",
       "true",
-    ])
+    ]);
     if (created.code !== 0) {
       throw new Error(
         `openshell.acquire: sandbox create failed (exit ${created.code}): ` +
-          `${created.stderr || created.stdout}`,
-      )
+          (created.stderr || created.stdout),
+      );
     }
 
     // Anything fallible after create must not leak the sandbox: best-effort
@@ -365,50 +374,54 @@ export class OpenShellContainment implements Containment {
         "-p",
         this.guestPath,
         "/sandbox/.home",
-      ])
+      ]);
       if (prep.code !== 0) {
         throw new Error(
           `openshell.acquire: guest layout prep failed (exit ${prep.code}): ` +
-            `${prep.stderr || prep.stdout}`,
-        )
+            (prep.stderr || prep.stdout),
+        );
       }
     } catch (err) {
       try {
-        await ws.exec(ctx, ["openshell", "sandbox", "delete", name])
+        await ws.exec(ctx, ["openshell", "sandbox", "delete", name]);
       } catch {
         // best-effort only
       }
-      throw err
+      throw err;
     }
 
-    return buildLayer(name, this.guestPath, this.driver)
+    return buildLayer(name, this.guestPath, this.driver);
   }
 }
 
 /** POSIX-only path helpers: guest and staging paths are always /-separated. */
 function posixBasename(p: string): string {
-  const i = p.lastIndexOf("/")
-  return i >= 0 ? p.slice(i + 1) : p
+  const i = p.lastIndexOf("/");
+  return i >= 0 ? p.slice(i + 1) : p;
 }
 function posixDirname(p: string): string {
-  const i = p.lastIndexOf("/")
-  return i > 0 ? p.slice(0, i) : "/"
+  const i = p.lastIndexOf("/");
+  return i > 0 ? p.slice(0, i) : "/";
 }
 
 /** Layer primitives closed over a REAL sandbox name. Module-scoped (not a class
  *  method) so the erased-at-runtime `private` keyword can't leak it onto the
  *  public class surface. */
-function buildLayer(name: string, guestRepo: string, driver: string): ContainmentLayer {
+function buildLayer(
+  name: string,
+  guestRepo: string,
+  driver: string,
+): ContainmentLayer {
   // The real openshell CLI errors on deleting an already-gone sandbox (exit 1,
   // gRPC NotFound — field-tested 0.0.53, see the live suite's redundant-delete
   // test), and compose() calls layer.teardown() unconditionally on every destroy —
   // idempotent double-destroy (conformance contract) therefore lives here:
   // emit the delete argv once, then [] ("nothing to tear down").
-  let torndown = false
+  let torndown = false;
 
   return {
     execWrap(argv: string[], opts: ExecOpts): [string[], ExecOpts] {
-      const envEntries = Object.entries(opts.env ?? {})
+      const envEntries = Object.entries(opts.env ?? {});
       const wrapped = [
         "openshell",
         "sandbox",
@@ -425,12 +438,12 @@ function buildLayer(name: string, guestRepo: string, driver: string): Containmen
           ? ["env", ...envEntries.map(([k, v]) => `${k}=${v}`)]
           : []),
         ...argv,
-      ]
+      ];
       // cwd/env are CONSUMED into the wrapper (guest-side): passing them
       // through would set a guest path as the HOST cwd and leak guest env
       // (possibly secrets) into the host openshell process.
-      const { cwd: _cwd, env: _env, ...rest } = opts
-      return [wrapped, rest]
+      const { cwd: _cwd, env: _env, ...rest } = opts;
+      return [wrapped, rest];
     },
 
     crossUpload(stagingPath: string, guestPath: string): string[] {
@@ -441,54 +454,73 @@ function buildLayer(name: string, guestRepo: string, driver: string): Containmen
       // into guest /tmp (nesting to the collision-free staging basename), then
       // move into place in-guest. Chained via host `sh -c`; every embedded
       // path is shQuote'd, and the in-guest script rides as ONE argv token.
-      const nested = `/tmp/${posixBasename(stagingPath)}`
+      const nested = `/tmp/${posixBasename(stagingPath)}`;
       const move =
         `mkdir -p ${shQuote(posixDirname(guestPath))} && ` +
         `rm -rf ${shQuote(guestPath)} && ` +
-        `mv ${shQuote(nested)} ${shQuote(guestPath)}`
+        `mv ${shQuote(nested)} ${shQuote(guestPath)}`;
       return [
         "sh",
         "-c",
-        argvToShell(["openshell", "sandbox", "upload", "--no-git-ignore", name, stagingPath, "/tmp"]) +
+        argvToShell([
+          "openshell",
+          "sandbox",
+          "upload",
+          "--no-git-ignore",
+          name,
+          stagingPath,
+          "/tmp",
+        ]) +
           " && " +
-          argvToShell(["openshell", "sandbox", "exec", "-n", name, "--no-tty", "--", "sh", "-c", move]),
-      ]
+          argvToShell([
+            "openshell",
+            "sandbox",
+            "exec",
+            "-n",
+            name,
+            "--no-tty",
+            "--",
+            "sh",
+            "-c",
+            move,
+          ]),
+      ];
     },
 
     crossDownload(guestPath: string, stagingPath: string): string[] {
-      return ["openshell", "sandbox", "download", name, guestPath, stagingPath]
+      return ["openshell", "sandbox", "download", name, guestPath, stagingPath];
     },
 
     pathMap(kind: "repo" | "home" | "tmp"): string {
       switch (kind) {
         case "repo":
-          return guestRepo
+          return guestRepo;
         case "home":
-          return "/sandbox/.home"
+          return "/sandbox/.home";
         case "tmp":
-          return "/tmp"
+          return "/tmp";
       }
     },
 
     teardown(): string[] {
-      if (torndown) return []
-      torndown = true
-      return ["openshell", "sandbox", "delete", name]
+      if (torndown) return [];
+      torndown = true;
+      return ["openshell", "sandbox", "delete", name];
     },
 
     aliasMap: (hostUrl: string): string => {
-      return resolveGuestUrl(hostUrl, driver)
+      return resolveGuestUrl(hostUrl, driver);
     },
-  }
+  };
 }
 
 export function openshell(opts?: {
-  driver?: string
-  provider?: string
-  guestPath?: string
-  agentId?: string
-  from?: string
-  cli?: CliRunner
+  driver?: string;
+  provider?: string;
+  guestPath?: string;
+  agentId?: string;
+  from?: string;
+  cli?: CliRunner;
 }): Containment {
-  return new OpenShellContainment(opts ?? {}, opts?.cli)
+  return new OpenShellContainment(opts ?? {}, opts?.cli);
 }

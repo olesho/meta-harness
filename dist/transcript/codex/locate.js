@@ -39,7 +39,7 @@ export function locateLatestSession(sessionsRoot, workingDir) {
     let bestMod = 0;
     for (const p of walkJSONL(sessionsRoot)) {
         const meta = readSessionMeta(p);
-        if (!meta || !meta.session_id || canonicalDir(meta.cwd ?? "") !== want)
+        if (!meta?.session_id || canonicalDir(meta.cwd ?? "") !== want)
             continue;
         let mod;
         try {
@@ -78,6 +78,6 @@ export function readSessionMeta(p) {
     }
     if (env.type !== "session_meta")
         return undefined;
-    return (env.payload ?? undefined);
+    return env.payload ?? undefined;
 }
 //# sourceMappingURL=locate.js.map

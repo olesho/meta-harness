@@ -29,7 +29,7 @@ import { Context } from "../internal/async/index.js";
 // (src/turnproto). Re-exported here so this CLI's tested surface — test/cli/
 // run.test.ts imports them from this module — stays UNCHANGED.
 export { ExitOK, ExitError, ExitUsage, ExitDeadline, DeadlineLine, } from "../turnproto/index.js";
-import { ExitOK, ExitError, ExitUsage, ExitDeadline, DeadlineLine } from "../turnproto/index.js";
+import { ExitOK, ExitError, ExitUsage, ExitDeadline, DeadlineLine, } from "../turnproto/index.js";
 /** Default one-shot deadline when HARNESS_WRAPPER_RUN_TIMEOUT is unset (Go: 15m). */
 const DEFAULT_TIMEOUT_MS = 15 * 60 * 1000;
 const HELP = `meta-harness run — one-shot harness turn (prompt on stdin → reply on stdout)
@@ -135,7 +135,7 @@ export function parseGoDuration(s) {
     const units = {
         ns: 1e-6,
         us: 1e-3,
-        "µs": 1e-3,
+        µs: 1e-3,
         ms: 1,
         s: 1000,
         m: 60_000,

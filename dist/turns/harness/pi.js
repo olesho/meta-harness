@@ -75,7 +75,10 @@ export class PiAdapter extends GenericAdapter {
     }
     /** Implements turns.TranscriptReader. Timestamp is forwarded as-is (may be undefined). */
     readTranscript(harnessSessionID, workingDir) {
-        return new PiReader({ root: this.root, sessionsDir: this.pinnedSessionsDir })
+        return new PiReader({
+            root: this.root,
+            sessionsDir: this.pinnedSessionsDir,
+        })
             .read(harnessSessionID, workingDir)
             .map((t) => ({ role: t.role, text: t.text, timestamp: t.timestamp }));
     }

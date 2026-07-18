@@ -12,66 +12,66 @@ import {
   RoleUser,
   SourceFile,
   type Event,
-} from "../event.ts"
-import { stripIDEContextTags } from "../stripTags.ts"
+} from "../event.ts";
+import { stripIDEContextTags } from "../stripTags.ts";
 
 // Envelope is Codex's top-level rollout line: {timestamp, type, payload}.
 export interface Envelope {
-  timestamp?: string
-  type?: string // session_meta, event_msg, response_item, turn_context
-  payload?: unknown
+  timestamp?: string;
+  type?: string; // session_meta, event_msg, response_item, turn_context
+  payload?: unknown;
 }
 
 interface ContentBlock {
-  type?: string
-  text?: string
+  type?: string;
+  text?: string;
 }
 
 interface ResponseItem {
-  type?: string // message, function_call, function_call_output, reasoning
-  role?: string
-  content?: ContentBlock[]
-  name?: string
-  arguments?: string
-  call_id?: string
-  output?: unknown
+  type?: string; // message, function_call, function_call_output, reasoning
+  role?: string;
+  content?: ContentBlock[];
+  name?: string;
+  arguments?: string;
+  call_id?: string;
+  output?: unknown;
 }
 
 // parseRollout reads Codex rollout JSONL into envelope lines. Malformed lines
 // are skipped.
 export function parseRollout(data: string): Envelope[] {
-  const out: Envelope[] = []
+  const out: Envelope[] = [];
   for (const line of data.split("\n")) {
-    if (line.length === 0) continue
+    if (line.length === 0) continue;
     try {
-      out.push(JSON.parse(line) as Envelope)
+      out.push(JSON.parse(line) as Envelope);
     } catch {
       // skip malformed
     }
   }
-  return out
+  return out;
 }
 
 // events parses Codex rollout JSONL into the canonical, tool-aware event stream.
 // Only response_item entries are surfaced.
 export function events(data: string): Event[] {
-  const envelopes = parseRollout(data)
-  const out: Event[] = []
-  let seq = 0
+  const envelopes = parseRollout(data);
+  const out: Event[] = [];
+  let seq = 0;
   for (const env of envelopes) {
-    if (env.type !== "response_item") continue
-    const ts = parseCodexTime(env.timestamp)
-    let item: ResponseItem
+    if (env.type !== "response_item") continue;
+    const ts = parseCodexTime(env.timestamp);
+    let item: ResponseItem;
     try {
-      item = env.payload as ResponseItem
+      item = env.payload as ResponseItem;
     } catch {
-      continue
+      continue;
     }
-    if (!item || typeof item !== "object") continue
+    if (!item || typeof item !== "object") continue;
     switch (item.type) {
       case "message":
-        seq = appendMessageEvents(out, item, ts, seq)
-        break
+        seq = appendMessageEvents(out, item, ts, seq);
+        break;
       case "function_call":
         out.push({
           seq,
@@ -83,9 +83,9 @@ export function events(data: string): Event[] {
           toolInput: item.arguments,
           source: SourceFile,
           nativeID: "tool-use:" + (item.call_id ?? ""),
-        })
-        seq++
-        break
+        });
+        seq++;
+        break;
       case "function_call_output":
         out.push({
           seq,
@@ -96,12 +96,12 @@ export function events(data: string): Event[] {
           output: decodeFunctionOutput(item.output),
           source: SourceFile,
           nativeID: "tool-result:" + (item.call_id ?? ""),
-        })
-        seq++
-        break
+        });
+        seq++;
+        break;
     }
   }
-  return out
+  return out;
 }
 
 // appendMessageEvents emits one text event per non-empty content block (user
@@ -112,11 +112,11 @@ function appendMessageEvents(
   ts: Date | undefined,
   seq: number,
 ): number {
-  const role = canonicalRole(item.role ?? "")
+  const role = canonicalRole(item.role ?? "");
   for (const block of item.content ?? []) {
-    let text = block.text ?? ""
-    if (role === RoleUser) text = stripIDEContextTags(text)
-    if (text === "") continue
+    let text = block.text ?? "";
+    if (role === RoleUser) text = stripIDEContextTags(text);
+    if (text === "") continue;
     out.push({
       seq,
       timestamp: ts,
@@ -125,33 +125,33 @@ function appendMessageEvents(
       text,
       source: SourceFile,
       nativeID: SourceFile + ":text:" + seq,
-    })
-    seq++
+    });
+    seq++;
   }
-  return seq
+  return seq;
 }
 
 // decodeFunctionOutput pulls the text out of a function_call_output payload,
 // usually a JSON string and occasionally a structured object.
 function decodeFunctionOutput(raw: unknown): string {
-  if (typeof raw === "string") return raw
-  if (raw === undefined || raw === null) return ""
-  return JSON.stringify(raw)
+  if (typeof raw === "string") return raw;
+  if (raw === undefined || raw === null) return "";
+  return JSON.stringify(raw);
 }
 
 function canonicalRole(r: string): string {
   switch (r) {
     case "user":
-      return RoleUser
+      return RoleUser;
     case "assistant":
-      return RoleAssistant
+      return RoleAssistant;
     default:
-      return RoleSystem
+      return RoleSystem;
   }
 }
 
 function parseCodexTime(s: string | undefined): Date | undefined {
-  if (!s) return undefined
-  const d = new Date(s)
-  return Number.isNaN(d.getTime()) ? undefined : d
+  if (!s) return undefined;
+  const d = new Date(s);
+  return Number.isNaN(d.getTime()) ? undefined : d;
 }

@@ -13,7 +13,7 @@ A thin wrapper around the shared one-shot loop (`meta-harness/oneshot`):
 - exit codes matching the orchestrator's `packages/agent/src/harness/headless.ts` parser:
   `0` ok · `1` errored/fatal/stdin-fail · `2` usage/resolve/empty-prompt ·
   `124` deadline (+ the literal stderr line `harness-wrapper run: context
-  deadline exceeded`, which fires BOTH of the orchestrator's timeout signals).
+deadline exceeded`, which fires BOTH of the orchestrator's timeout signals).
 
 Run directly with Node (against the compiled `dist`):
 
@@ -82,7 +82,7 @@ bumping Orche's pin from the pre-migration release to the migrated commit.
   (`chore: release v0.1.3`), which is a clean ancestor — a forward bump spanning
   the whole migration, no version change.
 
-**Edits on the Orche side** (repo `olesho/orche`). The pin appears in *two*
+**Edits on the Orche side** (repo `olesho/orche`). The pin appears in _two_
 workspace manifests — bump both so the whole workspace resolves one meta-harness
 install (a split pin would materialize two copies):
 

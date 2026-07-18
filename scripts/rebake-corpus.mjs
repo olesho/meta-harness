@@ -61,9 +61,13 @@ function locateRecorder() {
     return existsSync(override) ? override : null;
   }
   const bin = "meta-harness-screenbench-record";
-  const probe = spawnSync(process.platform === "win32" ? "where" : "which", [bin], {
-    encoding: "utf8",
-  });
+  const probe = spawnSync(
+    process.platform === "win32" ? "where" : "which",
+    [bin],
+    {
+      encoding: "utf8",
+    },
+  );
   if (probe.status === 0 && probe.stdout.trim() !== "") {
     return probe.stdout.trim().split(/\r?\n/)[0];
   }
@@ -120,7 +124,9 @@ async function main() {
   // to record against.
   const harnesses = [...manifest.entries()].filter(([, e]) => e.pinned !== "");
   if (harnesses.length === 0) {
-    process.stderr.write("rebake-corpus: manifest has no pinned harnesses to rebake\n");
+    process.stderr.write(
+      "rebake-corpus: manifest has no pinned harnesses to rebake\n",
+    );
     return ExitError;
   }
 
@@ -134,11 +140,16 @@ async function main() {
       //          --cols 120 --rows 40 --binary-version <entry.pinned>
       // Wiring is ready; this is the single line that A5 unblocks:
       const args = [
-        "--harness", name,
-        "--out", out,
-        "--cols", "120",
-        "--rows", "40",
-        "--binary-version", entry.pinned,
+        "--harness",
+        name,
+        "--out",
+        out,
+        "--cols",
+        "120",
+        "--rows",
+        "40",
+        "--binary-version",
+        entry.pinned,
       ];
       const res = spawnSync(recorder, args, { cwd: root, stdio: "inherit" });
       if (res.status !== 0) {
@@ -151,9 +162,7 @@ async function main() {
   }
 
   if (failed > 0) {
-    process.stderr.write(
-      `rebake-corpus: ${failed} recording(s) failed\n`,
-    );
+    process.stderr.write(`rebake-corpus: ${failed} recording(s) failed\n`);
     return ExitError;
   }
   process.stdout.write(

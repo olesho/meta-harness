@@ -58,7 +58,9 @@ class BoundedDisplaySink {
         if (this.scheduled)
             return;
         this.scheduled = true;
-        queueMicrotask(() => this.drain());
+        queueMicrotask(() => {
+            this.drain();
+        });
     }
     drain() {
         this.scheduled = false;

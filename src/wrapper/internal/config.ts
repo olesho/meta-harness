@@ -4,10 +4,15 @@
 // module ports only the config surface those entry points validate against,
 // plus the cause-chain sentinels callers test with isSentinel.
 
-import { defineSentinel, isSentinel, wrap, type Sentinel } from "../../internal/async/errors.ts"
-import { type Classifier } from "./classification.ts"
-import { harnessSupportsEffort, isSupportedEffort } from "./effort.ts"
-import { type Emitter } from "../trace.ts"
+import {
+  defineSentinel,
+  isSentinel,
+  wrap,
+  type Sentinel,
+} from "../../internal/async/errors.ts";
+import { type Classifier } from "./classification.ts";
+import { harnessSupportsEffort, isSupportedEffort } from "./effort.ts";
+import { type Emitter } from "../trace.ts";
 
 /**
  * Wrapper-level sentinel errors. Callers use isSentinel(err, X) to distinguish
@@ -17,44 +22,44 @@ import { type Emitter } from "../trace.ts"
 export const ErrInvalidConfig: Sentinel = defineSentinel(
   "wrapper:invalid-config",
   "wrapper: invalid config",
-)
+);
 export const ErrBinaryNotFound: Sentinel = defineSentinel(
   "wrapper:binary-not-found",
   "wrapper: binary not found",
-)
+);
 
 /** Configuration for a wrapper run. Durations are in milliseconds. */
 export interface Config {
   /** Path to the harness binary (required). */
-  binaryPath?: string
+  binaryPath?: string;
   /** Destination for harness stdout (required). */
-  stdout?: unknown
+  stdout?: unknown;
   /** Harness name ("claude", "codex", "claude-code", …). */
-  harness?: string
+  harness?: string;
   /** Harness CLI args. */
-  args?: string[]
+  args?: string[];
   /** Environment as "KEY=VALUE" entries. */
-  env?: string[]
+  env?: string[];
   /** Reasoning effort (low/medium/high/xhigh/max). */
-  effort?: string
+  effort?: string;
   /** Model override. */
-  model?: string
+  model?: string;
   /** Quiet threshold (ms). */
-  idleQuiet?: number
+  idleQuiet?: number;
   /** Classify threshold (ms). */
-  idleClassify?: number
+  idleClassify?: number;
   /** Stale threshold (ms). */
-  staleThreshold?: number
+  staleThreshold?: number;
   /** Wait after SIGTERM before escalating to SIGKILL (ms). */
-  waitDelay?: number
+  waitDelay?: number;
   /** Optional explicit classifier overriding per-harness resolution. */
-  classifier?: Classifier | null
+  classifier?: Classifier | null;
   /** Working directory for the harness. Defaults to the current directory. */
-  workingDir?: string
+  workingDir?: string;
   /** Source forwarded into the harness PTY input. */
-  stdin?: unknown
+  stdin?: unknown;
   /** Diagnostic trace emitter. Defaults to Discard. */
-  trace?: Emitter | null
+  trace?: Emitter | null;
   /**
    * Durable internal line tap. Receives every complete line of the harness's
    * RAW PTY output, in order, with no drops: invoked synchronously in the PTY
@@ -63,7 +68,7 @@ export interface Config {
    * a final unterminated line is flushed once when the PTY closes. ANSI/control
    * sequences are NOT stripped.
    */
-  onLine?: ((line: string) => void) | null
+  onLine?: ((line: string) => void) | null;
 }
 
 /**
@@ -72,53 +77,59 @@ export interface Config {
  */
 export function validateConfig(cfg: Config): Error | null {
   if (!cfg.binaryPath) {
-    return wrap("wrapper: invalid config: BinaryPath is required", ErrInvalidConfig)
+    return wrap(
+      "wrapper: invalid config: BinaryPath is required",
+      ErrInvalidConfig,
+    );
   }
   if (cfg.stdout == null) {
-    return wrap("wrapper: invalid config: Stdout is required", ErrInvalidConfig)
+    return wrap(
+      "wrapper: invalid config: Stdout is required",
+      ErrInvalidConfig,
+    );
   }
-  const idleClassify = cfg.idleClassify ?? 0
-  const idleQuiet = cfg.idleQuiet ?? 0
-  const staleThreshold = cfg.staleThreshold ?? 0
+  const idleClassify = cfg.idleClassify ?? 0;
+  const idleQuiet = cfg.idleQuiet ?? 0;
+  const staleThreshold = cfg.staleThreshold ?? 0;
   if (idleClassify > 0 && idleQuiet > 0 && idleClassify < idleQuiet) {
     return wrap(
       `wrapper: invalid config: IdleClassify (${idleClassify}) must be >= IdleQuiet (${idleQuiet})`,
       ErrInvalidConfig,
-    )
+    );
   }
   if (staleThreshold > 0 && idleClassify > 0 && staleThreshold < idleClassify) {
     return wrap(
       `wrapper: invalid config: StaleThreshold (${staleThreshold}) must be >= IdleClassify (${idleClassify})`,
       ErrInvalidConfig,
-    )
+    );
   }
   if (cfg.effort && cfg.effort !== "") {
     if (!isSupportedEffort(cfg.effort)) {
       return wrap(
         "wrapper: invalid config: Effort must be one of low, medium, high, xhigh, max",
         ErrInvalidConfig,
-      )
+      );
     }
     if (!harnessSupportsEffort(cfg.harness ?? "")) {
       return wrap(
         "wrapper: invalid config: Effort is only supported for claude and codex harnesses",
         ErrInvalidConfig,
-      )
+      );
     }
   }
-  return null
+  return null;
 }
 
 /** Report whether err indicates the configured harness binary was not found. */
 export function isBinaryNotFound(err: unknown): boolean {
-  if (isSentinel(err, ErrBinaryNotFound)) return true
+  if (isSentinel(err, ErrBinaryNotFound)) return true;
   // Node's spawn surfaces a missing executable as ENOENT.
-  let cur: unknown = err
-  const seen = new Set<unknown>()
+  let cur: unknown = err;
+  const seen = new Set<unknown>();
   while (cur && typeof cur === "object" && !seen.has(cur)) {
-    seen.add(cur)
-    if ((cur as { code?: unknown }).code === "ENOENT") return true
-    cur = (cur as { cause?: unknown }).cause
+    seen.add(cur);
+    if ((cur as { code?: unknown }).code === "ENOENT") return true;
+    cur = (cur as { cause?: unknown }).cause;
   }
-  return false
+  return false;
 }

@@ -17,7 +17,7 @@
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { Open, newMemStore, } from "../chat/index.js";
+import { Open, newMemStore } from "../chat/index.js";
 import { Context } from "../internal/async/index.js";
 import { normHarness } from "../wrapper/internal/harnessargs.js";
 // A picker row: optional cursor marker (❯ / › / *), an index, then a
@@ -43,7 +43,7 @@ function pickerHeader(harness) {
  */
 export function parseModelPicker(text, harness) {
     const header = pickerHeader(harness);
-    if (header === null || !header.test(text))
+    if (!header?.test(text))
         return [];
     const kind = normHarness(harness);
     const out = [];
@@ -57,14 +57,17 @@ export function parseModelPicker(text, harness) {
             const current = /\(current\)/i.test(rawLabel);
             const isDefault = /\(default\)/i.test(rawLabel);
             // "gpt-5.4-mini (current)" → id/label "gpt-5.4-mini".
-            const id = rawLabel.replace(/\([^)]*\)/g, "").trim().split(/\s+/)[0] ?? "";
+            const id = rawLabel
+                .replace(/\([^)]*\)/g, "")
+                .trim()
+                .split(/\s+/)[0] ?? "";
             if (id === "")
                 continue;
             out.push({ id, label: id, description, current, isDefault });
         }
         else {
             // claude-code: "Opus ✔" (active) / "Default (recommended)" (default).
-            const current = /✔/.test(rawLabel);
+            const current = rawLabel.includes("✔");
             const cleaned = rawLabel.replace(/✔/g, "").trim();
             const isDefault = /^Default\b|\(recommended\)/i.test(cleaned);
             // The picker's short name is the `--model` alias, case-insensitively.

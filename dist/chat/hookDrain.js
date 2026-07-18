@@ -32,7 +32,7 @@ import { homedir } from "node:os";
 import path from "node:path";
 import { drainSpool } from "../hooks/spool.js";
 import { mergeHookEvents } from "../transcript/hookMerge.js";
-import { EventTurnBoundary, } from "../hooks/claude.js";
+import { EventTurnBoundary } from "../hooks/claude.js";
 import { eventID, turnsFromEvents, } from "../transcript/event.js";
 // hookSpoolSubdir is the fixed segment under the harness config dir that holds
 // the per-session spool directories. A per-run subdir keyed on the harness
@@ -50,7 +50,12 @@ function sleep(ms) {
     const promise = new Promise((resolve) => {
         timeout = setTimeout(resolve, ms);
     });
-    return { promise, cancel: () => clearTimeout(timeout) };
+    return {
+        promise,
+        cancel: () => {
+            clearTimeout(timeout);
+        },
+    };
 }
 /**
  * HookDrain runs the spool → canonical-Event integration for one Conversation.
@@ -73,13 +78,16 @@ export class HookDrain {
         this.o = o;
         this.home = o.home && o.home !== "" ? o.home : homedir();
         this.configDir =
-            o.configDir && o.configDir !== "" ? o.configDir : path.join(this.home, ".claude");
+            o.configDir && o.configDir !== ""
+                ? o.configDir
+                : path.join(this.home, ".claude");
         // Per-run spool dir keyed on the tracked harness session id. A missing id
         // (never expected for a hook-capable harness, which pins its id at launch)
         // degrades to a shared "_" bucket rather than colliding at the parent.
         const key = o.harnessSessionID !== "" ? o.harnessSessionID : "_";
         this._spoolDir = path.join(this.configDir, hookSpoolSubdir, key);
-        this.fallbackMs = o.fallbackMs && o.fallbackMs > 0 ? o.fallbackMs : defaultDrainFallbackMs;
+        this.fallbackMs =
+            o.fallbackMs && o.fallbackMs > 0 ? o.fallbackMs : defaultDrainFallbackMs;
     }
     /** The per-run spool dir — wire this into the launch env as HW_EVENT_SPOOL. */
     spoolDir() {
@@ -193,8 +201,12 @@ export class HookDrain {
             // the coalesced wake Signal; the loop drains once per wake. On platforms
             // where fs.watch is unreliable this may miss events — the bounded fallback
             // timer is the backstop, so correctness never depends on the watch.
-            this.watcher = fs.watch(this._spoolDir, () => this.o.wake.signal());
-            this.watcher.on("error", () => this.stopWatch());
+            this.watcher = fs.watch(this._spoolDir, () => {
+                this.o.wake.signal();
+            });
+            this.watcher.on("error", () => {
+                this.stopWatch();
+            });
         }
         catch {
             // Watch unsupported here — the fallback timer covers draining entirely.

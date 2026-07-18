@@ -90,7 +90,9 @@ export class Screen {
     async write(data) {
         await this.mu.lock();
         try {
-            await new Promise((resolve) => this.term.write(data, resolve));
+            await new Promise((resolve) => {
+                this.term.write(data, resolve);
+            });
             this.gen++;
         }
         finally {

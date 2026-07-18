@@ -19,7 +19,6 @@ export function onStop(sig, cb) {
         return;
     }
     if (typeof sig.then === "function") {
-        ;
         sig.then(cb, cb);
         return;
     }
@@ -75,6 +74,7 @@ export async function streamSSE(res, sub, opts = {}) {
             teardown();
         }
     }, heartbeatMs);
+    // Don't let the heartbeat timer keep the process alive on its own.
     heartbeat.unref?.();
     try {
         for (;;) {

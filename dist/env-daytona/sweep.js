@@ -1,7 +1,7 @@
 // Daytona reaper (design doc Tier-4 requirement): finds and deletes orphaned
 // sandboxes by label, so a crashed live-test run doesn't leak billed
 // resources. Used both by the live e2e test's afterAll and standalone ops.
-import { loadDaytonaClass } from "./daytona.js";
+import { loadDaytonaClass, } from "./daytona.js";
 /** Lists sandboxes and deletes every one matching ALL of `opts.labels`.
  *
  *  Empty labels throw — an unscoped sweep would delete every sandbox in the
@@ -38,7 +38,10 @@ export async function sweep(ctx, config, opts) {
             result.swept.push(id);
         }
         catch (error) {
-            result.failed.push({ id, error: error instanceof Error ? error.message : String(error) });
+            result.failed.push({
+                id,
+                error: error instanceof Error ? error.message : String(error),
+            });
         }
     }
     return result;

@@ -69,42 +69,48 @@ A [`Conversation`](modules/chat.md) is a long-lived, multi-turn session. The sha
 always: **Open → acquire control → send → observe events → close.**
 
 ```ts
-import { Open, newMemStore, EventTurn, TurnStateComplete, TurnStateErrored } from "meta-harness/chat"
-import { Context } from "meta-harness/async"
+import {
+  Open,
+  newMemStore,
+  EventTurn,
+  TurnStateComplete,
+  TurnStateErrored,
+} from "meta-harness/chat";
+import { Context } from "meta-harness/async";
 
-const ctx = Context.background()
+const ctx = Context.background();
 
 const conv = await Open(ctx, {
-  harness: "claude-code",                 // adapter + classifier selector
-  binaryPath: "/usr/local/bin/claude",    // the harness executable
+  harness: "claude-code", // adapter + classifier selector
+  binaryPath: "/usr/local/bin/claude", // the harness executable
   workingDir: process.cwd(),
-  store: newMemStore(),                    // required; in-memory default
-})
+  store: newMemStore(), // required; in-memory default
+});
 
 // One mutating operation at a time — take the control token.
-const release = await conv.acquireControl(ctx)
-let assistantTurnID: string
+const release = await conv.acquireControl(ctx);
+let assistantTurnID: string;
 try {
-  assistantTurnID = await conv.send(ctx, "List the files in this directory.")
+  assistantTurnID = await conv.send(ctx, "List the files in this directory.");
 } finally {
-  release()
+  release();
 }
 
 // Observe the event stream until our assistant turn reaches a terminal state.
 for await (const ev of conv.events()) {
   if (ev.type === EventTurn && ev.turn?.id === assistantTurnID) {
     if (ev.turn.state === TurnStateComplete) {
-      console.log("reply:", ev.turn.text)
-      break
+      console.log("reply:", ev.turn.text);
+      break;
     }
     if (ev.turn.state === TurnStateErrored) {
-      console.error("turn errored:", ev.turn.reason)
-      break
+      console.error("turn errored:", ev.turn.reason);
+      break;
     }
   }
 }
 
-await conv.close()
+await conv.close();
 ```
 
 Key points:
@@ -126,31 +132,31 @@ Full walkthrough: [Guides › Building a conversation](guides/conversation.md).
 
 ## Your first one-shot
 
-When you just want *prompt in → reply out*, skip the ceremony and use
+When you just want _prompt in → reply out_, skip the ceremony and use
 [`runOneShot`](modules/oneshot.md). It opens a fresh harness, sends one prompt, waits for
 exactly one assistant turn, returns the clean text, and tears everything down.
 
 ```ts
-import { runOneShot } from "meta-harness/oneshot"
-import { Context } from "meta-harness/async"
+import { runOneShot } from "meta-harness/oneshot";
+import { Context } from "meta-harness/async";
 
-const { ctx, cancel } = Context.withDeadline(Context.background(), 120_000)
+const { ctx, cancel } = Context.withDeadline(Context.background(), 120_000);
 try {
   const reply = await runOneShot(ctx, {
     harness: "codex",
     binaryPath: "/usr/local/bin/codex",
     prompt: "Summarize this repo's README in one sentence.",
     workingDir: process.cwd(),
-  })
-  console.log(reply)
+  });
+  console.log(reply);
 } finally {
-  cancel()
+  cancel();
 }
 ```
 
 `runOneShot` throws `EmptyPromptError`, `DeadlineError`, or `TurnErroredError` for the
 expected failure modes. If you need the outcome (including the captured harness session
-id) *without* exceptions — e.g. to read the transcript back after a deadline — use
+id) _without_ exceptions — e.g. to read the transcript back after a deadline — use
 [`runOneShotDetailed`](modules/oneshot.md), which resolves with a tagged union instead.
 
 ---

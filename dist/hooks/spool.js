@@ -14,9 +14,9 @@
 // ISO string on append and drainSpool rehydrates it back to a Date. Every
 // drained event is (re)stamped source=SourceHook — that provenance is the whole
 // point of the spool (it feeds the eventID dedup consumer in hookMerge.ts).
-import { closeSync, existsSync, mkdirSync, openSync, readFileSync, writeFileSync } from "node:fs";
+import { closeSync, existsSync, mkdirSync, openSync, readFileSync, writeFileSync, } from "node:fs";
 import path from "node:path";
-import { SourceHook } from "../transcript/event.js";
+import { SourceHook, } from "../transcript/event.js";
 import { withLockedFile } from "./lock.js";
 // spoolFileName is the fixed basename of the spool file inside a spool dir. The
 // appender and the drainer derive the same path from the dir alone.
@@ -75,7 +75,10 @@ export function drainSpool(spoolDir) {
 // toRecord projects a ParsedEvent to its JSONL record. parentSessionID is
 // dropped when empty so the wire line stays minimal.
 function toRecord(pe) {
-    const rec = { harnessSessionID: pe.harnessSessionID, event: pe.event };
+    const rec = {
+        harnessSessionID: pe.harnessSessionID,
+        event: pe.event,
+    };
     if (pe.parentSessionID)
         rec.parentSessionID = pe.parentSessionID;
     return rec;
@@ -87,14 +90,19 @@ function parseLines(raw) {
     for (const line of raw.split("\n")) {
         if (line.trim() === "")
             continue;
-        let rec;
+        let parsed;
         try {
-            rec = JSON.parse(line);
+            parsed = JSON.parse(line);
         }
         catch {
             continue;
         }
-        if (!rec || typeof rec !== "object" || !rec.event)
+        // JSONL is untrusted on read: keep the shape `Partial` so the required-field
+        // guards below stay meaningful instead of being cast away.
+        if (!parsed || typeof parsed !== "object")
+            continue;
+        const rec = parsed;
+        if (!rec.event)
             continue;
         const pe = {
             harnessSessionID: rec.harnessSessionID ?? "",

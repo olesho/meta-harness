@@ -9,14 +9,14 @@ export {
   atomicWriteFileSync,
   lockStaleTTLMs,
   type LockOptions,
-} from "./lock.ts"
+} from "./lock.ts";
 
 export {
   hookMarkerPrefix,
   renderHookCommand,
   isManagedHookCommand,
   type RenderHookCommandOptions,
-} from "./command.ts"
+} from "./command.ts";
 
 export {
   ensureSettingsJSONHooks,
@@ -24,13 +24,13 @@ export {
   type SettingsHookCmd,
   type SettingsHookMatcher,
   type ManagedHooks,
-} from "./settingsjson.ts"
+} from "./settingsjson.ts";
 
 export {
   resolveWithinBase,
   isWithinBase,
   PathEscapeError,
-} from "./pathguard.ts"
+} from "./pathguard.ts";
 
 export {
   specFromProfile,
@@ -39,16 +39,16 @@ export {
   type HookProvider,
   type HookSpec,
   type StaticHookProfile,
-} from "./provider.ts"
+} from "./provider.ts";
 
-export { guardPath, sessionMatches } from "./guard.ts"
+export { guardPath, sessionMatches } from "./guard.ts";
 
 export {
   appendSpool,
   drainSpool,
   spoolFileName,
   spoolFilePath,
-} from "./spool.ts"
+} from "./spool.ts";
 
 export {
   ClaudeHookProvider,
@@ -61,4 +61,4 @@ export {
   claudeHookOwner,
   parseClaudeHookPayload,
   type ClaudeHookPayload,
-} from "./claude.ts"
+} from "./claude.ts";

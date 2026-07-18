@@ -7,23 +7,23 @@
 // call `resetFakeDaytonaSdk()` in `beforeEach` to avoid cross-test leakage.
 
 export interface FakeSandboxSpec {
-  id: string
-  labels?: Record<string, string>
+  id: string;
+  labels?: Record<string, string>;
 }
 
 export const state: {
   /** Scripts process.executeCommand's response for a given raw shell command. */
-  execResult: (command: string) => { result?: string; exitCode: number }
+  execResult: (command: string) => { result?: string; exitCode: number };
   /** Sandboxes visible to Daytona.list(). */
-  sandboxes: FakeSandboxSpec[]
-  executedCommands: string[]
-  uploads: Array<{ buffer: Buffer; path: string }>
-  downloads: string[]
-  deletedIds: string[]
-  createCalls: Array<Record<string, unknown>>
-  clientConfigs: Array<Record<string, unknown>>
+  sandboxes: FakeSandboxSpec[];
+  executedCommands: string[];
+  uploads: { buffer: Buffer; path: string }[];
+  downloads: string[];
+  deletedIds: string[];
+  createCalls: Record<string, unknown>[];
+  clientConfigs: Record<string, unknown>[];
   /** When set, a sandbox whose id this returns true for throws on delete(). */
-  deleteShouldFail: (id: string) => boolean
+  deleteShouldFail: (id: string) => boolean;
 } = {
   execResult: () => ({ result: "", exitCode: 0 }),
   sandboxes: [],
@@ -34,22 +34,22 @@ export const state: {
   createCalls: [],
   clientConfigs: [],
   deleteShouldFail: () => false,
-}
+};
 
 export function resetFakeDaytonaSdk(): void {
-  state.execResult = () => ({ result: "", exitCode: 0 })
-  state.sandboxes = []
-  state.executedCommands = []
-  state.uploads = []
-  state.downloads = []
-  state.deletedIds = []
-  state.createCalls = []
-  state.clientConfigs = []
-  state.deleteShouldFail = () => false
+  state.execResult = () => ({ result: "", exitCode: 0 });
+  state.sandboxes = [];
+  state.executedCommands = [];
+  state.uploads = [];
+  state.downloads = [];
+  state.deletedIds = [];
+  state.createCalls = [];
+  state.clientConfigs = [];
+  state.deleteShouldFail = () => false;
 }
 
 class FakeSandbox {
-  labels: Record<string, string>
+  labels: Record<string, string>;
   process = {
     executeCommand: async (
       command: string,
@@ -57,49 +57,51 @@ class FakeSandbox {
       _env?: Record<string, string>,
       _timeout?: number,
     ) => {
-      state.executedCommands.push(command)
-      return state.execResult(command)
+      state.executedCommands.push(command);
+      return state.execResult(command);
     },
-  }
+  };
   fs = {
     uploadFile: async (buffer: Buffer, path: string) => {
-      state.uploads.push({ buffer, path })
+      state.uploads.push({ buffer, path });
     },
     downloadFile: async (_path: string) => {
-      state.downloads.push(_path)
-      return Buffer.from("")
+      state.downloads.push(_path);
+      return Buffer.from("");
     },
-  }
+  };
 
   constructor(public id: string) {
-    this.labels = {}
+    this.labels = {};
   }
 
   async delete(_timeoutSeconds: number): Promise<void> {
     if (state.deleteShouldFail(this.id)) {
-      throw new Error(`fake delete failure for ${this.id}`)
+      throw new Error(`fake delete failure for ${this.id}`);
     }
-    state.deletedIds.push(this.id)
+    state.deletedIds.push(this.id);
   }
 }
 
 export class Daytona {
   constructor(private config: Record<string, unknown>) {
-    state.clientConfigs.push(config)
+    state.clientConfigs.push(config);
   }
 
   async create(opts: Record<string, unknown>): Promise<FakeSandbox> {
-    state.createCalls.push(opts)
-    const sandbox = new FakeSandbox(`fake-sandbox-${state.createCalls.length}`)
-    sandbox.labels = (opts.labels as Record<string, string>) ?? {}
-    return sandbox
+    state.createCalls.push(opts);
+    const sandbox = new FakeSandbox(`fake-sandbox-${state.createCalls.length}`);
+    sandbox.labels = (opts.labels as Record<string, string>) ?? {};
+    return sandbox;
   }
 
-  async *list(_query?: { labels?: Record<string, string> }): AsyncIterableIterator<FakeSandbox> {
+  async *list(_query?: {
+    labels?: Record<string, string>;
+  }): AsyncIterableIterator<FakeSandbox> {
     for (const spec of state.sandboxes) {
-      const sandbox = new FakeSandbox(spec.id)
-      sandbox.labels = spec.labels ?? {}
-      yield sandbox
+      const sandbox = new FakeSandbox(spec.id);
+      sandbox.labels = spec.labels ?? {};
+      yield sandbox;
     }
   }
 }

@@ -24,7 +24,9 @@ export function shouldKeep(retention, outcome) {
 export class TeardownError extends Error {
     errors;
     constructor(errors, context) {
-        const detail = errors.map((e) => (e instanceof Error ? e.message : String(e))).join("; ");
+        const detail = errors
+            .map((e) => (e instanceof Error ? e.message : String(e)))
+            .join("; ");
         super(context ? `${context}: ${detail}` : detail);
         this.name = "TeardownError";
         this.errors = errors;
