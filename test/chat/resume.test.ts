@@ -51,9 +51,11 @@ function argvOutPath(): string {
 }
 
 // Polls the argv-dump file the fake writes at startup; the write races the Open
-// return, so retry briefly before reading.
+// return, so retry before reading. The budget must tolerate a cold child-process
+// spawn (fresh `node` + ESM resolution) which a loaded/cold vitest worker can
+// push to ~3 s, so poll for ~10 s (still returns immediately once the file lands).
 async function readArgv(path: string): Promise<string[]> {
-  for (let i = 0; i < 100; i++) {
+  for (let i = 0; i < 500; i++) {
     try {
       return JSON.parse(readFileSync(path, "utf8"));
     } catch {
@@ -85,7 +87,7 @@ describe("resume plumbing (Phase 1)", () => {
 
     const stored = await store.getSession(conv.sessionID());
     expect(stored.harnessSessionID).toBe(uuid);
-  });
+  }, 20000);
 
   test("Open with resume prepends codex resume args", async () => {
     const argvPath = argvOutPath();
@@ -97,7 +99,7 @@ describe("resume plumbing (Phase 1)", () => {
     );
     const argv = await readArgv(argvPath);
     expect(argv.slice(0, 2)).toEqual(["resume", uuid]);
-  });
+  }, 20000);
 
   test("Open with resume against a non-resuming harness throws ErrResumeUnsupported", async () => {
     // opencode has no SessionResumer, so Open rejects before spawning.
@@ -166,7 +168,7 @@ describe("Reopen helper (Phase 2)", () => {
     // one. Read via the store directly, independent of the transcript path.
     const turns = await store.listTurns(conv.sessionID());
     expect(turns.map((t) => t.text)).toContain("earlier reply");
-  });
+  }, 20000);
 
   test("Reopen throws ErrNoHarnessSession when the stored session has none", async () => {
     const store = newMemStore();
