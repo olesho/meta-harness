@@ -26,3 +26,9 @@ jobs:
         run: harness install-tools
       - name: harness ci
         run: harness ci
+        env:
+          # The vitest v8-coverage run aggregates coverage for the whole suite
+          # in the main process, which exceeds Node's default heap on CI runners
+          # (JavaScript heap out of memory). Raise it so the coverage phase and
+          # its workers (which inherit NODE_OPTIONS) don't OOM.
+          NODE_OPTIONS: --max-old-space-size=6144
