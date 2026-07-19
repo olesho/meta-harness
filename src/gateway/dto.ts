@@ -27,6 +27,7 @@ import type {
   Session,
   Turn,
 } from "../chat/types.ts";
+import type { TurnResult } from "../harness/index.ts";
 import type { Snapshot } from "../screen/screen.ts";
 
 // ── Wire shapes ──────────────────────────────────────────────────────────────
@@ -90,6 +91,26 @@ export interface SessionDTO {
 /** Response body of POST .../conversations (open). Mirrors Go openResponse. */
 export interface OpenResponseDTO {
   id: string;
+}
+
+/**
+ * Response body of POST /v1/turns (one-shot RunTurn). Assembled from
+ * `TurnResult`'s fields — there is no single turn-result converter in Go's
+ * `types.go` (the daemon builds this inline), so MH defines it here beside the
+ * other converters. Field names stay snake_case to match the rest of the wire
+ * contract.
+ */
+export interface TurnResultDTO {
+  /** The assistant turn that completed or errored. */
+  turn: TurnDTO;
+  /** The chat-level session record after the turn. */
+  session: SessionDTO;
+  /** conv.historyWithSource() after the turn (or the store fallback). */
+  history: TurnDTO[];
+  /** Which path produced `history`: "transcript" or "store". */
+  history_source: string;
+  /** True when runTurn intentionally stopped the harness after the turn. */
+  process_stopped_after_turn: boolean;
 }
 
 /** One item of GET .../conversations (list). Mirrors Go conversationSummary. */
@@ -244,6 +265,17 @@ export function sessionDTO(s: Session): SessionDTO {
 /** openResponse: the POST /conversations reply. `id` is the conversation id. */
 export function openResponse(id: string): OpenResponseDTO {
   return { id };
+}
+
+/** turnResultDTO: MH TurnResult → wire JSON. Assembles the POST /v1/turns body. */
+export function turnResultDTO(r: TurnResult): TurnResultDTO {
+  return {
+    turn: turnDTO(r.turn),
+    session: sessionDTO(r.session),
+    history: r.history.map(turnDTO),
+    history_source: r.historySource,
+    process_stopped_after_turn: r.processStoppedAfterTurn,
+  };
 }
 
 /**

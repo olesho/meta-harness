@@ -40,6 +40,9 @@ import {
   type Session,
   type Turn,
 } from "../chat/index.ts";
+import { isSentinel } from "../chat/errors.ts";
+import { ErrTurnErrored, RunTurnError, runTurn } from "../harness/index.ts";
+import { AutoAcceptTrust } from "../oneshot/index.ts";
 import type { Snapshot } from "../screen/screen.ts";
 import { Context } from "../internal/async/index.ts";
 import {
@@ -49,6 +52,7 @@ import {
   parseAnswerRequest,
   screenResponse,
   turnDTO,
+  turnResultDTO,
   type AnswerRequestBody,
   type InputRequestDTO,
   type TurnDTO,
@@ -275,8 +279,25 @@ interface SendRequestBody {
   timeout_seconds?: number;
 }
 
+// POST /v1/turns request. A superset of OpenRequestBody + `prompt`: the full
+// one-shot turn config. `inputPolicy`/`onInputRequest`/`turnHarness`/
+// `eventBuffer` on TurnConfig are policy/function/internal-tuning valued and are
+// deliberately NOT wire-decoded (the server installs its own unattended policy).
 interface RunTurnRequestBody {
+  harness?: string;
+  binary_path?: string;
+  prompt?: string;
+  args?: string[];
+  working_dir?: string;
+  env?: string[];
+  cols?: number;
+  rows?: number;
+  effort?: string;
+  model?: string;
+  /** One-shot only: defaults to true; false is rejected 400 unsupported. */
   exit_after_turn?: boolean;
+  /** Bounds the whole run as a timed op (→ requestContext deadline). */
+  timeout_seconds?: number;
 }
 
 // ── The daemon ───────────────────────────────────────────────────────────────
@@ -407,11 +428,21 @@ export class Server {
   }
 
   /**
-   * POST /v1/turns — one-shot RunTurn. SCAFFOLD ONLY: the richer RunTurn/
-   * TurnResult it needs is not yet available (today's `src/oneshot`
-   * `runOneShotDetailed` returns the thinner OneShotOutcome), so the handler
-   * validates the request shape then returns a clear "not yet available" path.
-   * Its integration test is marked PENDING until that lands.
+   * POST /v1/turns — one-shot RunTurn. Opens a harness, submits one prompt,
+   * waits for that turn to reach a terminal state, stops the harness, and
+   * returns the full turn-result envelope (Go's `harness-chatd` /v1/turns).
+   *
+   * CONTEXT (§7): the handler passes a REQUEST-SCOPED, optionally-deadlined ctx
+   * (requestContext) as runTurn's first argument, so `timeout_seconds` and
+   * client disconnect can abort a wedged run (event-loop ctx sentinels →
+   * 504/408 via writeRunTurnError) — a background ctx would make those dead
+   * code and let an unanswered input request hang. The unattended
+   * `AutoAcceptTrust` policy clears the trust prompt; the bounded ctx is the
+   * primary guard against any other input kind hanging.
+   *
+   * TIMING (§3): a COMPLETED run pays runTurn's ~3s gracefulQuit floor before
+   * responding, so client timeouts must budget for it. An errored turn skips
+   * gracefulQuit and returns faster.
    */
   private async runTurn(
     req: IncomingMessage,
@@ -439,12 +470,61 @@ export class Server {
       );
       return;
     }
-    writeError(
-      res,
-      501,
-      "not_implemented",
-      "POST /v1/turns is not yet available (awaits the richer RunTurn/TurnResult)",
-    );
+    // Presence validation up front (mirrors runTurn's own wrapInvalid guards on
+    // harness/binaryPath; prompt is a one-shot requirement runTurn doesn't
+    // itself reject) → clean 400s instead of a spawn-then-fail.
+    if (!body.harness) {
+      writeError(res, 400, "invalid_options", "harness is required");
+      return;
+    }
+    if (!body.binary_path) {
+      writeError(res, 400, "invalid_options", "binary_path is required");
+      return;
+    }
+    if (!body.prompt) {
+      writeError(res, 400, "invalid_options", "prompt is required");
+      return;
+    }
+
+    const { ctx, cleanup } = requestContext(req, res, body.timeout_seconds);
+    try {
+      const result = await runTurn(ctx, {
+        harness: body.harness,
+        binaryPath: body.binary_path,
+        prompt: body.prompt,
+        args: body.args,
+        workingDir: body.working_dir,
+        env: body.env,
+        effort: body.effort,
+        model: body.model,
+        cols: body.cols,
+        rows: body.rows,
+        exitAfterTurn: true,
+        // Unattended one-shot: no interactive client to answer prompts. Reuse
+        // the one-shot loop's trust-prompt policy; the bounded ctx above guards
+        // every other input kind (AutoAcceptTrust alone is not hang-proof).
+        inputPolicy: AutoAcceptTrust,
+      });
+      writeJSON(res, 200, turnResultDTO(result));
+    } catch (err) {
+      // An errored turn is a VALID outcome, not a 500: Go returns the errored
+      // turn in the body. Rebuild the envelope from RunTurnError.result and
+      // respond 200. The internal TurnResult flag stays false (the errored turn
+      // throws before runTurn sets it), but /v1/turns only serves
+      // exit_after_turn=true, so conv.close() has already stopped the process —
+      // override process_stopped_after_turn to true at the wire boundary.
+      if (err instanceof RunTurnError && isSentinel(err, ErrTurnErrored)) {
+        const dto = turnResultDTO(err.result);
+        dto.process_stopped_after_turn = true;
+        writeJSON(res, 200, dto);
+        return;
+      }
+      // Everything else (ctx cancel/timeout, chat sentinels, unexpected) reuses
+      // the run-turn error table (ctxDeadlineExceeded→504, ctxCanceled→408, …).
+      writeRunTurnError(res, err);
+    } finally {
+      cleanup();
+    }
   }
 
   /** POST /v1/conversations — open. Uses a BACKGROUND context (see defaultOpener). */
