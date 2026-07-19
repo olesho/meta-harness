@@ -41,6 +41,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { dirname, basename, join } from "node:path";
+import { execPath } from "node:process";
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 
@@ -141,6 +142,13 @@ async function main() {
   // from it). spawnSync inherits the parent env, so propagate the resolved path.
   const childEnv = { ...process.env, META_HARNESS_REBAKE_MANIFEST: manifestPath };
 
+  // A PATH-installed bin is executable and runs directly; a `.js` override (e.g.
+  // META_HARNESS_SCREENBENCH_RECORD pointing at dist/cli/screenbench-record.js,
+  // which may lack the executable bit) must run under `node`.
+  const recorderIsJs = /\.[mc]?js$/.test(recorder);
+  const cmd = recorderIsJs ? execPath : recorder;
+  const baseArgs = recorderIsJs ? [recorder] : [];
+
   let failed = 0;
   let recorded = 0;
   for (const [name, entry] of harnesses) {
@@ -171,7 +179,7 @@ async function main() {
         "--binary-version",
         entry.pinned,
       ];
-      const res = spawnSync(recorder, args, {
+      const res = spawnSync(cmd, [...baseArgs, ...args], {
         cwd: root,
         stdio: "inherit",
         env: childEnv,
