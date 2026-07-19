@@ -1,4 +1,5 @@
 import type { Snapshot, Screen } from "../screen/index.ts";
+import type { Snapshot as SessionSnapshot } from "../wrapper/index.ts";
 import type { Context } from "../internal/async/index.ts";
 import type { ParsedEvent } from "../transcript/event.ts";
 import type { HookProvider } from "../hooks/provider.ts";
@@ -68,6 +69,12 @@ export interface WrapperSession {
     resize(cols: number, rows: number): void;
     /** Terminate the harness process. */
     stop(ctx: Context): Promise<void>;
+    /**
+     * A coherent point-in-time view of the session's liveness state (status,
+     * reason, lastOutputAt). Sampled by the chat layer's activity observer. The
+     * concrete wrapper Session already implements this; test fakes must too.
+     */
+    snapshot(): SessionSnapshot;
 }
 /** wrapper.Config subset the chat layer fills in at Open. */
 export interface StartConfig {

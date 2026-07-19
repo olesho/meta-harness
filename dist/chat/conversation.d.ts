@@ -1,6 +1,6 @@
 import { type Screen, type Snapshot } from "../screen/index.ts";
 import { type Adapter, type Event as TurnEvent, type InputRequest as TurnsInputRequest, type Watcher } from "../turns/index.ts";
-import { type Session as WrapperSession } from "../wrapper/index.ts";
+import { type Session as WrapperSession, type Snapshot as SessionSnapshot } from "../wrapper/index.ts";
 import { Context } from "../internal/async/index.ts";
 import type { Store } from "./store.ts";
 import { type Session, type Turn, type ConversationEvent, type InputRequest, type InputAnswer, type InputPolicy, type HistorySource } from "./types.ts";
@@ -51,6 +51,17 @@ export interface Options {
     primeBound?: number;
     /** Test-only echo-gated submit deadline override (ms). Zero = package default. */
     echoBound?: number;
+    /**
+     * Periodic liveness callback. When set, activityObserver samples
+     * sess.snapshot() every activityInterval ms and delivers it here, plus a final
+     * sample at close() before the session stops. Absent ⇒ the observer never runs.
+     */
+    onActivity?: (snap: SessionSnapshot) => void;
+    /**
+     * The activity-observer tick period (ms). Undefined or <= 0 ⇒
+     * DefaultActivityInterval (10s), mirroring Go's DefaultActivityInterval.
+     */
+    activityInterval?: number;
     /**
      * The REQUESTED acquisition mode. planAcquisition resolves it against the
      * resolved adapter's capabilities to the LATCHED mode actually used. Absent ⇒
@@ -108,6 +119,7 @@ export interface Options {
      */
     streamVersionPredicate?: StreamVersionPredicate;
 }
+export declare const DefaultActivityInterval = 10000;
 /** A size-1 coalesced wake signal — the Go `chan struct{}` of capacity 1. */
 declare class Signal {
     private pending;
@@ -315,6 +327,20 @@ export declare class Conversation {
     private idleGapDur;
     private markerGapDur;
     private idleCompletionWatcher;
+    private activityIntervalDur;
+    /**
+     * The periodic liveness ticker. Ports Go's startActivityObserver /
+     * ActivityInterval (pkg/harness/run.go): every activityInterval ms it samples
+     * the WRAPPER-SESSION snapshot (sess.snapshot(), carrying lastOutputAt) and
+     * hands it to onActivity. Its SOLE gate is the callback being set — unlike
+     * idleCompletionWatcher it is deliberately harness-INDEPENDENT (no
+     * requiresPromptReadiness early-return): liveness must be observable on every
+     * harness. The final sample is taken by close() before sess.stop(), so this
+     * loop only needs to fire on the timer and exit on close (no post-stop
+     * sample). Driven by the cancellable sleep() raced against closedPromise so
+     * teardown leaves no leaked timer (same discipline as the hook drain).
+     */
+    private activityObserver;
     maybeIdleComplete(): Promise<void>;
     maybeExtractSessionID(): Promise<void>;
     /**
