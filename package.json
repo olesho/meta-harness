@@ -82,7 +82,8 @@
     "meta-harness-structured-run": "./dist/cli/structured-runner.js",
     "meta-harness-chatd": "./dist/gateway/server.js",
     "meta-harness-check-versions": "./dist/cli/check-versions.js",
-    "meta-harness-hooks": "./dist/cli/hooks.js"
+    "meta-harness-hooks": "./dist/cli/hooks.js",
+    "meta-harness-screenbench-record": "./dist/cli/screenbench-record.js"
   },
   "scripts": {
     "postinstall": "node scripts/postinstall.mjs",

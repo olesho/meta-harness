@@ -1,60 +1,67 @@
 // Corpus rebake — regenerate the live-recording corpus from an ALTERNATE
-// versions.json manifest by driving the A5 screenbench recorder.
+// versions.json manifest by driving the screenbench recorder.
 //
 // ============================================================================
-// BLOCKED ON A5 (META-HARNESS-51 / the screenbench-recorder ticket).
+// A5 (META-HARNESS-51) is DELIVERED by META-HARNESS-82. The recorder
+// `meta-harness-screenbench-record` now exists in this tree (src/cli/
+// screenbench-record.ts → dist/cli/screenbench-record.js, registered as a `bin`).
+// This script drives it per `(harness × scenario)`. The exit-3 signal is retained
+// only as a defensive "recorder unexpectedly absent" guard — it should never fire
+// in a correctly-built tree; a normal run exits 0.
 // ============================================================================
-// Rebake drives a TypeScript screenbench recorder — `meta-harness-screenbench-record`
-// — that does NOT exist in this tree yet; it is delivered by the A5 ticket. Until
-// A5 lands, this script CANNOT record anything: it detects the missing recorder
-// and exits with a clear, actionable "blocked on A5" message rather than a
-// fabricated recorder call. The wiring around the recorder (manifest read,
-// per-(harness × scenario) fan-out, exit contract) is implemented so that
-// enabling A5 is a one-line change at the marked TODO.
 //
 // Why an ALTERNATE versions.json: rebake pins recordings to a distinct corpus
 // manifest, NOT the embedded catalog. That is why it reads via `readFrom(path)`
-// (src/versions/versions.ts:131) instead of `all()` — the embedded pins drive
-// the drift sentry/canary, while the rebake manifest drives which upstream
-// versions get freshly recorded.
+// (src/versions/versions.ts) instead of `all()` — the embedded pins drive the
+// drift sentry/canary, while the rebake manifest drives which upstream versions
+// get freshly recorded. The recorder RE-READS the same manifest independently
+// (via META_HARNESS_REBAKE_MANIFEST, inherited across spawnSync) to resolve each
+// harness's binary — so both sides agree on which binary produced the bytes.
 //
-// Go analogue: Makefile `rebake-corpus` / `rebake-corpus-all` = 18 live
-// recordings (6 scenarios × 3 harnesses). This repo has no Makefile/CI
-// substrate, so rebake is expressed as a standalone script in the existing
-// script family (build.mjs, verify-exports.mjs).
+// Scenario coverage is PER-HARNESS (see SCENARIOS): the on-disk corpus and the
+// scripted-driver coverage differ per harness, so a single flat array cannot
+// describe the matrix. This ticket's live matrix:
+//   claude-code: multi-turn, tool-call, interrupted-mid-reply  (3)
+//   codex:       multi-turn, tool-call                          (2)
+//   pi:          (deferred — pinned so rebake iterates it, but no scripted
+//                 scenario corpus and no interrupt-confirmation anchor)  (0)
+// = 5 live cells. Harnesses absent from the map rebake nothing (logged, not
+// silently skipped). Enabling pi / extra codex scenarios is a map + catalog edit.
 //
 //   Manifest path:  env META_HARNESS_REBAKE_MANIFEST, else ./versions.rebake.json
 //   Recorder:       env META_HARNESS_SCREENBENCH_RECORD, else `meta-harness-screenbench-record` on PATH
 //
-//   npm run rebake-corpus            # once A5 exists and the manifest is present
+//   npm run rebake-corpus            # with the manifest present
 //
 // EXIT CODES:
-//   0 — all recordings regenerated (only reachable once A5 exists)
+//   0 — all recordings regenerated
 //   1 — error (missing/invalid manifest, recorder failure)
-//   3 — BLOCKED: A5 screenbench recorder not found (distinct from a real error)
+//   3 — recorder unexpectedly absent (defensive; should not fire in a built tree)
 import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { dirname, join } from "node:path";
+import { dirname, basename, join } from "node:path";
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 
 const ExitOK = 0;
 const ExitError = 1;
-const ExitBlockedOnA5 = 3;
+const ExitRecorderAbsent = 3;
 
-// The 6 canonical corpus scenarios (Go analogue). Combined with the manifest's
-// pinned harnesses this is the 6 × 3 = 18 live-recording matrix.
-const SCENARIOS = [
-  "short-reply",
-  "multi-turn",
-  "tool-call",
-  "long-output",
-  "interrupt",
-  "error-recovery",
-];
+// Per-harness scenario coverage — the catalog keys the recorder can DRIVE for
+// each harness (not "exists on disk": rebake creates/overwrites the output dir,
+// so on-disk presence is an output, not a precondition). Harnesses absent from
+// this map (pi, any unpinned/unsupported harness) rebake nothing.
+const SCENARIOS = {
+  "claude-code": ["multi-turn", "tool-call", "interrupted-mid-reply"],
+  codex: ["multi-turn", "tool-call"], // interrupt excluded: no BusyDetector/interrupt seam
+  // "pi": deferred — pi is pinned so rebake iterates it, but it has no scripted
+  //   scenario corpus and no interrupt-confirmation anchor. Omitted here so the
+  //   `?? []` skips it BY DESIGN; enabling pi is a one-line addition once its
+  //   multi-turn/tool-call recordings are validated against the real binary.
+};
 
-// Locate the A5 recorder. Explicit override wins; otherwise probe PATH.
+// Locate the recorder. Explicit override wins; otherwise probe PATH.
 function locateRecorder() {
   const override = process.env.META_HARNESS_SCREENBENCH_RECORD;
   if (override && override !== "") {
@@ -83,14 +90,14 @@ async function main() {
   const recorder = locateRecorder();
   if (recorder === null) {
     process.stderr.write(
-      "rebake-corpus: BLOCKED ON A5 — the screenbench recorder " +
-        "`meta-harness-screenbench-record` was not found.\n" +
-        "  This tool depends on the A5 (META-HARNESS-51) TypeScript screenbench\n" +
-        "  recorder, which is not yet in the tree. Corpus rebake cannot run until\n" +
-        "  A5 lands. Set META_HARNESS_SCREENBENCH_RECORD to the recorder path once\n" +
-        "  it exists, or install it on PATH.\n",
+      "rebake-corpus: the screenbench recorder " +
+        "`meta-harness-screenbench-record` was not found on PATH.\n" +
+        "  It is delivered by META-HARNESS-82 (src/cli/screenbench-record.ts →\n" +
+        "  dist/cli/screenbench-record.js). Build the tree (`npm run build`) so the\n" +
+        "  bin is materialized, set META_HARNESS_SCREENBENCH_RECORD to its path, or\n" +
+        "  install it on PATH.\n",
     );
-    return ExitBlockedOnA5;
+    return ExitRecorderAbsent;
   }
 
   if (!existsSync(manifestPath)) {
@@ -130,20 +137,33 @@ async function main() {
     return ExitError;
   }
 
+  // Ensure the recorder re-reads THIS manifest (it resolves each harness's binary
+  // from it). spawnSync inherits the parent env, so propagate the resolved path.
+  const childEnv = { ...process.env, META_HARNESS_REBAKE_MANIFEST: manifestPath };
+
   let failed = 0;
+  let recorded = 0;
   for (const [name, entry] of harnesses) {
-    for (const scenario of SCENARIOS) {
+    const wanted = SCENARIOS[name] ?? [];
+    if (wanted.length === 0) {
+      // Pinned but out-of-scope (e.g. pi, deferred) — skip by design, logged.
+      process.stderr.write(
+        `rebake-corpus: ${name} has no in-scope scenarios (deferred) — skipping\n`,
+      );
+      continue;
+    }
+    for (const scenario of wanted) {
       const out = join(root, "test", "corpus", name, scenario);
-      // TODO(A5): once `meta-harness-screenbench-record` exists, invoke it here.
-      // The Go analogue's argument shape (test/corpus/README.md) is:
-      //   record --harness <name> --bin "$(which <binary>)" --out <out>
-      //          --cols 120 --rows 40 --binary-version <entry.pinned>
-      // Wiring is ready; this is the single line that A5 unblocks:
+      // Drive the recorder. It derives the binary from --harness by re-reading
+      // the manifest, derives the scenario name from basename(--out), probes the
+      // real binary version, and cross-checks it against --binary-version.
       const args = [
         "--harness",
         name,
         "--out",
         out,
+        "--scenario",
+        basename(out),
         "--cols",
         "120",
         "--rows",
@@ -151,12 +171,18 @@ async function main() {
         "--binary-version",
         entry.pinned,
       ];
-      const res = spawnSync(recorder, args, { cwd: root, stdio: "inherit" });
+      const res = spawnSync(recorder, args, {
+        cwd: root,
+        stdio: "inherit",
+        env: childEnv,
+      });
       if (res.status !== 0) {
         failed++;
         process.stderr.write(
           `rebake-corpus: recording failed: ${name}/${scenario} (exit ${res.status})\n`,
         );
+      } else {
+        recorded++;
       }
     }
   }
@@ -165,9 +191,7 @@ async function main() {
     process.stderr.write(`rebake-corpus: ${failed} recording(s) failed\n`);
     return ExitError;
   }
-  process.stdout.write(
-    `rebake-corpus: regenerated ${harnesses.length * SCENARIOS.length} recordings\n`,
-  );
+  process.stdout.write(`rebake-corpus: regenerated ${recorded} recording(s)\n`);
   return ExitOK;
 }
 
