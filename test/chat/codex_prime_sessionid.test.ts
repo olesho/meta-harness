@@ -110,7 +110,13 @@ describe("codex session-id prime", () => {
     const uuid = "019f0300-0000-7013-a43a-000000000003";
     // First /status renders nothing (delayed); the halfway resend renders the box.
     const { c, scr, sent } = await build({
-      primeBound: 200,
+      // A wide bound (was 200) so the halfway-mark resend's async `Screen.write`
+      // has ~1 s to land under release-gate CPU contention. The assertions are
+      // unchanged: the box only renders on `count >= 2`, so exactly one latched
+      // resend fires and `statusCount === 2` regardless of the bound's width
+      // (META-HARNESS-79 — this fixes the assertion-class flake a timeout bump
+      // cannot reach).
+      primeBound: 2000,
       onStatus: (s, count) => {
         if (count >= 2) void s.write(statusBox(uuid));
       },

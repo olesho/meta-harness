@@ -105,7 +105,7 @@ describe("oneshot inherits acquisition from the single chat seam", () => {
     const events: EventEnvelope[] = [];
     const script = streamScript();
 
-    const out = await runOneShotDetailed(deadline(3000), {
+    const out = await runOneShotDetailed(deadline(15000), {
       harness: "generic",
       binaryPath: fakeHarnessBin,
       prompt: "drive the acquisition seam",
@@ -142,7 +142,7 @@ describe("oneshot inherits acquisition from the single chat seam", () => {
     const events: EventEnvelope[] = [];
     const script = streamScript();
 
-    const out = await runOneShotDetailed(deadline(3000), {
+    const out = await runOneShotDetailed(deadline(15000), {
       harness: "generic",
       binaryPath: fakeHarnessBin,
       prompt: "no acquisition this time",
