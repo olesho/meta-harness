@@ -36,6 +36,12 @@ import {
 } from "../../src/chat/index.ts";
 import { Context, ctxCanceled } from "../../src/internal/async/index.ts";
 import type { Snapshot } from "../../src/screen/screen.ts";
+import {
+  New,
+  PromptRef,
+  fakeHarnessBin,
+  fakeLaunchEnv,
+} from "../chat/fakeharness.ts";
 
 // ── A faithful fake Conversation ─────────────────────────────────────────────
 
@@ -671,7 +677,13 @@ describe("no lost events", () => {
   });
 });
 
-describe("/v1/turns (scaffold — pending A1's RunTurn/TurnResult)", () => {
+// /v1/turns drives the imported runTurn directly (NOT the injectable opener), so
+// these tests spawn a REAL fake-harness process on a REAL pty — exactly like
+// test/harness/run-turn.test.ts. That yields a genuine store-backed Session for
+// free (the live line taps populate the store), so the asserted `session` is a
+// real, non-zero record rather than zeroSession(). The 30 000 ms global vitest
+// budget absorbs the ~3 s gracefulQuit floor the completed path pays (§3).
+describe("/v1/turns (one-shot RunTurn over a real pty + fake harness)", () => {
   test("exit_after_turn=false → 400 unsupported", async () => {
     const { base } = await start();
     const r = await req(base, "POST", "/v1/turns", {
@@ -683,7 +695,101 @@ describe("/v1/turns (scaffold — pending A1's RunTurn/TurnResult)", () => {
     expect(r.json.code).toBe("unsupported");
   });
 
-  test.todo("one-shot RunTurn returns a full TurnResult (awaits A1)");
+  test("missing harness / binary_path / prompt → 400 invalid_options", async () => {
+    const { base } = await start();
+    for (const body of [
+      { binary_path: "/b", prompt: "p" },
+      { harness: "claude", prompt: "p" },
+      { harness: "claude", binary_path: "/b" },
+    ]) {
+      const r = await req(base, "POST", "/v1/turns", body);
+      expect(r.status).toBe(400);
+      expect(r.json.code).toBe("invalid_options");
+    }
+  });
+
+  test("malformed JSON → 400 invalid_json", async () => {
+    const { base } = await start();
+    const res = await fetch(base + "/v1/turns", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{not valid json",
+    });
+    expect(res.status).toBe(400);
+    const j = await res.json();
+    expect(j.code).toBe("invalid_json");
+  });
+
+  test("one-shot RunTurn returns a full TurnResult envelope", async () => {
+    // The claude-code adapter mints its OWN --session-id uuid at launch; the
+    // scripted resume hint is a losing backstop (see run-turn.test.ts).
+    const resumeHintID = "123e4567-e89b-12d3-a456-426614174000";
+    const script = New("claude-code")
+      .Session(resumeHintID)
+      .Idle()
+      .AwaitSubmit()
+      .Working(30, "Working")
+      .Reply(40, "assistant reply: " + PromptRef(), "Baked", "1s")
+      .StayAliveUntilStopped()
+      .Build();
+    const { base } = await start();
+    const r = await req(base, "POST", "/v1/turns", {
+      harness: "claude",
+      binary_path: fakeHarnessBin,
+      env: fakeLaunchEnv(script),
+      prompt: "ship the turn API",
+    });
+    expect(r.status).toBe(200);
+    expect(r.json.turn.state).toBe("complete");
+    // A GENUINE, store-backed session — a freshly-minted --session-id uuid, NOT
+    // the all-zeros zeroSession() a naive fake seam would yield.
+    expect(r.json.session.harness_session_id).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
+    );
+    expect(r.json.session.harness_session_id).not.toBe(resumeHintID);
+    expect(r.json.history.length).toBeGreaterThanOrEqual(2);
+    expect(["transcript", "store"]).toContain(r.json.history_source);
+    expect(r.json.process_stopped_after_turn).toBe(true);
+  });
+
+  test("an errored turn returns 200 with the errored turn, NOT 500", async () => {
+    const script = New("claude-code").Idle().AwaitSubmit().Exit(2).Build();
+    const { base } = await start();
+    const r = await req(base, "POST", "/v1/turns", {
+      harness: "claude",
+      binary_path: fakeHarnessBin,
+      env: fakeLaunchEnv(script),
+      prompt: "fail this turn",
+    });
+    expect(r.status).toBe(200);
+    expect(r.json.turn.state).toBe("errored");
+    // Handler override (§4): the internal TurnResult flag is false (the errored
+    // turn throws before runTurn sets it), but exit_after_turn=true always stops
+    // the process, so the wire envelope reports it stopped consistently.
+    expect(r.json.process_stopped_after_turn).toBe(true);
+  });
+
+  test("timeout_seconds bounds a wedged turn → 504 timeout (§7)", async () => {
+    // A turn that submits but never reaches a terminal state: runTurn's event
+    // loop exits only on ctx.done(). Proves the handler passes the bounded,
+    // request-scoped ctx (a background ctx would hang here forever).
+    const script = New("claude-code")
+      .Idle()
+      .AwaitSubmit()
+      .Working(30, "Working")
+      .StayAliveUntilStopped()
+      .Build();
+    const { base } = await start();
+    const r = await req(base, "POST", "/v1/turns", {
+      harness: "claude",
+      binary_path: fakeHarnessBin,
+      env: fakeLaunchEnv(script),
+      prompt: "never completes",
+      timeout_seconds: 6,
+    });
+    expect(r.status).toBe(504);
+    expect(r.json.code).toBe("timeout");
+  });
 });
 
 // ── SSE collection helper ────────────────────────────────────────────────────

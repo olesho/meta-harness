@@ -24,6 +24,7 @@ import {
 import {
   ctxCanceled,
   ctxDeadlineExceeded,
+  isSentinel,
   wrap,
 } from "../../src/internal/async/index.ts";
 import {
@@ -32,6 +33,11 @@ import {
   writeChatError,
   writeRunTurnError,
 } from "../../src/gateway/errors.ts";
+import {
+  ErrTurnErrored,
+  RunTurnError,
+  type TurnResult,
+} from "../../src/harness/index.ts";
 
 /** Drive a writer against a fresh ServerResponse and capture status + body. */
 function capture(
@@ -150,5 +156,46 @@ describe("writeRunTurnError — adds context sentinels", () => {
     const got = capture(writeRunTurnError, new Error("boom"));
     expect(got.status).toBe(500);
     expect(got.body.code).toBe("internal");
+  });
+
+  // §4: ErrTurnErrored is NOT a table row — an errored turn is a valid 200
+  // outcome the /v1/turns HANDLER branches on (isSentinel + rebuild envelope),
+  // not an error the mapper turns into a status. So mapRunTurnError leaves it on
+  // the 500 fallback; the handler must intercept it before ever reaching here.
+  test("RunTurnError(ErrTurnErrored) is NOT table-mapped (handler owns the 200)", () => {
+    const zero = new Date(0);
+    const result = {
+      turn: {
+        id: "t",
+        sessionID: "s",
+        role: "assistant",
+        state: "errored",
+        text: "",
+        reason: "boom",
+        startedAt: zero,
+        completedAt: zero,
+        httpCode: 0,
+        retryAfter: 0,
+      },
+      session: {
+        id: "s",
+        harness: "claude-code",
+        workingDir: "",
+        createdAt: zero,
+        harnessSessionID: "",
+      },
+      history: [],
+      historySource: "store",
+      processStoppedAfterTurn: false,
+    } as TurnResult;
+    const err = new RunTurnError(
+      "harness: turn errored",
+      ErrTurnErrored,
+      result,
+    );
+    // The handler recognizes it via isSentinel …
+    expect(isSentinel(err, ErrTurnErrored)).toBe(true);
+    // … but the mapper does not: it falls through to the 500 fallback.
+    expect(mapRunTurnError(err)).toEqual({ status: 500, code: "internal" });
   });
 });
