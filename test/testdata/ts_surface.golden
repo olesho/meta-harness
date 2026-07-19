@@ -20,7 +20,9 @@ wrapper/index.ts
   ErrTransient: number=7
   ErrUnknown: number=8
   EventChannel: class{close,emit,receive}
-  Session: class{acquireWriter,classifyOnExit,emitClassifierTrace,events,forwardStdin,onOutput,pid,recentOutput,recordStatusChange,resize,snapshot,start,startClassifier,stop,supervise,terminate,wait,writeStdin}
+  OutputFanout: class{attach,close,hasSinks,push}
+  SINK_CAP_BYTES: number=65536
+  Session: class{acquireWriter,attachOutput,classifyOnExit,emitClassifierTrace,events,forwardStdin,onOutput,pid,recentOutput,recordStatusChange,resize,snapshot,start,startClassifier,stop,supervise,terminate,wait,writeStdin}
   StatusAPIError: string="api_error"
   StatusBinaryNotFound: string="binary_not_found"
   StatusBlockedByCost: string="blocked_by_cost"
