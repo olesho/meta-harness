@@ -12,9 +12,9 @@
 // We deliberately do NOT canary `opencode` (unpinned `pinned: ""` — perpetual
 // `unpinned`, no signal) or any harness absent from versions.json.
 //
-// Unlike the corpus rebake tooling, this canary runs against the EMBEDDED
-// catalog via `all()` and needs no A5 screenbench recorder — so it lands and
-// runs today.
+// Unlike the corpus rebake tooling (which drives the `meta-harness-screenbench-record`
+// recorder delivered by META-HARNESS-82), this canary runs against the EMBEDDED
+// catalog via `all()` and needs no screenbench recorder at all.
 //
 // EXIT-CODE CONTRACT — identical to the check-versions gate (src/cli/check-versions.ts):
 //   0 — codex matches npm `latest` (or is unpinned — never reached here)

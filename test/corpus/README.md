@@ -39,10 +39,19 @@ Scripted refreshes go through `make rebake-corpus` — see
 > Makefile target. It reads an ALTERNATE corpus manifest via `readFrom(path)`
 > (env `META_HARNESS_REBAKE_MANIFEST`, else `./versions.rebake.json`) and drives
 > the TypeScript screenbench recorder `meta-harness-screenbench-record`. That
-> recorder is delivered by A5 (META-HARNESS-51) and does **not** exist in the
-> tree yet, so `npm run rebake-corpus` currently exits **3 (blocked on A5)** with
-> a clear message and records nothing. The Go command above is the interim
-> reference for the recorder's argument shape.
+> recorder is delivered by META-HARNESS-82 (which supersedes and implements A5 /
+> META-HARNESS-51): `src/cli/screenbench-record.ts` → `dist/cli/screenbench-record.js`,
+> registered as a `bin`. Build the tree so the bin is materialized, then
+> `npm run rebake-corpus` records and exits **0** (exit **3** is now only a
+> defensive "recorder unexpectedly absent" guard).
+>
+> Scenario coverage is **per-harness** (`SCENARIOS` in the script): `claude-code`
+> records `multi-turn`, `tool-call`, `interrupted-mid-reply`; `codex` records
+> `multi-turn`, `tool-call` (interrupt excluded — no generic BusyDetector /
+> interrupt seam yet); `pi` is **deferred** (pinned, so rebake iterates it, but it
+> has no scripted scenario corpus and no interrupt-confirmation anchor — it is
+> skipped with a logged line). The Go command above is the interim reference for
+> the recorder's argument shape.
 
 ## Privacy
 
