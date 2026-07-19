@@ -96,5 +96,12 @@ export declare class HookDrain {
     private startWatch;
     private stopWatch;
     private loop;
+    /**
+     * Wait for the next wake signal or the fallback timer. Every arm settles or is
+     * cleared exactly once, so nothing accumulates across iterations even when the
+     * wake fires continuously (fs.watch churn on Linux previously spun this loop
+     * and leaked pending promises until the worker OOM'd).
+     */
+    private waitWake;
 }
 //# sourceMappingURL=hookDrain.d.ts.map

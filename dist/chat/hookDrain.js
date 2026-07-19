@@ -43,20 +43,6 @@ export const hookSpoolSubdir = "hook-spool";
 // promptly); small enough that SessionStart/idle hooks are never arbitrarily
 // late, large enough not to busy-loop.
 export const defaultDrainFallbackMs = 750;
-// sleep is a cancelable timer, mirroring conversation.ts's helper so the drain
-// loop never leaks a pending setTimeout on the wake/close paths.
-function sleep(ms) {
-    let timeout;
-    const promise = new Promise((resolve) => {
-        timeout = setTimeout(resolve, ms);
-    });
-    return {
-        promise,
-        cancel: () => {
-            clearTimeout(timeout);
-        },
-    };
-}
 /**
  * HookDrain runs the spool → canonical-Event integration for one Conversation.
  * Construct it, call ensureConfig() (installs the managed hooks + creates the
@@ -225,22 +211,20 @@ export class HookDrain {
         }
     }
     async loop() {
+        // Wake the loop once when the Conversation closes so it re-checks
+        // isClosed() and exits promptly. The previous code did
+        // `this.o.closed.then(...)` inside a Promise.race EVERY iteration; race never
+        // releases its losing arms, so each iteration leaked a handler on the
+        // long-lived `closed` promise (and an abandoned wake/timer promise). When the
+        // wake fires rapidly — e.g. fs.watch churn on Linux — the loop spins and
+        // those pending promises accumulate until the worker runs out of heap.
+        void this.o.closed.then(() => {
+            this.o.wake.signal();
+        });
         for (;;) {
             if (this.stopped || this.o.isClosed())
                 return;
-            const timer = sleep(this.fallbackMs);
-            try {
-                const which = await Promise.race([
-                    this.o.wake.receive().then(() => "wake"),
-                    this.o.closed.then(() => "closed"),
-                    timer.promise.then(() => "timer"),
-                ]);
-                if (which === "closed")
-                    return;
-            }
-            finally {
-                timer.cancel();
-            }
+            await this.waitWake();
             if (this.stopped || this.o.isClosed())
                 return;
             try {
@@ -251,6 +235,26 @@ export class HookDrain {
                 // the next wake/timer retries.
             }
         }
+    }
+    /**
+     * Wait for the next wake signal or the fallback timer. Every arm settles or is
+     * cleared exactly once, so nothing accumulates across iterations even when the
+     * wake fires continuously (fs.watch churn on Linux previously spun this loop
+     * and leaked pending promises until the worker OOM'd).
+     */
+    waitWake() {
+        return new Promise((resolve) => {
+            let settled = false;
+            const finish = () => {
+                if (settled)
+                    return;
+                settled = true;
+                clearTimeout(timer);
+                resolve();
+            };
+            const timer = setTimeout(finish, this.fallbackMs);
+            void this.o.wake.receive().then(finish, finish);
+        });
     }
 }
 //# sourceMappingURL=hookDrain.js.map
