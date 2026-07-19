@@ -17,10 +17,10 @@ import { start as wrapperStart, } from "../wrapper/index.js";
 import { Context, isSentinel, wrap } from "../internal/async/index.js";
 import { ErrEmptySessionID, ErrSessionNotFound } from "../transcript/errors.js";
 import { stripIDEContextTags } from "../transcript/stripTags.js";
-import { RoleUser, RoleAssistant, TurnStatePending, TurnStateComplete, TurnStateErrored, EventTurn, EventInputRequest, EventInputResolved, DispositionAnswer, DispositionDeny, HistorySourceTranscript, HistorySourceStore, newID, } from "./types.js";
+import { RoleUser, RoleAssistant, TurnStatePending, TurnStateComplete, TurnStateErrored, EventTurn, EventInputRequest, EventInputResolved, DispositionAnswer, DispositionDeny, HistorySourceTranscript, HistorySourceStore, ReasonAuthRequired, newID, } from "./types.js";
 import { ErrInvalidOptions, ErrUnknownHarness, ErrNoControl, ErrTurnInFlight, ErrClosed, ErrInputPending, ErrNoInputPending, ErrStaleInputRequest, ErrUnknownOption, ErrNotMultiSelect, ErrQuitUnsupported, ErrResumeUnsupported, ErrNoHarnessSession, } from "./errors.js";
 import { newControlQueue } from "./control.js";
-import { submitKeyForHarness, requiresPromptReadiness, readyForInput, } from "./ready.js";
+import { submitKeyForHarness, requiresPromptReadiness, readyForInput, authRequired, } from "./ready.js";
 import { cleanHarnessEnv } from "./env.js";
 import { AcquisitionModeOff, AcquisitionModeHooks } from "../turns/index.js";
 import { StreamTap, adapterStreamParser, } from "../acquisition/internal/streamTap.js";
@@ -655,13 +655,30 @@ export class Conversation {
                     turn.text = this.assistantText(ev.snap);
                 break;
             case Blocked:
-            case Errored:
                 turn.state = TurnStateErrored;
                 turn.completedAt = ev.at ?? new Date();
                 turn.reason = ev.reason;
                 turn.httpCode = ev.httpCode ?? 0;
                 turn.retryAfter = ev.retryAfter ?? 0;
                 break;
+            case Errored: {
+                turn.state = TurnStateErrored;
+                turn.completedAt = ev.at ?? new Date();
+                // A terminal error whose screen shows a logged-out / re-auth banner is not
+                // a task failure — the harness CLI is logged out. Prefer the canonical,
+                // machine-matchable auth reason over the generic one (e.g. "harness
+                // exited"). Status-derived Errored events carry no snapshot (the wrapper-
+                // status watcher pump stamps none), so fall back to the live screen, which
+                // still shows the banner after the harness exits.
+                const authText = ev.snap?.text ?? this.screen?.snapshot().text;
+                turn.reason =
+                    authText !== undefined && authRequired(this.opts.harness, authText)
+                        ? ReasonAuthRequired
+                        : ev.reason;
+                turn.httpCode = ev.httpCode ?? 0;
+                turn.retryAfter = ev.retryAfter ?? 0;
+                break;
+            }
             case ToolCall:
                 this.currentTurn = turn;
                 return;
@@ -774,8 +791,13 @@ export class Conversation {
             }
             else {
                 turn.state = TurnStateErrored;
-                turn.reason =
-                    this.opts.harness +
+                // No assistant output was recoverable. If the settled screen shows a
+                // logged-out / re-auth banner, the turn didn't fail on its merits — the
+                // harness is logged out; record the canonical auth reason instead of the
+                // generic "prompt not accepted" one.
+                turn.reason = authRequired(this.opts.harness, snap.text)
+                    ? ReasonAuthRequired
+                    : this.opts.harness +
                         ": prompt not accepted / no assistant output" +
                         (diag !== "" ? "; " + diag : "");
             }
