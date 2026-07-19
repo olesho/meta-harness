@@ -76,7 +76,7 @@ describe("runTurn (real pty + fake harness)", () => {
     expect(result.history.length).toBeGreaterThanOrEqual(2);
     expect(result.conversation).toBeUndefined();
     expect(result.processStoppedAfterTurn).toBe(true);
-  }, 20000);
+  });
 
   test("keeps the conversation alive when exitAfterTurn is false", async () => {
     const script = New("claude-code")
@@ -107,7 +107,7 @@ describe("runTurn (real pty + fake harness)", () => {
     await sendOneTurn(conv, "second turn");
     const turn = await waitForTerminalTurn(conv, 8000);
     expect(turn.state).toBe(TurnStateComplete);
-  }, 20000);
+  });
 
   test("throws ErrTurnErrored when the harness exits mid-turn", async () => {
     const script = New("claude-code").Idle().AwaitSubmit().Exit(2).Build();
@@ -129,5 +129,5 @@ describe("runTurn (real pty + fake harness)", () => {
     expect(caught).toBeInstanceOf(RunTurnError);
     const result: TurnResult = (caught as RunTurnError).result;
     expect(result.turn.state).toBe(TurnStateErrored);
-  }, 15000);
+  });
 });
