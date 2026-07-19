@@ -37,10 +37,14 @@ const cancels: (() => void)[] = [];
 afterEach(() => {
   for (const c of cancels.splice(0)) c();
 });
-function deadline(ms: number): Context {
+// Returns the deadline context AND its cancel. The deadline is kept generous
+// (a pure safety net) so it never sits on the happy path: each test drives the
+// run to its observable outcome, then calls `cancel()` to make runOneShotDetailed
+// return promptly instead of burning the full deadline (15 s → <1 s per test).
+function deadlineCtx(ms: number): { ctx: Context; cancel: () => void } {
   const { ctx, cancel } = Context.withDeadline(Context.background(), ms);
   cancels.push(cancel);
-  return ctx;
+  return { ctx, cancel };
 }
 
 // A minimal turns.Adapter that carries a StreamParser but derives NO turn events
@@ -105,7 +109,11 @@ describe("oneshot inherits acquisition from the single chat seam", () => {
     const events: EventEnvelope[] = [];
     const script = streamScript();
 
-    const out = await runOneShotDetailed(deadline(15000), {
+    // Start the run WITHOUT awaiting: the turn never settles, so its only exit is
+    // the deadline. Poll the observation sink until the three events are in, then
+    // cancel the context to force a prompt return — the deadline stays a safety net.
+    const { ctx, cancel } = deadlineCtx(15000);
+    const p = runOneShotDetailed(ctx, {
       harness: "generic",
       binaryPath: fakeHarnessBin,
       prompt: "drive the acquisition seam",
@@ -118,6 +126,9 @@ describe("oneshot inherits acquisition from the single chat seam", () => {
       // Keep idle-completion from settling the turn early, so all events flow.
       idleGap: 5000,
     });
+    await waitFor(() => events.length >= 3, 10000, "3 acquisition events");
+    cancel();
+    const out = await p;
 
     // Exactly the three interleaved events arrive, in arrival order, off ONE tap.
     // A second StreamTap (double-attach) would deliver each line twice.
@@ -140,9 +151,15 @@ describe("oneshot inherits acquisition from the single chat seam", () => {
 
   test("flag unset: no acquisition fan-off, raw session-id capture unchanged", async () => {
     const events: EventEnvelope[] = [];
+    const lines: string[] = [];
     const script = streamScript();
 
-    const out = await runOneShotDetailed(deadline(15000), {
+    // Sink stays empty (mode unset), so observe progress via onDisplayLine. The
+    // `late-1` line arrives AFTER `SESSIONID:abc-123`, so once we see it the raw
+    // capture has completed — then cancel to return promptly off the safety-net
+    // deadline instead of blocking on it.
+    const { ctx, cancel } = deadlineCtx(15000);
+    const p = runOneShotDetailed(ctx, {
       harness: "generic",
       binaryPath: fakeHarnessBin,
       prompt: "no acquisition this time",
@@ -151,12 +168,19 @@ describe("oneshot inherits acquisition from the single chat seam", () => {
       // A sink is present but the mode is NOT set — the plan latches Off, so the
       // tap never fans acquisition events out (behaviour unchanged).
       onAcquisitionEvent: (env) => events.push(env),
+      onDisplayLine: (l) => lines.push(l),
       idleGap: 5000,
     });
+    await waitFor(
+      () => lines.some((l) => l.includes("late-1")),
+      10000,
+      "late-1 display line (session id already captured)",
+    );
+    cancel();
+    const out = await p;
 
     // Raw session-id capture still runs (the record is written), proving the
     // seam is intact — only the acquisition fan-off is dormant.
-    await waitFor(() => out.harnessSessionID === "abc-123", 100, "id captured");
     expect(out.harnessSessionID).toBe("abc-123");
     // No live acquisition events without the mode flag.
     expect(events.length).toBe(0);
