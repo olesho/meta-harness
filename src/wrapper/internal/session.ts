@@ -18,6 +18,11 @@ import {
 } from "./classification.ts";
 import { type Config } from "./config.ts";
 import { ErrNone, type ErrorClass } from "./errorclass.ts";
+import {
+  OutputFanout,
+  type OutputSink,
+  type OutputSinkHandle,
+} from "./fanout.ts";
 import { LineSplitter, newLineSplitter } from "./linetap.ts";
 import { resolveClassifier } from "./classifier.ts";
 import { newRecentOutput, type RecentOutputBuffer } from "./recentOutput.ts";
@@ -285,6 +290,7 @@ export class Session {
   private readonly recentOutputBuf: RecentOutputBuffer;
   private readonly lineSplitter: LineSplitter | null;
   private readonly stdout: StdoutSink;
+  private readonly fanout = new OutputFanout();
   private readonly _startedAt: Date;
 
   private _pid: number;
@@ -465,11 +471,43 @@ export class Session {
     }
   }
 
+  /**
+   * Attach a runtime observer of raw PTY output. Returns an idempotent detach
+   * handle that removes the sink, ends its pump, and discards its ring. Delivery
+   * is best-effort and DEFERRED (a later microtask, never inline with the PTY
+   * read) and may drop the oldest bytes under back-pressure; the durable taps
+   * (recentOutput / onLine) and the fixed stdout are unaffected. Attaching after
+   * the session has exited yields a no-op handle that delivers nothing.
+   */
+  attachOutput(sink: OutputSink): () => void {
+    const handle: OutputSinkHandle = this.fanout.attach(sink);
+    return () => {
+      handle.detach();
+    };
+  }
+
   private onOutput(d: Uint8Array): void {
     this.lastOutput = Date.now();
+    // Durable, non-lossy taps first: both copy/back-pressure the caller and must
+    // stay ahead of and outside the best-effort fanout.
     this.recentOutputBuf.write(d);
     this.lineSplitter?.write(d);
-    this.stdout.write(d);
+    // The fixed stdout keeps its exact current synchronous, inline delivery
+    // (chat's Screen), but a throw can no longer propagate into the PTY read
+    // loop. Trace it rather than swallow silently — a throw here was previously
+    // loud (it broke reads), so a real Screen bug must stay visible.
+    try {
+      this.stdout.write(d);
+    } catch (err) {
+      this.trace.emit({
+        at: new Date(),
+        kind: "stdout_write_failed",
+        fields: { pid: this._pid, err: String(err) },
+      });
+    }
+    // Best-effort observers last, on a deferred pump. No-op / zero-copy when no
+    // observer is attached (the common case), so the hot path is unchanged.
+    this.fanout.push(d);
   }
 
   private terminate(): void {
@@ -519,6 +557,9 @@ export class Session {
     if (this.classifierTimer) clearInterval(this.classifierTimer);
     if (this.escalateTimer) clearTimeout(this.escalateTimer);
     this.lineSplitter?.flush();
+    // End the output fanout: end every observer pump, discard any still-buffered
+    // ring contents (discard-not-flush), fire each sink's close?() once.
+    this.fanout.close();
     this.pty.closeStdin();
 
     this.trace.emit({

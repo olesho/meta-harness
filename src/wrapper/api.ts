@@ -69,4 +69,10 @@ export {
   type StdoutSink,
   type EventRecv,
 } from "./internal/session.ts";
+export {
+  OutputFanout,
+  SINK_CAP_BYTES,
+  type OutputSink,
+  type OutputSinkHandle,
+} from "./internal/fanout.ts";
 export { ErrPTYAllocation, ErrPTYRead } from "./internal/pty.ts";

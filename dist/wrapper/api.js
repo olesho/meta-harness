@@ -13,5 +13,6 @@ export { argsWithHarnessModel } from "./internal/mode.js";
 // PTY supervision surface.
 export { start, run } from "./internal/run.js";
 export { Session, ClassifierFunc, classifyExit, EventChannel, } from "./internal/session.js";
+export { OutputFanout, SINK_CAP_BYTES, } from "./internal/fanout.js";
 export { ErrPTYAllocation, ErrPTYRead } from "./internal/pty.js";
 //# sourceMappingURL=api.js.map
