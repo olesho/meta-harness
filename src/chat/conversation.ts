@@ -61,6 +61,7 @@ import {
   DispositionDeny,
   HistorySourceTranscript,
   HistorySourceStore,
+  ReasonAuthRequired,
   newID,
 } from "./types.ts";
 import {
@@ -83,6 +84,7 @@ import {
   submitKeyForHarness,
   requiresPromptReadiness,
   readyForInput,
+  authRequired,
 } from "./ready.ts";
 import { cleanHarnessEnv } from "./env.ts";
 import type { AcquisitionMode } from "../turns/index.ts";
@@ -904,13 +906,30 @@ export class Conversation {
         if (ev.snap) turn.text = this.assistantText(ev.snap);
         break;
       case Blocked:
-      case Errored:
         turn.state = TurnStateErrored;
         turn.completedAt = ev.at ?? new Date();
         turn.reason = ev.reason;
         turn.httpCode = ev.httpCode ?? 0;
         turn.retryAfter = ev.retryAfter ?? 0;
         break;
+      case Errored: {
+        turn.state = TurnStateErrored;
+        turn.completedAt = ev.at ?? new Date();
+        // A terminal error whose screen shows a logged-out / re-auth banner is not
+        // a task failure — the harness CLI is logged out. Prefer the canonical,
+        // machine-matchable auth reason over the generic one (e.g. "harness
+        // exited"). Status-derived Errored events carry no snapshot (the wrapper-
+        // status watcher pump stamps none), so fall back to the live screen, which
+        // still shows the banner after the harness exits.
+        const authText = ev.snap?.text ?? this.screen?.snapshot().text;
+        turn.reason =
+          authText !== undefined && authRequired(this.opts.harness, authText)
+            ? ReasonAuthRequired
+            : ev.reason;
+        turn.httpCode = ev.httpCode ?? 0;
+        turn.retryAfter = ev.retryAfter ?? 0;
+        break;
+      }
       case ToolCall:
         this.currentTurn = turn;
         return;
@@ -1015,10 +1034,15 @@ export class Conversation {
         turn.text = proof.text;
       } else {
         turn.state = TurnStateErrored;
-        turn.reason =
-          this.opts.harness +
-          ": prompt not accepted / no assistant output" +
-          (diag !== "" ? "; " + diag : "");
+        // No assistant output was recoverable. If the settled screen shows a
+        // logged-out / re-auth banner, the turn didn't fail on its merits — the
+        // harness is logged out; record the canonical auth reason instead of the
+        // generic "prompt not accepted" one.
+        turn.reason = authRequired(this.opts.harness, snap.text)
+          ? ReasonAuthRequired
+          : this.opts.harness +
+            ": prompt not accepted / no assistant output" +
+            (diag !== "" ? "; " + diag : "");
       }
       try {
         await this.store.updateTurn(turn);

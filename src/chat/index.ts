@@ -37,6 +37,7 @@ export {
   type HistorySource,
   HistorySourceTranscript,
   HistorySourceStore,
+  ReasonAuthRequired,
 } from "./types.ts";
 
 export type { Store } from "./store.ts";
@@ -64,6 +65,7 @@ export {
   submitKeyForHarness,
   requiresPromptReadiness,
   readyForInput,
+  authRequired,
 } from "./ready.ts";
 
 export {
