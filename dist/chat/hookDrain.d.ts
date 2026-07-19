@@ -62,6 +62,7 @@ export declare class HookDrain {
     /** eventIDs already routed to onEvents — dedup across successive drains. */
     private readonly emitted;
     private watcher;
+    private watchDebounce;
     private started;
     private stopped;
     constructor(o: HookDrainOptions);

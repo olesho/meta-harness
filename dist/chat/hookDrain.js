@@ -43,6 +43,9 @@ export const hookSpoolSubdir = "hook-spool";
 // promptly); small enough that SessionStart/idle hooks are never arbitrarily
 // late, large enough not to busy-loop.
 export const defaultDrainFallbackMs = 750;
+/** Coalescing window for fs.watch raises, so a Linux inotify burst on the spool
+ * dir wakes the drain loop once (macrotask-paced) instead of spinning it. */
+const WATCH_DEBOUNCE_MS = 5;
 /**
  * HookDrain runs the spool → canonical-Event integration for one Conversation.
  * Construct it, call ensureConfig() (installs the managed hooks + creates the
@@ -58,6 +61,7 @@ export class HookDrain {
     /** eventIDs already routed to onEvents — dedup across successive drains. */
     emitted = new Set();
     watcher = null;
+    watchDebounce = null;
     started = false;
     stopped = false;
     constructor(o) {
@@ -187,8 +191,18 @@ export class HookDrain {
             // the coalesced wake Signal; the loop drains once per wake. On platforms
             // where fs.watch is unreliable this may miss events — the bounded fallback
             // timer is the backstop, so correctness never depends on the watch.
+            //
+            // Debounce the raise: on Linux, fs.watch can fire a burst (or continuously)
+            // for the drain's own spool-dir churn. Signalling per raw event would spin
+            // the drain loop on a microtask treadmill that starves the event loop. A
+            // short setTimeout coalesces a burst into one macrotask-paced wake.
             this.watcher = fs.watch(this._spoolDir, () => {
-                this.o.wake.signal();
+                if (this.watchDebounce)
+                    return;
+                this.watchDebounce = setTimeout(() => {
+                    this.watchDebounce = null;
+                    this.o.wake.signal();
+                }, WATCH_DEBOUNCE_MS);
             });
             this.watcher.on("error", () => {
                 this.stopWatch();
@@ -200,6 +214,10 @@ export class HookDrain {
         }
     }
     stopWatch() {
+        if (this.watchDebounce) {
+            clearTimeout(this.watchDebounce);
+            this.watchDebounce = null;
+        }
         if (this.watcher) {
             try {
                 this.watcher.close();
