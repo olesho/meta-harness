@@ -140,7 +140,10 @@ async function main() {
 
   // Ensure the recorder re-reads THIS manifest (it resolves each harness's binary
   // from it). spawnSync inherits the parent env, so propagate the resolved path.
-  const childEnv = { ...process.env, META_HARNESS_REBAKE_MANIFEST: manifestPath };
+  const childEnv = {
+    ...process.env,
+    META_HARNESS_REBAKE_MANIFEST: manifestPath,
+  };
 
   // A PATH-installed bin is executable and runs directly; a `.js` override (e.g.
   // META_HARNESS_SCREENBENCH_RECORD pointing at dist/cli/screenbench-record.js,
