@@ -35,6 +35,7 @@ import {
 import {
   start as wrapperStart,
   type Session as WrapperSession,
+  type Snapshot as SessionSnapshot,
 } from "../wrapper/index.ts";
 import { Context, isSentinel, wrap } from "../internal/async/index.ts";
 import { ErrEmptySessionID, ErrSessionNotFound } from "../transcript/errors.ts";
@@ -147,6 +148,24 @@ export interface Options {
   /** Test-only echo-gated submit deadline override (ms). Zero = package default. */
   echoBound?: number;
 
+  // ── Activity observer (periodic wrapper-session liveness snapshot) ──────────
+  // A periodic ticker that samples the WRAPPER-SESSION snapshot (carrying
+  // lastOutputAt) and hands it to onActivity, plus one final sample taken at
+  // close() BEFORE the session is stopped. Ports Go's startActivityObserver /
+  // OnActivity / ActivityInterval (pkg/harness/run.go). Harness-independent: it
+  // fires regardless of prompt-readiness. Inert unless onActivity is set.
+  /**
+   * Periodic liveness callback. When set, activityObserver samples
+   * sess.snapshot() every activityInterval ms and delivers it here, plus a final
+   * sample at close() before the session stops. Absent ⇒ the observer never runs.
+   */
+  onActivity?: (snap: SessionSnapshot) => void;
+  /**
+   * The activity-observer tick period (ms). Undefined or <= 0 ⇒
+   * DefaultActivityInterval (10s), mirroring Go's DefaultActivityInterval.
+   */
+  activityInterval?: number;
+
   // ── Acquisition (StreamTap) opt-in ─────────────────────────────────────────
   // The acquisition subsystem attaches as an ADDITIONAL consumer of the SAME
   // durable PTY line tap chat already uses for raw session-id capture — no second
@@ -242,6 +261,10 @@ const echoNeedleLen = 24;
 // current prompt not yet appended). A genuine swallow writes no rollout, so it
 // pays at most this once. (ms)
 const transcriptFlushRetryGap = 500;
+// DefaultActivityInterval — the activity observer's default tick period, mirroring
+// Go's harness.DefaultActivityInterval (10s). Used when Options.activityInterval
+// is undefined or <= 0. (ms)
+export const DefaultActivityInterval = 10_000;
 
 function concat(a: Uint8Array, b: Uint8Array): Uint8Array {
   const out = new Uint8Array(a.length + b.length);
@@ -525,6 +548,14 @@ export class Conversation {
     // wake) and then reaps the spool dir. Managed settings.json blocks are left
     // installed (idempotent, re-ensured each session) — removal is explicit only.
     if (this.hookDrain) this.hookDrain.close();
+    // Final liveness sample, mirroring Go's one last onAct(sess.Snapshot()) when
+    // the session stops (pkg/harness/run.go). It MUST be taken BEFORE
+    // this.sess.stop() below — stop tears the session state down, so a sample
+    // taken afterwards would be post-mortem. Setting closedResolve() above has
+    // already unblocked the activityObserver loop, so it exits without taking an
+    // extra post-stop sample.
+    if (this.opts.onActivity && this.sess)
+      this.opts.onActivity(this.sess.snapshot());
     if (this.sess) await this.sess.stop(ctx);
     if (this.watcher) this.watcher.close();
   }
@@ -977,6 +1008,41 @@ export class Conversation {
       }
     } finally {
       unsubscribe();
+    }
+  }
+
+  private activityIntervalDur(): number {
+    return this.opts.activityInterval && this.opts.activityInterval > 0
+      ? this.opts.activityInterval
+      : DefaultActivityInterval;
+  }
+
+  /**
+   * The periodic liveness ticker. Ports Go's startActivityObserver /
+   * ActivityInterval (pkg/harness/run.go): every activityInterval ms it samples
+   * the WRAPPER-SESSION snapshot (sess.snapshot(), carrying lastOutputAt) and
+   * hands it to onActivity. Its SOLE gate is the callback being set — unlike
+   * idleCompletionWatcher it is deliberately harness-INDEPENDENT (no
+   * requiresPromptReadiness early-return): liveness must be observable on every
+   * harness. The final sample is taken by close() before sess.stop(), so this
+   * loop only needs to fire on the timer and exit on close (no post-stop
+   * sample). Driven by the cancellable sleep() raced against closedPromise so
+   * teardown leaves no leaked timer (same discipline as the hook drain).
+   */
+  private async activityObserver(): Promise<void> {
+    if (this.opts.onActivity === undefined) return;
+    const interval = this.activityIntervalDur();
+    for (;;) {
+      if (this.closedFlag) return;
+      const timer = sleep(interval);
+      const which = await Promise.race([
+        this.closedPromise.then(() => "closed" as const),
+        timer.promise.then(() => "timer" as const),
+      ]);
+      timer.cancel();
+      if (which === "closed") return;
+      if (this.closedFlag) return;
+      if (this.sess) this.opts.onActivity(this.sess.snapshot());
     }
   }
 
@@ -1654,6 +1720,9 @@ export class Conversation {
   startPumps(): void {
     void this.consumeWatcher();
     void this.idleCompletionWatcher();
+    // Harness-independent periodic liveness ticker. Runs its OWN loop (a
+    // cancellable sleep raced against close), inert unless onActivity is set.
+    void this.activityObserver();
     // The hook drain runs its OWN loop (spool watch + bounded fallback timer),
     // deliberately NOT hung off consumeWatcher — so a SessionStart-before-any-
     // file-change or an idle-period Stop drains promptly regardless of turn
