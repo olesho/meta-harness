@@ -160,6 +160,16 @@ export function sessionDTO(s) {
 export function openResponse(id) {
     return { id };
 }
+/** turnResultDTO: MH TurnResult → wire JSON. Assembles the POST /v1/turns body. */
+export function turnResultDTO(r) {
+    return {
+        turn: turnDTO(r.turn),
+        session: sessionDTO(r.session),
+        history: r.history.map(turnDTO),
+        history_source: r.historySource,
+        process_stopped_after_turn: r.processStoppedAfterTurn,
+    };
+}
 /**
  * conversationSummary: one GET /conversations list item. Per the id-convention,
  * `session_id` carries Conversation.sessionID().

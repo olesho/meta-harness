@@ -6,3 +6,4 @@ node_modules/
 # harness transient runtime state (manifest.json is intentionally tracked)
 .harness/lock
 .harness/txn/
+.harness/session-*

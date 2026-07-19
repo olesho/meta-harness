@@ -50,11 +50,21 @@ export declare class Server {
     private buildRoutes;
     private healthz;
     /**
-     * POST /v1/turns — one-shot RunTurn. SCAFFOLD ONLY: the richer RunTurn/
-     * TurnResult it needs is not yet available (today's `src/oneshot`
-     * `runOneShotDetailed` returns the thinner OneShotOutcome), so the handler
-     * validates the request shape then returns a clear "not yet available" path.
-     * Its integration test is marked PENDING until that lands.
+     * POST /v1/turns — one-shot RunTurn. Opens a harness, submits one prompt,
+     * waits for that turn to reach a terminal state, stops the harness, and
+     * returns the full turn-result envelope (Go's `harness-chatd` /v1/turns).
+     *
+     * CONTEXT (§7): the handler passes a REQUEST-SCOPED, optionally-deadlined ctx
+     * (requestContext) as runTurn's first argument, so `timeout_seconds` and
+     * client disconnect can abort a wedged run (event-loop ctx sentinels →
+     * 504/408 via writeRunTurnError) — a background ctx would make those dead
+     * code and let an unanswered input request hang. The unattended
+     * `AutoAcceptTrust` policy clears the trust prompt; the bounded ctx is the
+     * primary guard against any other input kind hanging.
+     *
+     * TIMING (§3): a COMPLETED run pays runTurn's ~3s gracefulQuit floor before
+     * responding, so client timeouts must budget for it. An errored turn skips
+     * gracefulQuit and returns faster.
      */
     private runTurn;
     /** POST /v1/conversations — open. Uses a BACKGROUND context (see defaultOpener). */
