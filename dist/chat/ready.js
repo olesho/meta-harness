@@ -120,6 +120,45 @@ export function readyForInput(harness, text) {
             return true;
     }
 }
+// --- logged-out / re-authentication detection (both harnesses) ---
+//
+// A harness whose CLI login has expired or was never established produces NO
+// assistant output for the turn. The observed terminal-screen banners (grounded
+// in real CLI output, not invented):
+//   - claude-code: "Not logged in · Please run /login" (printed then exit), and
+//     the "run /login" family of re-auth banners.
+//   - codex:       the turn fails with "401 Unauthorized: missing bearer or basic
+//     authentication" on screen; `codex login status` / a logged-out TUI say
+//     "Not logged in"; codex's own remediation is "run `codex login`".
+//
+// These anchors are matched ONLY at a turn's terminal point, and ONLY once it has
+// yielded no clean assistant output (see conversation.ts) — they EXPLAIN a failed
+// turn, they never complete one. That gating is what keeps a genuine reply merely
+// mentioning logins, or a benign "your login expires in N days" WARNING on a
+// still-valid session, from ever being scanned and mislabeled.
+const claudeAuthRE = [/\brun \/login\b/i, /\bnot logged in\b/i];
+const codexAuthRE = [
+    /\b401 unauthorized\b/i,
+    /missing bearer or basic authentication/i,
+    /\bnot logged in\b/i,
+    /\b(?:re-?run|run) ['"`]?codex(?: mcp)? login/i,
+];
+/**
+ * authRequired reports whether the rendered screen shows a harness login-expiry /
+ * logged-out banner. Callers MUST gate this on a turn that produced no clean
+ * assistant output — it is a failure EXPLANATION, not a turn-completion signal.
+ * Returns false for any harness without a known banner set.
+ */
+export function authRequired(harness, text) {
+    switch (harness) {
+        case "claude-code":
+            return claudeAuthRE.some((re) => re.test(text));
+        case "codex":
+            return codexAuthRE.some((re) => re.test(text));
+        default:
+            return false;
+    }
+}
 /** submitKeyForHarness pins the per-harness Enter key. */
 export function submitKeyForHarness(harness, _screenText) {
     switch (harness) {

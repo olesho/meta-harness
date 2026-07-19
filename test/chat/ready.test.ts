@@ -4,6 +4,7 @@ import {
   submitKeyForHarness,
   requiresPromptReadiness,
   readyForInput,
+  authRequired,
 } from "../../src/chat/ready.ts";
 
 const dec = new TextDecoder();
@@ -267,5 +268,63 @@ describe("readyForInput(pi)", () => {
   });
   test("startup not ready", () => {
     expect(readyForInput("pi", startup)).toBe(false);
+  });
+});
+
+describe("authRequired", () => {
+  // claude-code — real observed output: `claude -p` on an unauthenticated box
+  // prints "Not logged in · Please run /login"; the TUI shows a "run /login"
+  // re-auth banner.
+  test("claude: detects the logged-out banner", () => {
+    expect(
+      authRequired("claude-code", "Not logged in · Please run /login"),
+    ).toBe(true);
+    expect(
+      authRequired(
+        "claude-code",
+        "  ⚠ Your login expires in 1 day · run /login to renew\n❯ ",
+      ),
+    ).toBe(true);
+  });
+
+  // codex — real observed output: the `codex exec` turn path fails with a 401,
+  // `codex login status` says "Not logged in", remediation is "run `codex login`".
+  test("codex: detects 401 / missing-bearer / not-logged-in / codex login", () => {
+    expect(
+      authRequired(
+        "codex",
+        "ERROR: unexpected status 401 Unauthorized: Missing bearer or basic authentication in header",
+      ),
+    ).toBe(true);
+    expect(authRequired("codex", "Not logged in")).toBe(true);
+    expect(
+      authRequired(
+        "codex",
+        "ChatGPT account ID not available, please re-run `codex login`",
+      ),
+    ).toBe(true);
+  });
+
+  // Gating context: authRequired is only consulted on a turn that produced no
+  // clean output, but even so it must not fire on ordinary text lacking the
+  // anchors, nor cross harnesses, nor for an unknown harness.
+  test("no false positive on ordinary screen text", () => {
+    expect(authRequired("claude-code", "⏺ I refactored the auth module.")).toBe(
+      false,
+    );
+    expect(authRequired("codex", "› ready\nthinking about the task")).toBe(
+      false,
+    );
+  });
+  test("codex anchors do not fire for claude-code and vice versa", () => {
+    // "401 Unauthorized" is a codex-only anchor; claude's set is /login-based.
+    expect(
+      authRequired("claude-code", "HTTP 401 Unauthorized from the API"),
+    ).toBe(false);
+    // "run /login" is a claude-only anchor; not in codex's set.
+    expect(authRequired("codex", "please run /login")).toBe(false);
+  });
+  test("unknown harness never fires", () => {
+    expect(authRequired("some-other-harness", "Not logged in")).toBe(false);
   });
 });

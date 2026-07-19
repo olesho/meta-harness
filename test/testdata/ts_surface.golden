@@ -177,6 +177,7 @@ chat/index.ts
   MemStore: class{appendTurn,createSession,getSession,listTurns,updateSession,updateTurn}
   Open: function
   Options: type
+  ReasonAuthRequired: string="auth_required: harness login expired or re-authentication required — renew the harness login"
   Reopen: function
   ReopenOptions: type
   Role: type
@@ -199,6 +200,7 @@ chat/index.ts
   TurnsInputRequest: type
   Watcher: type
   WrapperSession: type
+  authRequired: function
   cleanHarnessEnv: function
   newMemStore: function
   readyForInput: function
