@@ -185,10 +185,18 @@ export declare class Conversation {
      */
     harnessSessionIDProvisional: boolean;
     /**
-     * Diagnostic outcome of the startup session-id prime (primeSessionID). Read by
-     * tests via a structural escape; NOT a public accessor and NOT walked by the
-     * contract golden (private instance field). Undefined when priming did not run
-     * (resume, non-codex, id already set).
+     * Outcome of the startup session-id prime (primeSessionID). Undefined when
+     * priming did not run (resume, non-codex, id already set). NOT a public
+     * accessor and NOT walked by the contract golden (private instance field);
+     * tests read it via a structural escape.
+     *
+     * Load-bearing (not merely diagnostic) on the codex first-write path: the
+     * `written_uncaptured` value ARMS the guarded disk fallback. maybeExtractSessionID's
+     * first-write branch passes `primeOutcome === "written_uncaptured"` as
+     * extractSessionID's allowDiskFallback, so this field decides whether the
+     * disk-locate backstop (CodexAdapter.locateSessionID) is consulted at all. Any
+     * other value (or undefined) keeps the fallback OFF — the scrape either worked,
+     * was never primed, or is still viable. See extractSessionID.
      */
     private primeOutcome?;
     eventCh: EventBus;
@@ -337,6 +345,17 @@ export declare class Conversation {
      * openWithSession's cleanup. Records the outcome in primeOutcome for tests.
      */
     private primeSessionID;
+    /**
+     * Screen-scrape first, then (only when allowDiskFallback) the adapter's
+     * disk-locate. allowDiskFallback is a REQUIRED parameter so tsc flags any
+     * caller left unconverted — the gate must be decided at every call site:
+     *   - provisional-refresh (forking resume): true — locate is the mechanism.
+     *   - first-write (codex): primeOutcome === "written_uncaptured" only.
+     *   - captureFromScreen (during priming) and the primeSessionID discriminator:
+     *     false — scrape only; the disk fallback is premature/outcome-polluting there.
+     * This scopes the disk fallback to the codex first-write backstop and keeps
+     * the common scrape path race-free.
+     */
     private extractSessionID;
     captureRawSessionID(line: string): Promise<void>;
     history(): Promise<Turn[]>;

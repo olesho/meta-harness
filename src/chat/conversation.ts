@@ -384,10 +384,18 @@ export class Conversation {
   harnessSessionIDProvisional = false;
 
   /**
-   * Diagnostic outcome of the startup session-id prime (primeSessionID). Read by
-   * tests via a structural escape; NOT a public accessor and NOT walked by the
-   * contract golden (private instance field). Undefined when priming did not run
-   * (resume, non-codex, id already set).
+   * Outcome of the startup session-id prime (primeSessionID). Undefined when
+   * priming did not run (resume, non-codex, id already set). NOT a public
+   * accessor and NOT walked by the contract golden (private instance field);
+   * tests read it via a structural escape.
+   *
+   * Load-bearing (not merely diagnostic) on the codex first-write path: the
+   * `written_uncaptured` value ARMS the guarded disk fallback. maybeExtractSessionID's
+   * first-write branch passes `primeOutcome === "written_uncaptured"` as
+   * extractSessionID's allowDiskFallback, so this field decides whether the
+   * disk-locate backstop (CodexAdapter.locateSessionID) is consulted at all. Any
+   * other value (or undefined) keeps the fallback OFF — the scrape either worked,
+   * was never primed, or is still viable. See extractSessionID.
    */
   private primeOutcome?:
     | "captured"
@@ -1061,7 +1069,12 @@ export class Conversation {
     // the locator still returns the old id, and we keep retrying. This is the
     // ONLY path that overwrites an already-set harnessSessionID.
     if (this.harnessSessionIDProvisional) {
-      const [id, ok] = this.extractSessionID();
+      // Provisional-refresh (forking resume): the disk-locate IS the mechanism
+      // here — a forking adapter mints a fresh id onto a new rollout that only
+      // disk-locate can see. Always allow it. Codex never arms this latch
+      // (resumeForksSessionID() === false), so the guarded first-write path
+      // below is unaffected by this branch.
+      const [id, ok] = this.extractSessionID(true);
       if (ok && id !== "" && id !== this.session.harnessSessionID) {
         // Persist-before-set: on a persist failure keep the latch armed and the
         // old id so the next TurnComplete retries.
@@ -1074,7 +1087,13 @@ export class Conversation {
       return;
     }
     if (this.session.harnessSessionID !== "") return;
-    const [id, ok] = this.extractSessionID();
+    // First-write path: allow the disk fallback ONLY when the prime wrote
+    // `/status` but the box never yielded an id (`written_uncaptured`). In the
+    // common case the scrape works and the fallback is never consulted, so
+    // race-freedom is preserved. See extractSessionID / primeOutcome.
+    const [id, ok] = this.extractSessionID(
+      this.primeOutcome === "written_uncaptured",
+    );
     if (!ok) return;
     await this.captureAndPersistSessionID(id, /* replace */ false);
   }
@@ -1118,7 +1137,10 @@ export class Conversation {
   /** Extract the id from the current screen and first-write it. True once set. */
   private async captureFromScreen(): Promise<boolean> {
     if (this.session.harnessSessionID !== "") return true;
-    const [id, ok] = this.extractSessionID();
+    // Called inside the prime poll loop: the disk fallback is premature during
+    // priming (the whole point of the poll is to render and scrape the box), and
+    // primeOutcome is not yet finalized. Scrape only.
+    const [id, ok] = this.extractSessionID(false);
     if (!ok) return false;
     return this.captureAndPersistSessionID(id, /* replace */ false);
   }
@@ -1215,8 +1237,14 @@ export class Conversation {
           break; // deadline
         }
         // Distinguish a persist failure (box rendered + parsed, but the store
-        // rejected, so the id is still empty) from a plain poll miss.
-        const [, parsed] = this.extractSessionID();
+        // rejected, so the id is still empty) from a plain poll miss. Scrape
+        // ONLY (allowDiskFallback=false): this discriminator must reflect the
+        // screen scrape alone. If the disk fallback ran here, a matching rollout
+        // already on disk would set `parsed = true` even though the box never
+        // rendered — misclassifying `written_uncaptured` as `persist_failed`,
+        // which is NOT in the firing gate set, so the fallback would then never
+        // arm on the next TurnComplete (silently disabling itself).
+        const [, parsed] = this.extractSessionID(false);
         this.primeOutcome =
           parsed && this.session.harnessSessionID === ""
             ? "persist_failed"
@@ -1239,7 +1267,18 @@ export class Conversation {
     }
   }
 
-  private extractSessionID(): [string, boolean] {
+  /**
+   * Screen-scrape first, then (only when allowDiskFallback) the adapter's
+   * disk-locate. allowDiskFallback is a REQUIRED parameter so tsc flags any
+   * caller left unconverted — the gate must be decided at every call site:
+   *   - provisional-refresh (forking resume): true — locate is the mechanism.
+   *   - first-write (codex): primeOutcome === "written_uncaptured" only.
+   *   - captureFromScreen (during priming) and the primeSessionID discriminator:
+   *     false — scrape only; the disk fallback is premature/outcome-polluting there.
+   * This scopes the disk fallback to the codex first-write backstop and keeps
+   * the common scrape path race-free.
+   */
+  private extractSessionID(allowDiskFallback: boolean): [string, boolean] {
     const a = this.adapter as unknown as Record<string, unknown>;
     if (typeof a.extractSessionID === "function") {
       const [id, ok] = (
@@ -1247,7 +1286,7 @@ export class Conversation {
       )(this.screen.snapshot());
       if (ok) return [id, true];
     }
-    if (typeof a.locateSessionID === "function") {
+    if (allowDiskFallback && typeof a.locateSessionID === "function") {
       const [id, ok] = (a.locateSessionID as (w: string) => [string, boolean])(
         this.opts.workingDir ?? "",
       );
