@@ -154,6 +154,19 @@ export class Conversation {
     queue;
     session;
     /**
+     * The final run-level observation, captured off the watcher AFTER
+     * consumeWatcher's event loop drains the terminal event (the post-terminal
+     * seam — watcher.close() is NOT a valid barrier; it only joins the screen
+     * pump). Rolls up the LARGEST retryAfter and whether ANY raw wrapper event
+     * reported an api_error, EVEN one that produced no turn transition. Defaults
+     * to the empty observation until the loop completes. Ports Go's Result
+     * observation (pkg/harness/run.go).
+     */
+    finalObservation = {
+        retryAfter: 0,
+        sawAPIError: false,
+    };
+    /**
      * The per-run acquisition tap: a PARALLEL CONSUMER of the same durable PTY line
      * tap `captureRawSessionID` reads from. Set by openWithSession when the plan or
      * a display sink needs it; otherwise undefined. Never drives turn state.
@@ -639,8 +652,23 @@ export class Conversation {
             }
         }
         finally {
+            // The event loop is done only after pump 1 processed the TERMINAL event
+            // (watcher.events() returns done from pumpDone()), so this is the correct
+            // post-terminal seam to snapshot the full run-level observation — not
+            // watcher.close(), which never joins pump 1.
+            this.finalObservation = this.watcher.observation();
             this.eventCh.close();
         }
+    }
+    /**
+     * The run-level observation: the LARGEST retryAfter seen across every raw
+     * wrapper event and whether ANY event reported an api_error mid-run (even one
+     * that produced no turn transition, or that later recovered to a different
+     * terminal status). Returns the empty observation until consumeWatcher's loop
+     * completes. Ports Go's post-terminal Result observation (pkg/harness/run.go).
+     */
+    observation() {
+        return this.finalObservation;
     }
     async handleTurnsEvent(ev) {
         switch (ev.kind) {

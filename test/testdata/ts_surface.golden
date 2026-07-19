@@ -90,7 +90,7 @@ turns/index.ts
   Turn: type
   TurnComplete: string="turn_complete"
   Watch: function
-  Watcher: class{close,events,pumpDone,send}
+  Watcher: class{close,events,observation,pumpDone,send}
   claudecode: object{ClaudeCodeAdapter,DetectInput,DetectQuestion,New}
   codex: object{AutoDismissKeys,CODEX_STATUS_MIN_COLS,CodexAdapter,DetectInput,KindApproval,KindModelMigration,KindNotice,KindUpdateNotice,New,PromptReady}
   describeAcquisitionMode: function
@@ -144,7 +144,7 @@ transcript/index.ts
 chat/index.ts
   Adapter: type
   Backend: type
-  Conversation: class{acquireControl,activityIntervalDur,activityObserver,adapterBusy,adapterPromptNotAccepted,adapterQuitSequence,adapterRawSessionID,answer,assistantText,awaitComposerEcho,awaitPromptReady,awaitPromptReadyUntil,captureAndPersistSessionID,captureFromScreen,captureRawSessionID,captureTranscriptWatermark,close,consumeWatcher,echoBoundDur,emit,events,extractSessionID,getAdapter,handleInputRequested,handleInputResolved,handleTurnsEvent,history,historyWithSource,idleCompletionWatcher,idleGapDur,inputAwaitingClient,isClosed,markerGapDur,maybeExtractSessionID,maybeIdleComplete,pendingInput,policyOption,primeBoundDur,primeSessionID,quit,readTranscriptTurns,screenSnapshot,send,sessionID,signalInputState,startPumps,transcriptOverrideEligible,transcriptProofOfCurrentTurn,tryAutoDismissCodex,tryResolveInput,tryTranscriptProof,waitReadyForSend,wrapper,writeAnswer,writeKeys,writeMessageAndSubmit}
+  Conversation: class{acquireControl,activityIntervalDur,activityObserver,adapterBusy,adapterPromptNotAccepted,adapterQuitSequence,adapterRawSessionID,answer,assistantText,awaitComposerEcho,awaitPromptReady,awaitPromptReadyUntil,captureAndPersistSessionID,captureFromScreen,captureRawSessionID,captureTranscriptWatermark,close,consumeWatcher,echoBoundDur,emit,events,extractSessionID,getAdapter,handleInputRequested,handleInputResolved,handleTurnsEvent,history,historyWithSource,idleCompletionWatcher,idleGapDur,inputAwaitingClient,isClosed,markerGapDur,maybeExtractSessionID,maybeIdleComplete,observation,pendingInput,policyOption,primeBoundDur,primeSessionID,quit,readTranscriptTurns,screenSnapshot,send,sessionID,signalInputState,startPumps,transcriptOverrideEligible,transcriptProofOfCurrentTurn,tryAutoDismissCodex,tryResolveInput,tryTranscriptProof,waitReadyForSend,wrapper,writeAnswer,writeKeys,writeMessageAndSubmit}
   ConversationEvent: type
   Disposition: type
   DispositionAnswer: string="answer"

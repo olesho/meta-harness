@@ -10,7 +10,7 @@
 
 import type { Screen } from "../screen/index.ts";
 import type { Adapter, Event } from "./types.ts";
-import type { SessionLike } from "./wrapper.ts";
+import { StatusAPIError, type SessionLike } from "./wrapper.ts";
 
 export class Watcher {
   private readonly queue: Event[] = [];
@@ -20,6 +20,14 @@ export class Watcher {
   private finished = false;
   private onClose: (() => void) | null = null;
 
+  // Run-level observation, rolled up off EVERY raw wrapper session event —
+  // BEFORE the adapter maps it to turn events (a rate-limit banner or a
+  // recovered api_error that yields NO turn transition would otherwise be
+  // lost). Ports pkg/harness/run.go's observation struct: the LARGEST
+  // retryAfter seen and whether ANY event reported an api_error.
+  private maxRetryAfter = 0;
+  private sawAPIError = false;
+
   constructor(sess: SessionLike | null, scr: Screen | null, adapter: Adapter) {
     // Pump 1: wrapper session events → adapter.onWrapperStatus.
     if (sess) {
@@ -27,6 +35,12 @@ export class Watcher {
       void (async () => {
         try {
           for await (const ev of sess.events()) {
+            // Roll up the run-level observation off the RAW event, before the
+            // adapter drops non-turn-producing events. retryAfter is optional
+            // on SessionEvent, so guard the read with `?? 0`.
+            if ((ev.retryAfter ?? 0) > this.maxRetryAfter)
+              this.maxRetryAfter = ev.retryAfter ?? 0;
+            if (ev.status === StatusAPIError) this.sawAPIError = true;
             for (const te of adapter.onWrapperStatus(ev.status, ev.reason)) {
               if (te.at === undefined) te.at = ev.at;
               if (te.httpCode === undefined) te.httpCode = ev.httpCode;
@@ -87,6 +101,16 @@ export class Watcher {
       if (next.done) return;
       yield next.value;
     }
+  }
+
+  /**
+   * The run-level roll-up over every raw wrapper session event seen so far:
+   * the LARGEST retryAfter and whether ANY event reported an api_error. Read it
+   * after pump 1 has drained the terminal event (i.e. after events() completes)
+   * for the final, complete observation.
+   */
+  observation(): { retryAfter: number; sawAPIError: boolean } {
+    return { retryAfter: this.maxRetryAfter, sawAPIError: this.sawAPIError };
   }
 
   /** Signals the screen pump to stop. Does not stop the session. Idempotent. */
