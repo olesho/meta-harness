@@ -7,6 +7,7 @@
 //   2. screen subscription   → adapter.onScreen
 // The events stream ends after both the session terminates AND close() is
 // called.
+import { StatusAPIError } from "./wrapper.js";
 export class Watcher {
     queue = [];
     waiter = null;
@@ -14,6 +15,13 @@ export class Watcher {
     closed = false;
     finished = false;
     onClose = null;
+    // Run-level observation, rolled up off EVERY raw wrapper session event —
+    // BEFORE the adapter maps it to turn events (a rate-limit banner or a
+    // recovered api_error that yields NO turn transition would otherwise be
+    // lost). Ports pkg/harness/run.go's observation struct: the LARGEST
+    // retryAfter seen and whether ANY event reported an api_error.
+    maxRetryAfter = 0;
+    sawAPIError = false;
     constructor(sess, scr, adapter) {
         // Pump 1: wrapper session events → adapter.onWrapperStatus.
         if (sess) {
@@ -21,6 +29,13 @@ export class Watcher {
             void (async () => {
                 try {
                     for await (const ev of sess.events()) {
+                        // Roll up the run-level observation off the RAW event, before the
+                        // adapter drops non-turn-producing events. retryAfter is optional
+                        // on SessionEvent, so guard the read with `?? 0`.
+                        if ((ev.retryAfter ?? 0) > this.maxRetryAfter)
+                            this.maxRetryAfter = ev.retryAfter ?? 0;
+                        if (ev.status === StatusAPIError)
+                            this.sawAPIError = true;
                         for (const te of adapter.onWrapperStatus(ev.status, ev.reason)) {
                             if (te.at === undefined)
                                 te.at = ev.at;
@@ -90,6 +105,15 @@ export class Watcher {
                 return;
             yield next.value;
         }
+    }
+    /**
+     * The run-level roll-up over every raw wrapper session event seen so far:
+     * the LARGEST retryAfter and whether ANY event reported an api_error. Read it
+     * after pump 1 has drained the terminal event (i.e. after events() completes)
+     * for the final, complete observation.
+     */
+    observation() {
+        return { retryAfter: this.maxRetryAfter, sawAPIError: this.sawAPIError };
     }
     /** Signals the screen pump to stop. Does not stop the session. Idempotent. */
     close() {
