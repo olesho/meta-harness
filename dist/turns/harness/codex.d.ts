@@ -63,6 +63,22 @@ export declare class CodexAdapter extends GenericAdapter implements Adapter {
      */
     extractSessionID(snap: Snapshot): [string, boolean];
     /**
+     * Implements turns.SessionIDLocator — the GUARDED disk fallback for a Codex
+     * build whose `/status` scrape yields no id but which still writes a
+     * `session_meta` rollout. Delegates through CodexReader (NOT the bare
+     * locateLatestSession): the bare function reads this.sessionsRoot, which is ""
+     * in production, so walkJSONL("") → readdirSync("") throws → undefined — a
+     * silent no-op. CodexReader.resolveRoot() defaults to ~/.codex/sessions,
+     * mirroring the readTranscript delegation below.
+     *
+     * locateLatestSession never throws (every fs call is try/catch) and returns
+     * undefined for empty workingDir or no match, satisfying the [id, boolean]
+     * contract. The chat layer gates WHEN this is consulted (only on the codex
+     * first-write path once the prime recorded `written_uncaptured`), so this
+     * method itself stays a plain latest-rollout lookup.
+     */
+    locateSessionID(workingDir: string): [string, boolean];
+    /**
      * Implements turns.SessionIDPrimer — the keystrokes that make Codex print its
      * session id on screen: the `/status` slash command followed by the CSI 13 u
      * submit key (unmodified Enter under the kitty keyboard protocol; mirrors
