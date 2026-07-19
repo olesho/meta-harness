@@ -1,6 +1,7 @@
 import { type Classification, type Classifier, type ClassifierInput } from "./classification.ts";
 import { type Config } from "./config.ts";
 import { type ErrorClass } from "./errorclass.ts";
+import { type OutputSink } from "./fanout.ts";
 import { PtyProcess, type PtyExit } from "./pty.ts";
 import { type Status } from "./status.ts";
 import { type Emitter } from "../trace.ts";
@@ -94,6 +95,7 @@ export declare class Session {
     private readonly recentOutputBuf;
     private readonly lineSplitter;
     private readonly stdout;
+    private readonly fanout;
     private readonly _startedAt;
     private _pid;
     private lastOutput;
@@ -165,6 +167,15 @@ export declare class Session {
      * discipline — mirroring the headless behavior in session.go.
      */
     private forwardStdin;
+    /**
+     * Attach a runtime observer of raw PTY output. Returns an idempotent detach
+     * handle that removes the sink, ends its pump, and discards its ring. Delivery
+     * is best-effort and DEFERRED (a later microtask, never inline with the PTY
+     * read) and may drop the oldest bytes under back-pressure; the durable taps
+     * (recentOutput / onLine) and the fixed stdout are unaffected. Attaching after
+     * the session has exited yields a no-op handle that delivers nothing.
+     */
+    attachOutput(sink: OutputSink): () => void;
     private onOutput;
     private terminate;
     private supervise;

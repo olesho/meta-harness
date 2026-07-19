@@ -7,5 +7,6 @@ export { argsWithHarnessEffort, harnessSupportsEffort, isSupportedEffort, } from
 export { argsWithHarnessModel } from "./internal/mode.ts";
 export { start, run, type RunContext } from "./internal/run.ts";
 export { Session, ClassifierFunc, classifyExit, EventChannel, type Result, type Snapshot, type SessionEvent, type StdoutSink, type EventRecv, } from "./internal/session.ts";
+export { OutputFanout, SINK_CAP_BYTES, type OutputSink, type OutputSinkHandle, } from "./internal/fanout.ts";
 export { ErrPTYAllocation, ErrPTYRead } from "./internal/pty.ts";
 //# sourceMappingURL=api.d.ts.map
