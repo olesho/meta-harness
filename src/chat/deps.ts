@@ -73,6 +73,13 @@ export interface EventStream<T> {
 export interface Watcher {
   events(): EventStream<TurnEvent>;
   close(): Promise<void>;
+  /**
+   * The run-level roll-up over every raw wrapper session event: the LARGEST
+   * retryAfter and whether ANY event reported an api_error. Ports Go's
+   * observation struct (pkg/harness/run.go). Read after the event stream
+   * completes for the final value.
+   */
+  observation(): { retryAfter: number; sawAPIError: boolean };
 }
 
 /**
