@@ -9,10 +9,22 @@
 // the session at first idle by writing `/status`, which renders a box containing
 // `│ Session: <uuid> │`; extractSessionID reads that (and the legacy / `/quit`
 // `codex resume <uuid>` hint). Reading a process's own output cannot collide
-// with another process, so capture is race-free by construction — the old
-// disk-locate fallback (racy across sessions sharing a cwd) was removed. The
-// transcript reader (readTranscript / CodexReader) still reads disk, but that is
-// keyed on an already-captured id and is a separate concern.
+// with another process, so the scrape is race-free by construction and remains
+// PRIMARY.
+//
+// locateSessionID (disk fallback) is a GUARDED backstop for the case the scrape
+// cannot cover — a Codex build that stops rendering the `│ Session: <uuid> │`
+// box (and emits no `/quit` hint) yet still writes a `session_meta` rollout. The
+// naive disk-locate that META-HARNESS-20 removed was racy: it captured the
+// most-recently-modified rollout for a cwd, so a sibling/prior session sharing
+// that cwd could be mis-captured. This fallback is re-introduced WITHOUT that
+// race: the chat layer consults it only on the codex first-write path and only
+// when the prime wrote `/status` but the box never yielded an id
+// (primeOutcome === "written_uncaptured"), never during priming, and never on
+// the provisional-refresh path. See src/chat/conversation.ts extractSessionID
+// (the allowDiskFallback gate). The transcript reader (readTranscript /
+// CodexReader) still reads disk, but that is keyed on an already-captured id and
+// is a separate concern.
 
 import { createHash } from "node:crypto";
 import type { TranscriptTurn } from "../../chat/deps.ts";
@@ -175,6 +187,28 @@ export class CodexAdapter extends GenericAdapter implements Adapter {
       if (s) return [s[1], true];
     }
     return ["", false];
+  }
+
+  /**
+   * Implements turns.SessionIDLocator — the GUARDED disk fallback for a Codex
+   * build whose `/status` scrape yields no id but which still writes a
+   * `session_meta` rollout. Delegates through CodexReader (NOT the bare
+   * locateLatestSession): the bare function reads this.sessionsRoot, which is ""
+   * in production, so walkJSONL("") → readdirSync("") throws → undefined — a
+   * silent no-op. CodexReader.resolveRoot() defaults to ~/.codex/sessions,
+   * mirroring the readTranscript delegation below.
+   *
+   * locateLatestSession never throws (every fs call is try/catch) and returns
+   * undefined for empty workingDir or no match, satisfying the [id, boolean]
+   * contract. The chat layer gates WHEN this is consulted (only on the codex
+   * first-write path once the prime recorded `written_uncaptured`), so this
+   * method itself stays a plain latest-rollout lookup.
+   */
+  locateSessionID(workingDir: string): [string, boolean] {
+    const id = new CodexReader(this.sessionsRoot).locateLatestSession(
+      workingDir,
+    );
+    return id ? [id, true] : ["", false];
   }
 
   /**

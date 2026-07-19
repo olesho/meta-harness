@@ -5,8 +5,12 @@
 // `codex resume <uuid>` (no fork; CodexAdapter.resumeForksSessionID() === false).
 // The generic provisional-refresh mechanism is retained for a hypothetical
 // forking harness, so these tests drive it through a SYNTHETIC forking adapter
-// that implements SessionIDLocator + resumeForksSessionID(): true — Codex no
-// longer implements locateSessionID (its /status scrape replaced disk-locate).
+// that implements SessionIDLocator + resumeForksSessionID(): true. Codex DOES
+// implement locateSessionID (a guarded disk fallback), but never on this path:
+// its /status scrape stays primary, and because resumeForksSessionID() is false
+// codex never arms the provisional latch — so the disk fallback is scoped to the
+// codex first-write path (primeOutcome === "written_uncaptured") and cannot fire
+// here. This test proves that scoping leaves the provisional consumer intact.
 import { describe, expect, test } from "vitest";
 import {
   Conversation,
