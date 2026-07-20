@@ -66,6 +66,7 @@ export {
   requiresPromptReadiness,
   readyForInput,
   authRequired,
+  onboardingWall,
 } from "./ready.ts";
 
 export {
