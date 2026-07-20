@@ -11,6 +11,7 @@ the [module reference](../modules/); for the mental model, [Concepts](../concept
 | [Reading history](reading-history.md)        | Get conversation history and know its source (transcript vs store).                                 |
 | [Handling input requests](handling-input.md) | Resolve trust dialogs, prompts, and mid-turn clarifying questions — automatically or interactively. |
 | [Adding a harness](adding-a-harness.md)      | Teach meta-harness a new coding agent.                                                              |
+| [Hook env vars](hook-env.md)                 | Look up the `HW_*` env contract between an orchestrator and the hook handler (Go and TS).           |
 
 All examples assume:
 

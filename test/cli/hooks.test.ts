@@ -7,7 +7,9 @@ import { EventSessionMeta, SourceHook } from "../../src/transcript/event.ts";
 import { encodedCWD } from "../../src/transcript/claudecode/claudecode.ts";
 import { drainSpool } from "../../src/hooks/spool.ts";
 import {
+  contextFromEnv,
   EnvConfigDir,
+  EnvConfigDirDeprecated,
   EnvSessionID,
   handleHookEvent,
   type Env,
@@ -18,6 +20,7 @@ import {
   EnvSpool,
 } from "../../src/acquisition/internal/yield.ts";
 import {
+  ClaudeHookProvider,
   HookEventSessionStart,
   HookEventStop,
   type ClaudeHookPayload,
@@ -143,5 +146,40 @@ describe("handleHookEvent", () => {
       handleHookEvent("claude", "", env(spool), "not json at all"),
     ).not.toThrow();
     expect(drainSpool(spool)).toHaveLength(0);
+  });
+});
+
+describe("contextFromEnv configDir precedence", () => {
+  test("deprecated HW_CONFIG_DIR alone still configures configDir", () => {
+    const ctx = contextFromEnv({
+      [EnvConfigDirDeprecated]: "/legacy/cfg",
+    });
+    expect(ctx.configDir).toBe("/legacy/cfg");
+  });
+
+  test("canonical HW_HARNESS_CONFIG_DIR wins over the deprecated name", () => {
+    const ctx = contextFromEnv({
+      [EnvConfigDir]: "/canonical/cfg",
+      [EnvConfigDirDeprecated]: "/legacy/cfg",
+    });
+    expect(ctx.configDir).toBe("/canonical/cfg");
+  });
+
+  test("an EMPTY canonical value falls through to the deprecated name", () => {
+    const ctx = contextFromEnv({
+      [EnvConfigDir]: "",
+      [EnvConfigDirDeprecated]: "/legacy/cfg",
+    });
+    expect(ctx.configDir).toBe("/legacy/cfg");
+  });
+
+  test("env-derived configDir is consumed by ensureConfig's settings path", () => {
+    const configDir = "/custom/claude-config";
+    const ctx = contextFromEnv({
+      [EnvHome]: HOME,
+      [EnvConfigDir]: configDir,
+    });
+    const spec = new ClaudeHookProvider().ensureConfig(ctx);
+    expect(spec.configPath).toBe(path.join(configDir, "settings.json"));
   });
 });

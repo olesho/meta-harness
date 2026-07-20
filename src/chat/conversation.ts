@@ -106,7 +106,11 @@ import type {
   ParsedEvent,
   Turn as TranscriptTurn,
 } from "../transcript/event.ts";
-import { EnvConfigDir, EnvSessionID } from "../cli/hooks.ts";
+import {
+  EnvConfigDir,
+  EnvConfigDirDeprecated,
+  EnvSessionID,
+} from "../cli/hooks.ts";
 
 /** Options configures a single Conversation. Mirrors chat.Options. */
 export interface Options {
@@ -2056,6 +2060,11 @@ async function openWithSession(
     launchEnv = [
       ...launchEnv,
       `${EnvConfigDir}=${c.hookDrain.hookContext().configDir}`,
+      // Transition compat: also export the deprecated spelling so an older
+      // installed meta-harness-hooks bin still resolves the config dir. Remove
+      // in the next minor release together with EnvConfigDirDeprecated itself
+      // and its docs row (docs/md/guides/hook-env.md).
+      `${EnvConfigDirDeprecated}=${c.hookDrain.hookContext().configDir}`,
       `${EnvSessionID}=${session.harnessSessionID}`,
     ];
   }
