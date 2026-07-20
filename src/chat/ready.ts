@@ -116,6 +116,12 @@ export function requiresPromptReadiness(harness: string): boolean {
 export function readyForInput(harness: string, text: string): boolean {
   switch (harness) {
     case "claude-code":
+      // A first-run onboarding WIZARD (theme picker, "Select login method") paints
+      // the "Claude Code" header and a "❯" menu selector, so it would otherwise
+      // look ready — but it waits for menu input and never becomes a usable
+      // composer on its own. Treat it as not-ready so send's auth gate
+      // short-circuits it instead of typing the prompt into the wizard.
+      if (onboardingWall(harness, text)) return false;
       // A blocking dialog (folder trust, bypass acceptance) renders its own
       // "❯" selector + "Claude Code" header and would otherwise look ready —
       // reject those outright, mirroring the codex interstitial handling.
@@ -125,6 +131,10 @@ export function readyForInput(harness: string, text: string): boolean {
       // ready screen and the 2.1.185 corpus.
       return text.includes("Claude Code") && claudeComposerRE.test(text);
     case "codex":
+      // The never-signed-in onboarding menu ("Sign in with ChatGPT") renders a
+      // "›"-highlighted row and would look ready; it is a stuck sign-in wall, so
+      // treat it as not-ready and let send's auth gate short-circuit it.
+      if (onboardingWall(harness, text)) return false;
       // A blocking startup interstitial renders its own "›" highlight and looks
       // ready — treat it as not-ready so Send waits for the auto-dismiss.
       if (codexBlockingInterstitial(text)) return false;
@@ -140,24 +150,49 @@ export function readyForInput(harness: string, text: string): boolean {
   }
 }
 
-// --- logged-out / re-authentication detection (both harnesses) ---
+// --- logged-out / re-authentication / not-yet-onboarded detection ---
 //
-// A harness whose CLI login has expired or was never established produces NO
-// assistant output for the turn. The observed terminal-screen banners (grounded
-// in real CLI output, not invented):
-//   - claude-code: "Not logged in · Please run /login" (printed then exit), and
-//     the "run /login" family of re-auth banners.
-//   - codex:       the turn fails with "401 Unauthorized: missing bearer or basic
-//     authentication" on screen; `codex login status` / a logged-out TUI say
-//     "Not logged in"; codex's own remediation is "run `codex login`".
+// A harness whose CLI login has expired, was never established, or that is still
+// sitting in first-run onboarding produces NO assistant output for the turn. The
+// observed terminal-screen banners (grounded in real CLI output, not invented —
+// see test/corpus/auth for the captured screen each one matches):
+//   - claude-code: "Not logged in · Please run /login" (logged out); "Invalid API
+//     key · Fix external API key" (bad external key); the first-run onboarding
+//     "Choose the text style" theme picker and the "Select login method" screen.
+//   - codex:       "401 Unauthorized: missing bearer or basic authentication"
+//     (bad/expired key); `codex login status` / a logged-out TUI say "Not logged
+//     in"; codex's own remediation is "run `codex login`"; the never-signed-in
+//     onboarding menu "Sign in with ChatGPT".
 //
-// These anchors are matched ONLY at a turn's terminal point, and ONLY once it has
-// yielded no clean assistant output (see conversation.ts) — they EXPLAIN a failed
-// turn, they never complete one. That gating is what keeps a genuine reply merely
+// Reachability: these are scanned (a) when a turn ends in failure, (b) on the
+// completion path when the turn produced NO clean assistant text — an auth banner
+// left on a settled screen (see maybeIdleComplete / the Errored branch), and (c)
+// before a turn is sent, to short-circuit an onboarding screen that would
+// otherwise hang to the deadline (see Conversation.send). They EXPLAIN or pre-empt
+// a turn that cannot produce output; they never COMPLETE a turn that produced a
+// real reply. The empty-output gate is what keeps a genuine reply merely
 // mentioning logins, or a benign "your login expires in N days" WARNING on a
 // still-valid session, from ever being scanned and mislabeled.
-const claudeAuthRE = [/\brun \/login\b/i, /\bnot logged in\b/i];
-const codexAuthRE = [
+// Onboarding WIZARDS: interactive first-run screens that wait for menu input and
+// never become a usable composer on their own. readyForInput treats these as
+// not-ready (so send's auth gate short-circuits them), distinct from a normal
+// composer showing a stale logged-out banner (which IS ready).
+const claudeOnboardingRE = [
+  /choose the text style/i, // theme picker
+  /select login method/i, // login-method screen
+];
+const codexOnboardingRE = [
+  /sign in with chatgpt/i, // never-signed-in menu
+  /finish signing in via your browser/i, // the login flow the menu advances into
+];
+// Logged-out / bad-key banners left on an otherwise-ready screen. Handled on the
+// completion path (a turn that yielded no reply), not by refusing to send.
+const claudeLoggedOutRE = [
+  /\brun \/login\b/i,
+  /\bnot logged in\b/i,
+  /\binvalid api key\b/i,
+];
+const codexLoggedOutRE = [
   /\b401 unauthorized\b/i,
   /missing bearer or basic authentication/i,
   /\bnot logged in\b/i,
@@ -165,17 +200,41 @@ const codexAuthRE = [
 ];
 
 /**
+ * onboardingWall reports whether the screen is a first-run onboarding / sign-in
+ * WIZARD that waits for menu input and never turns into a usable composer on its
+ * own — distinct from a normal composer that merely shows a stale logged-out
+ * banner. readyForInput uses it to keep send from typing a prompt into the
+ * wizard, so the auth gate short-circuits with ReasonAuthRequired instead.
+ */
+export function onboardingWall(harness: string, text: string): boolean {
+  switch (harness) {
+    case "claude-code":
+      return claudeOnboardingRE.some((re) => re.test(text));
+    case "codex":
+      return codexOnboardingRE.some((re) => re.test(text));
+    default:
+      return false;
+  }
+}
+
+/**
  * authRequired reports whether the rendered screen shows a harness login-expiry /
- * logged-out banner. Callers MUST gate this on a turn that produced no clean
- * assistant output — it is a failure EXPLANATION, not a turn-completion signal.
- * Returns false for any harness without a known banner set.
+ * logged-out banner OR a first-run onboarding wizard — either way the turn can
+ * produce no assistant output until the human authenticates. Returns false for
+ * any harness without a known banner set.
  */
 export function authRequired(harness: string, text: string): boolean {
   switch (harness) {
     case "claude-code":
-      return claudeAuthRE.some((re) => re.test(text));
+      return (
+        claudeOnboardingRE.some((re) => re.test(text)) ||
+        claudeLoggedOutRE.some((re) => re.test(text))
+      );
     case "codex":
-      return codexAuthRE.some((re) => re.test(text));
+      return (
+        codexOnboardingRE.some((re) => re.test(text)) ||
+        codexLoggedOutRE.some((re) => re.test(text))
+      );
     default:
       return false;
   }
