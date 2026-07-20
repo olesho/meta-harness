@@ -3,7 +3,7 @@ export type { Store } from "./store.ts";
 export { MemStore, newMemStore } from "./memstore.ts";
 export { cleanHarnessEnv } from "./env.ts";
 export { ErrInvalidOptions, ErrUnknownHarness, ErrNoControl, ErrTurnInFlight, ErrClosed, ErrInputPending, ErrNoInputPending, ErrStaleInputRequest, ErrUnknownOption, ErrNotMultiSelect, ErrQuitUnsupported, ErrResumeUnsupported, ErrNoHarnessSession, } from "./errors.ts";
-export { submitKeyForHarness, requiresPromptReadiness, readyForInput, authRequired, } from "./ready.ts";
+export { submitKeyForHarness, requiresPromptReadiness, readyForInput, authRequired, onboardingWall, } from "./ready.ts";
 export { Conversation, Open, Reopen, resolveAdapter, type Options, type ReopenOptions, } from "./conversation.ts";
 export type { WrapperSession, Adapter, TranscriptTurn, Watcher, EventStream, TurnEvent, TurnEventKind, TurnsInputRequest, TurnsInputOption, StartConfig, Backend, } from "./deps.ts";
 //# sourceMappingURL=index.d.ts.map
