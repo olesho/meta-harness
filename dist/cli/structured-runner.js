@@ -12,7 +12,7 @@
 // parses the LAST stdout line as that result.
 //
 // Grammar:
-//   structured-runner --prompt-file <path> [--effort E] [--model M] <name> -- <harness args...>
+//   structured-runner --prompt-file <path> [--effort E] [--model M] [--sandbox-defaults] <name> -- <harness args...>
 //
 // Exit codes (coarse orchestration signal; the JSON payload is the source of truth):
 //   0   — completed
@@ -48,10 +48,23 @@ function resolveBinaryPath(harness, env) {
     const key = "HARNESS_BINARY_" + harness.toUpperCase().replace(/-/g, "_");
     return env[key] ?? env.HARNESS_BINARY ?? harness;
 }
-// metaHarnessArgs mirrors loom's local runner + orche: claude needs the permission
-// bypass, codex needs none. effort/model flow through OneShotConfig, not here.
-function metaHarnessArgs(harness) {
-    return harness === "claude-code" ? ["--dangerously-skip-permissions"] : [];
+// metaHarnessArgs — sandbox-default argv injection, OPT-IN via --sandbox-defaults
+// (off by default so argv is forwarded verbatim, matching Go structured-run):
+// when set, claude gets the permission bypass, codex gets no argv injection.
+// effort/model flow through OneShotConfig, not here.
+function metaHarnessArgs(harness, sandboxDefaults) {
+    return sandboxDefaults && harness === "claude-code"
+        ? ["--dangerously-skip-permissions"]
+        : [];
+}
+/** buildGuestEnv assembles the guest env entries from the host env. With
+ *  sandboxDefaults, IS_SANDBOX is set/OVERWRITTEN to "1" — a single entry, never
+ *  a duplicate KEY=VALUE pair when the host already sets IS_SANDBOX. Without it,
+ *  the host env passes through verbatim: a host-preset IS_SANDBOX is neither
+ *  stripped nor rewritten. Composed with cleanEnv by the caller. */
+export function buildGuestEnv(baseEnv, sandboxDefaults) {
+    const merged = sandboxDefaults ? { ...baseEnv, IS_SANDBOX: "1" } : baseEnv;
+    return Object.entries(merged).map(([k, v]) => `${k}=${v ?? ""}`);
 }
 function resolveTimeoutMs(env) {
     const raw = (env.LOOM_LOCAL_TASK_TIMEOUT_MS ?? "").trim();
@@ -117,6 +130,16 @@ export function parseStructuredArgs(argv) {
                 return out;
             continue;
         }
+        // --sandbox-defaults is BOOLEAN (valueless): the =-form is rejected with a
+        // deliberate message rather than the catch-all's generic "unknown flag".
+        if (a === "--sandbox-defaults") {
+            out.sandboxDefaults = true;
+            continue;
+        }
+        if (a.startsWith("--sandbox-defaults=")) {
+            out.error = "flag --sandbox-defaults takes no value";
+            return out;
+        }
         if (a.startsWith("-")) {
             out.error = `unknown flag: ${a}`;
             return out;
@@ -170,13 +193,17 @@ function emit(payload) {
 }
 const HELP = `meta-harness structured-runner — one-shot harness turn → JSON result line
 
-usage: structured-runner --prompt-file <path> [--effort E] [--model M] <name> -- <harness args...>
+usage: structured-runner --prompt-file <path> [--effort E] [--model M] [--sandbox-defaults] <name> -- <harness args...>
 
-  --prompt-file P   read the prompt from file P (required; safe transport)
-  <name>            short alias: claude → claude-code, codex → codex
-  --effort E        reasoning effort passed to the harness
-  --model M         model passed to the harness
-  --                everything after is forwarded verbatim to the harness
+  --prompt-file P     read the prompt from file P (required; safe transport)
+  <name>              short alias: claude → claude-code, codex → codex
+  --effort E          reasoning effort passed to the harness
+  --model M           model passed to the harness
+  --sandbox-defaults  opt into sandbox defaults: IS_SANDBOX=1 in the guest env
+                      (all harnesses) and --dangerously-skip-permissions
+                      prepended to the argv (claude-code only). Off by default:
+                      argv and env are forwarded verbatim.
+  --                  everything after is forwarded verbatim to the harness
 
 Emits ONE JSON line on stdout: { status, reply, harnessSessionID, transcript_entries,
 usage?, reason?, transcript_error?, working_dir }. Exit: 0 completed · 1 errored · 2 usage · 124 deadline.
@@ -213,10 +240,7 @@ export async function main(argv) {
         return ExitUsage;
     }
     const workingDir = (process.env.LOOM_WORKTREE_PATH ?? "").trim() || process.cwd();
-    const env = cleanEnv([
-        ...Object.entries(process.env).map(([k, v]) => `${k}=${v ?? ""}`),
-        "IS_SANDBOX=1",
-    ]);
+    const env = cleanEnv(buildGuestEnv(process.env, parsed.sandboxDefaults === true));
     const binaryPath = resolveBinaryPath(harness, process.env);
     const { ctx, cancel } = Context.withDeadline(Context.background(), resolveTimeoutMs(process.env));
     let outcome;
@@ -225,7 +249,10 @@ export async function main(argv) {
             harness,
             binaryPath,
             prompt,
-            args: [...metaHarnessArgs(harness), ...parsed.harnessArgs],
+            args: [
+                ...metaHarnessArgs(harness, parsed.sandboxDefaults === true),
+                ...parsed.harnessArgs,
+            ],
             workingDir,
             env,
             effort: parsed.effort,

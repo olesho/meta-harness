@@ -14,6 +14,10 @@ export interface TurnConfig {
     model?: string;
     /** Extra args forwarded verbatim to the harness after `--`. */
     harnessArgs?: string[];
+    /** Opt into the runner's sandbox defaults (`--sandbox-defaults`): IS_SANDBOX=1
+     *  in the guest env (all harnesses) and --dangerously-skip-permissions on the
+     *  argv (claude-code only). Off by default — argv/env forwarded verbatim. */
+    sandboxDefaults?: boolean;
     /** Environment overlaid on the guest process. */
     env?: Record<string, string>;
     /** Guest working directory; defaults to the workspace's repo path. */

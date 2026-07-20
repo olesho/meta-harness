@@ -273,7 +273,7 @@ runStructuredTurn(ctx: Context, ws: Workspace, cfg: TurnConfig): Promise<Structu
 ```
 
 1. Writes the prompt to a temp file (never argv or shell-interpolated).
-2. Calls `ws.exec()` with `meta-harness-structured-run --prompt-file <path> … <harness> -- <args>`.
+2. Calls `ws.exec()` with `meta-harness-structured-run --prompt-file <path> … [--sandbox-defaults] <harness> -- <args>` (`--sandbox-defaults` opts into `IS_SANDBOX=1` + the claude-code permission bypass; off by default — argv/env forwarded verbatim).
 3. Parses the last stdout line as JSON (the structured result).
 4. Optionally retrieves the on-disk transcript to a host path.
 

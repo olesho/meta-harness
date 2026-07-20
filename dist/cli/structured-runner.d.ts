@@ -1,6 +1,12 @@
 #!/usr/bin/env node
 export { ExitOK, ExitError, ExitUsage, ExitDeadline, DeadlineLine, } from "../turnproto/index.ts";
 export declare function resolveHarnessName(name: string): "claude-code" | "codex" | null;
+/** buildGuestEnv assembles the guest env entries from the host env. With
+ *  sandboxDefaults, IS_SANDBOX is set/OVERWRITTEN to "1" — a single entry, never
+ *  a duplicate KEY=VALUE pair when the host already sets IS_SANDBOX. Without it,
+ *  the host env passes through verbatim: a host-preset IS_SANDBOX is neither
+ *  stripped nor rewritten. Composed with cleanEnv by the caller. */
+export declare function buildGuestEnv(baseEnv: Record<string, string | undefined>, sandboxDefaults: boolean): string[];
 export interface StructuredArgs {
     help?: boolean;
     error?: string;
@@ -8,6 +14,7 @@ export interface StructuredArgs {
     promptFile?: string;
     effort?: string;
     model?: string;
+    sandboxDefaults?: boolean;
     harnessArgs: string[];
 }
 /**
