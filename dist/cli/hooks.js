@@ -24,9 +24,15 @@ import { ClaudeHookProvider } from "../hooks/claude.js";
 import { appendSpool } from "../hooks/spool.js";
 // Extra HW_* env vars this CLI reads that are not part of the yield handshake.
 // EnvConfigDir overrides the harness config dir (else the provider defaults it
-// from home); EnvSessionID is the expected session id for the session-mismatch
-// guard (empty ⇒ no expectation).
-export const EnvConfigDir = "HW_CONFIG_DIR";
+// from home) — HW_HARNESS_CONFIG_DIR is the canonical spelling, shared with the
+// Go implementation (harness-wrapper's EnvConfigDir). EnvConfigDirDeprecated is
+// the old TS-only spelling, still read as a fallback when the canonical var is
+// unset or empty; deprecated, to be removed in the next minor release together
+// with the launch-env compatibility line in conversation.ts (see
+// docs/md/guides/hook-env.md). EnvSessionID is the expected session id for the
+// session-mismatch guard (empty ⇒ no expectation).
+export const EnvConfigDir = "HW_HARNESS_CONFIG_DIR";
+export const EnvConfigDirDeprecated = "HW_CONFIG_DIR";
 export const EnvSessionID = "HW_HARNESS_SESSION_ID";
 // providers maps a harness name to its concrete HookProvider. Only Claude Code
 // ships a provider today; an unknown name yields no events (inert).
@@ -42,11 +48,13 @@ function providerFor(harnessName) {
 }
 // contextFromEnv builds the HookContext the provider needs from the HW_* env
 // vars the orchestrator set in the harness launch env (see yield.hookEnv).
-function contextFromEnv(env) {
+export function contextFromEnv(env) {
     return {
         cwd: env[EnvHookCwd] ?? "",
         home: env[EnvHome] ?? homedir(),
-        configDir: env[EnvConfigDir] ?? "",
+        // `||`, not `??`: an EMPTY canonical value must fall through to the
+        // deprecated name (empty already means "derive from home" downstream).
+        configDir: env[EnvConfigDir] || env[EnvConfigDirDeprecated] || "",
         spoolDir: env[EnvSpool] ?? "",
         harnessSessionID: env[EnvSessionID] ?? "",
     };

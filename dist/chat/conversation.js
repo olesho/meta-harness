@@ -28,7 +28,7 @@ import { newDisplaySink } from "../acquisition/internal/display.js";
 import { hookEnv } from "../acquisition/internal/yield.js";
 import { planAcquisition, resolveProfile, } from "../acquisition/internal/planAcquisition.js";
 import { HookDrain } from "./hookDrain.js";
-import { EnvConfigDir, EnvSessionID } from "../cli/hooks.js";
+import { EnvConfigDir, EnvConfigDirDeprecated, EnvSessionID, } from "../cli/hooks.js";
 const enc = new TextEncoder();
 // idleCompletionGap — how long the screen must sit unchanged at the ready prompt
 // before the idle fallback completes an in-flight turn. (ms)
@@ -1716,6 +1716,11 @@ async function openWithSession(ctx, opts, session, persist) {
         launchEnv = [
             ...launchEnv,
             `${EnvConfigDir}=${c.hookDrain.hookContext().configDir}`,
+            // Transition compat: also export the deprecated spelling so an older
+            // installed meta-harness-hooks bin still resolves the config dir. Remove
+            // in the next minor release together with EnvConfigDirDeprecated itself
+            // and its docs row (docs/md/guides/hook-env.md).
+            `${EnvConfigDirDeprecated}=${c.hookDrain.hookContext().configDir}`,
             `${EnvSessionID}=${session.harnessSessionID}`,
         ];
     }

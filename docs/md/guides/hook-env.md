@@ -14,15 +14,15 @@ Within meta-harness the variables are exported as constants:
 
 ## Variables
 
-| Variable                 | Purpose                                                                                                              | Go (harness-wrapper) | TS (meta-harness) |
-| ------------------------ | -------------------------------------------------------------------------------------------------------------------- | -------------------- | ----------------- |
-| `HW_EVENT_SPOOL`         | Spool directory the hook handler appends canonical events to. Absent or empty ⇒ the handler is inert.                | ✅                   | ✅                |
-| `HW_HOOK_CWD`            | The harness working dir (worktree) the hook fired from; used for transcript-path validation.                         | ✅                   | ✅                |
-| `HW_HOME`                | User home dir; fallback base for deriving the harness config dir.                                                    | ✅                   | ✅                |
-| `HW_YIELD_FILE`          | Yield file the yield-guard PreToolUse hook checks before each tool. Wired differently per side (see note below).     | ✅                   | ✅                |
-| `HW_HARNESS_CONFIG_DIR`  | Overrides the harness config dir (e.g. where `settings.json` lives). Empty ⇒ derived from `HW_HOME`.                 | ✅                   | ✅                |
-| `HW_CONFIG_DIR`          | **Deprecated** old TS-only spelling of `HW_HARNESS_CONFIG_DIR`; read only when the canonical var is unset or empty. Removed in the next minor release. | —                    | ⚠️ deprecated     |
-| `HW_HARNESS_SESSION_ID`  | Expected harness session id for the session-mismatch guard (a stray hook from another session is dropped). Empty ⇒ no expectation. | —                    | ✅                |
+| Variable                | Purpose                                                                                                                                                | Go (harness-wrapper) | TS (meta-harness) |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------- | ----------------- |
+| `HW_EVENT_SPOOL`        | Spool directory the hook handler appends canonical events to. Absent or empty ⇒ the handler is inert.                                                  | ✅                   | ✅                |
+| `HW_HOOK_CWD`           | The harness working dir (worktree) the hook fired from; used for transcript-path validation.                                                           | ✅                   | ✅                |
+| `HW_HOME`               | User home dir; fallback base for deriving the harness config dir.                                                                                      | ✅                   | ✅                |
+| `HW_YIELD_FILE`         | Yield file the yield-guard PreToolUse hook checks before each tool. Wired differently per side (see note below).                                       | ✅                   | ✅                |
+| `HW_HARNESS_CONFIG_DIR` | Overrides the harness config dir (e.g. where `settings.json` lives). Empty ⇒ derived from `HW_HOME`.                                                   | ✅                   | ✅                |
+| `HW_CONFIG_DIR`         | **Deprecated** old TS-only spelling of `HW_HARNESS_CONFIG_DIR`; read only when the canonical var is unset or empty. Removed in the next minor release. | —                    | ⚠️ deprecated     |
+| `HW_HARNESS_SESSION_ID` | Expected harness session id for the session-mismatch guard (a stray hook from another session is dropped). Empty ⇒ no expectation.                     | —                    | ✅                |
 
 Known asymmetries, recorded rather than papered over:
 
