@@ -71,6 +71,7 @@ import {
   ErrTurnInFlight,
   ErrClosed,
   ErrInputPending,
+  ErrAuthRequired,
   ErrNoInputPending,
   ErrStaleInputRequest,
   ErrUnknownOption,
@@ -85,6 +86,7 @@ import {
   requiresPromptReadiness,
   readyForInput,
   authRequired,
+  onboardingWall,
 } from "./ready.ts";
 import { cleanHarnessEnv } from "./env.ts";
 import type { AcquisitionMode } from "../turns/index.ts";
@@ -229,6 +231,13 @@ const idleCompletionGap = 8000;
 // markerConfirmGap — the shorter quiet window used once an end-of-turn marker has
 // been seen. (ms)
 const markerConfirmGap = 2000;
+// authGateStabilizeGap — how long the screen must stay on a logged-out /
+// onboarding banner (matching authRequired but never reaching readyForInput)
+// before awaitPromptReady short-circuits with ErrAuthRequired instead of blocking
+// to the run deadline. The dwell distinguishes a persistent sign-in / onboarding
+// wall (which never clears on its own) from a transient startup frame; a genuine
+// composer is never gated because the readyForInput check wins first. (ms)
+const authGateStabilizeGap = 2000;
 // primeBoundGap — the overall wall-clock bound on the startup session-id prime,
 // so Open can never hang on the /status scrape. (ms)
 const primeBoundGap = 800;
@@ -535,7 +544,20 @@ export class Conversation {
     if (!this.queue.held()) throw ErrNoControl;
     if (this.currentTurn !== null) throw ErrTurnInFlight;
 
-    await this.waitReadyForSend(ctx);
+    try {
+      await this.waitReadyForSend(ctx);
+    } catch (err) {
+      // The harness is stuck on a logged-out / onboarding screen and will never
+      // reach a ready prompt. Record a terminal assistant turn carrying the
+      // canonical ReasonAuthRequired instead of hanging to the deadline, so the
+      // onboarding case surfaces through the same events()/turn.reason channel as
+      // the completion- and error-path cases. Returns the assistant turn id so the
+      // runTurn driver observes the emitted terminal turn rather than a bare throw.
+      if (isSentinel(err, ErrAuthRequired)) {
+        return await this.emitAuthRequiredTurn(text);
+      }
+      throw err;
+    }
 
     const now = new Date();
     const userTurn: Turn = {
@@ -587,6 +609,49 @@ export class Conversation {
       throw err;
     }
 
+    this.emit({ type: EventTurn, turn: assistantTurn });
+    return assistantTurn.id;
+  }
+
+  // emitAuthRequiredTurn records and emits a terminal assistant turn carrying
+  // ReasonAuthRequired, for the case where the harness never reaches a ready
+  // prompt because it is sitting in a logged-out / onboarding screen (detected by
+  // waitReadyForSend). It mirrors the normal send bookkeeping — a completed user
+  // turn, then a terminal assistant turn — so consumers observe the auth signal
+  // through the same events()/turn.reason channel as the completion- and
+  // error-path cases. The prompt is NOT written to the harness (it would land in
+  // the sign-in menu). Returns the assistant turn id; the runTurn driver reads the
+  // emitted Errored turn and surfaces its reason.
+  private async emitAuthRequiredTurn(text: string): Promise<string> {
+    const now = new Date();
+    const userTurn: Turn = {
+      id: newID(),
+      sessionID: this.session.id,
+      role: RoleUser,
+      state: TurnStateComplete,
+      text,
+      reason: "",
+      startedAt: now,
+      completedAt: now,
+      httpCode: 0,
+      retryAfter: 0,
+    };
+    await this.store.appendTurn(userTurn);
+    this.emit({ type: EventTurn, turn: userTurn });
+
+    const assistantTurn: Turn = {
+      id: newID(),
+      sessionID: this.session.id,
+      role: RoleAssistant,
+      state: TurnStateErrored,
+      text: "",
+      reason: ReasonAuthRequired,
+      startedAt: now,
+      completedAt: now,
+      httpCode: 0,
+      retryAfter: 0,
+    };
+    await this.store.appendTurn(assistantTurn);
     this.emit({ type: EventTurn, turn: assistantTurn });
     return assistantTurn.id;
   }
@@ -903,7 +968,12 @@ export class Conversation {
         turn.state = TurnStateComplete;
         turn.completedAt = ev.at ?? new Date();
         turn.reason = ev.reason;
-        if (ev.snap) turn.text = this.assistantText(ev.snap);
+        if (ev.snap) {
+          turn.text = this.assistantText(ev.snap);
+          // A "completed" turn that yielded no real reply on a logged-out /
+          // not-onboarded screen is not a success — relabel it ReasonAuthRequired.
+          this.authRelabel(turn, ev.snap);
+        }
         break;
       case Blocked:
         turn.state = TurnStateErrored;
@@ -1066,6 +1136,11 @@ export class Conversation {
       : this.opts.harness +
         ": idle-completion fallback (end-of-turn marker not observed)";
     turn.text = this.assistantText(snap, /* wholeScreenFallback */ marker);
+    // The claude-code false-success lands HERE: a logged-out turn ends on a
+    // "✻ … for 0s" marker (marker === true) and would otherwise complete with the
+    // raw banner screen as its reply. Relabel it ReasonAuthRequired when no real
+    // reply was extracted.
+    this.authRelabel(turn, snap);
     try {
       await this.store.updateTurn(turn);
     } catch (err) {
@@ -1365,6 +1440,39 @@ export class Conversation {
     return snap.text;
   }
 
+  // cleanAssistantText is the adapter's extracted assistant reply with NO
+  // whole-screen fallback: "" when the adapter has no extractor or finds no reply.
+  // It is the "did this turn actually produce a reply?" signal used by authRelabel.
+  // (Distinct from assistantText(snap, false), which still returns the whole screen
+  // for an adapter that has no extractMessage at all — e.g. codex.)
+  private cleanAssistantText(snap: Snapshot): string {
+    const a = this.adapter as unknown as Record<string, unknown>;
+    if (typeof a.extractMessage === "function") {
+      const [msg, ok] = (
+        a.extractMessage as (s: Snapshot) => [string, boolean]
+      )(snap);
+      if (ok) return msg;
+    }
+    return "";
+  }
+
+  // authRelabel converts a turn that "completed" but produced NO real assistant
+  // reply, on a settled screen showing a logged-out / not-onboarded banner, into
+  // the canonical ReasonAuthRequired failure. Without it a logged-out claude-code
+  // turn — which ends on a "✻ … for 0s" end-of-turn thinking marker, not an error
+  // — is persisted as a SUCCESS with the raw banner screen as its "reply" (the
+  // false-success bug). Gated on an EMPTY clean extraction, so a genuine reply
+  // (which produces a "⏺" bullet) is never touched even if it mentions "/login".
+  // Returns true if it relabeled the turn.
+  private authRelabel(turn: Turn, snap: Snapshot): boolean {
+    if (this.cleanAssistantText(snap).trim() !== "") return false;
+    if (!authRequired(this.opts.harness, snap.text)) return false;
+    turn.state = TurnStateErrored;
+    turn.reason = ReasonAuthRequired;
+    turn.text = "";
+    return true;
+  }
+
   private adapterPromptNotAccepted(snap: Snapshot): boolean {
     const a = this.adapter as unknown as Record<string, unknown>;
     if (typeof a.promptNotAccepted === "function") {
@@ -1564,8 +1672,48 @@ export class Conversation {
    */
   private async awaitPromptReady(ctx: Context): Promise<void> {
     const [notify, unsubscribe] = this.screen.subscribe();
+
+    // Stabilize timer for a soft logged-out BANNER on a not-ready screen (rare on
+    // the send path). An onboarding WALL is handled separately, immediately (see
+    // check). The race is rebuilt each iteration, so referencing the current
+    // `armedAuth` is enough: a never-resolving promise when disarmed, the timeout
+    // promise when armed.
+    const never = new Promise<void>(() => {});
+    let authTimer: ReturnType<typeof setTimeout> | undefined;
+    let armedAuth: Promise<void> = never;
+    const disarmAuth = (): void => {
+      if (authTimer !== undefined) {
+        clearTimeout(authTimer);
+        authTimer = undefined;
+      }
+      armedAuth = never;
+    };
+    // check classifies the current screen. An onboarding WALL (sign-in wizard /
+    // device-code / login-method screen) fires NOW: it never becomes ready, and
+    // it can appear for a single frame before the CLI advances its own login flow
+    // past it — a dwell would miss it. A softer logged-out banner arms the
+    // debounce timer instead. readyForInput wins first, so a real composer (even
+    // with a stale banner scrolled above) is never auth-gated.
+    const check = (): "ready" | "wall" | "wait" => {
+      const txt = this.screen.snapshot().text;
+      if (readyForInput(this.opts.harness, txt)) return "ready";
+      if (onboardingWall(this.opts.harness, txt)) return "wall";
+      if (authRequired(this.opts.harness, txt)) {
+        if (authTimer === undefined) {
+          armedAuth = new Promise<void>((res) => {
+            authTimer = setTimeout(res, authGateStabilizeGap);
+          });
+        }
+      } else {
+        disarmAuth();
+      }
+      return "wait";
+    };
+
     try {
-      if (readyForInput(this.opts.harness, this.screen.snapshot().text)) return;
+      const first = check();
+      if (first === "ready") return;
+      if (first === "wall") throw ErrAuthRequired;
       for (;;) {
         const which = await Promise.race([
           ctx.done().then(() => "ctx" as const),
@@ -1576,15 +1724,31 @@ export class Conversation {
             .then((r) =>
               r.ok ? ("notify" as const) : ("notifyClosed" as const),
             ),
+          armedAuth.then(() => "auth" as const),
         ]);
         if (which === "ctx") throw ctx.err();
         if (which === "closed") throw ErrClosed;
         if (which === "notifyClosed") throw ErrClosed;
+        if (which === "auth") {
+          // Re-confirm against the live screen before committing: a frame may
+          // have changed it without a wake we processed, so never short-circuit
+          // on a stale banner.
+          const txt = this.screen.snapshot().text;
+          if (
+            !readyForInput(this.opts.harness, txt) &&
+            authRequired(this.opts.harness, txt)
+          )
+            throw ErrAuthRequired;
+          disarmAuth();
+          continue;
+        }
         if (this.inputAwaitingClient()) throw ErrInputPending;
-        if (readyForInput(this.opts.harness, this.screen.snapshot().text))
-          return;
+        const c = check();
+        if (c === "ready") return;
+        if (c === "wall") throw ErrAuthRequired;
       }
     } finally {
+      disarmAuth();
       unsubscribe();
     }
   }

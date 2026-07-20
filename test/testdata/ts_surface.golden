@@ -142,7 +142,7 @@ transcript/index.ts
 chat/index.ts
   Adapter: type
   Backend: type
-  Conversation: class{acquireControl,adapterBusy,adapterPromptNotAccepted,adapterQuitSequence,adapterRawSessionID,answer,assistantText,awaitComposerEcho,awaitPromptReady,awaitPromptReadyUntil,captureAndPersistSessionID,captureFromScreen,captureRawSessionID,captureTranscriptWatermark,close,consumeWatcher,echoBoundDur,emit,events,extractSessionID,getAdapter,handleInputRequested,handleInputResolved,handleTurnsEvent,history,historyWithSource,idleCompletionWatcher,idleGapDur,inputAwaitingClient,isClosed,markerGapDur,maybeExtractSessionID,maybeIdleComplete,pendingInput,policyOption,primeBoundDur,primeSessionID,quit,readTranscriptTurns,screenSnapshot,send,sessionID,signalInputState,startPumps,transcriptOverrideEligible,transcriptProofOfCurrentTurn,tryAutoDismissCodex,tryResolveInput,tryTranscriptProof,waitReadyForSend,wrapper,writeAnswer,writeKeys,writeMessageAndSubmit}
+  Conversation: class{acquireControl,adapterBusy,adapterPromptNotAccepted,adapterQuitSequence,adapterRawSessionID,answer,assistantText,authRelabel,awaitComposerEcho,awaitPromptReady,awaitPromptReadyUntil,captureAndPersistSessionID,captureFromScreen,captureRawSessionID,captureTranscriptWatermark,cleanAssistantText,close,consumeWatcher,echoBoundDur,emit,emitAuthRequiredTurn,events,extractSessionID,getAdapter,handleInputRequested,handleInputResolved,handleTurnsEvent,history,historyWithSource,idleCompletionWatcher,idleGapDur,inputAwaitingClient,isClosed,markerGapDur,maybeExtractSessionID,maybeIdleComplete,pendingInput,policyOption,primeBoundDur,primeSessionID,quit,readTranscriptTurns,screenSnapshot,send,sessionID,signalInputState,startPumps,transcriptOverrideEligible,transcriptProofOfCurrentTurn,tryAutoDismissCodex,tryResolveInput,tryTranscriptProof,waitReadyForSend,wrapper,writeAnswer,writeKeys,writeMessageAndSubmit}
   ConversationEvent: type
   Disposition: type
   DispositionAnswer: string="answer"
@@ -203,6 +203,7 @@ chat/index.ts
   authRequired: function
   cleanHarnessEnv: function
   newMemStore: function
+  onboardingWall: function
   readyForInput: function
   requiresPromptReadiness: function
   resolveAdapter: function

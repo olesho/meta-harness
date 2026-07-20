@@ -241,6 +241,7 @@ export declare class Conversation {
     isClosed(): boolean;
     /** Transmit a user message; record the user turn and a pending assistant turn. */
     send(ctx: Context, text: string): Promise<string>;
+    private emitAuthRequiredTurn;
     /** The underlying wrapper session, for callers reaching past the chat API. */
     wrapper(): WrapperSession | undefined;
     /** Ask the harness to exit gracefully via its adapter-defined quit sequence. */
@@ -349,6 +350,8 @@ export declare class Conversation {
      * their only reply-capture mechanism.
      */
     private assistantText;
+    private cleanAssistantText;
+    private authRelabel;
     private adapterPromptNotAccepted;
     /**
      * The transcript-backed swallow override applies only to adapters that CAN

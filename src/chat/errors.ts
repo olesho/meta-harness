@@ -46,6 +46,19 @@ export const ErrInputPending: Sentinel = defineSentinel(
   "chat: blocked on interactive input request",
 );
 
+/**
+ * Thrown by waitReadyForSend when the harness cannot reach a ready prompt because
+ * it is sitting in a logged-out / not-onboarded screen (a sign-in wizard,
+ * login-method picker, or re-auth banner) that never clears on its own. send()
+ * catches it and records a terminal assistant turn carrying ReasonAuthRequired,
+ * so the onboarding case surfaces the same canonical signal as the completion-
+ * and error-path cases instead of hanging to the run deadline.
+ */
+export const ErrAuthRequired: Sentinel = defineSentinel(
+  "chat/auth-required",
+  "chat: harness requires authentication / onboarding",
+);
+
 /** Returned by Answer when no interactive prompt is currently pending. */
 export const ErrNoInputPending: Sentinel = defineSentinel(
   "chat/no-input-pending",
