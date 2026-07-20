@@ -34,15 +34,18 @@ import {
 } from "../oneshot/index.ts";
 import { Context } from "../internal/async/index.ts";
 
-// Exit codes + DeadlineLine come from the ONE shared protocol module
-// (src/turnproto). Re-exported here so this CLI's tested surface — test/cli/
-// run.test.ts imports them from this module — stays UNCHANGED.
+// Exit codes + DeadlineLine + the HARNESS_WRAPPER_RUN_TIMEOUT parser come from
+// the ONE shared protocol module (src/turnproto). Re-exported here so this
+// CLI's tested surface — test/cli/run.test.ts imports them from this module —
+// stays UNCHANGED.
 export {
   ExitOK,
   ExitError,
   ExitUsage,
   ExitDeadline,
   DeadlineLine,
+  parseTimeoutMs,
+  parseGoDuration,
 } from "../turnproto/index.ts";
 
 import {
@@ -51,10 +54,8 @@ import {
   ExitUsage,
   ExitDeadline,
   DeadlineLine,
+  parseTimeoutMs,
 } from "../turnproto/index.ts";
-
-/** Default one-shot deadline when HARNESS_WRAPPER_RUN_TIMEOUT is unset (Go: 15m). */
-const DEFAULT_TIMEOUT_MS = 15 * 60 * 1000;
 
 const HELP = `meta-harness run — one-shot harness turn (prompt on stdin → reply on stdout)
 
@@ -158,39 +159,6 @@ export function parseArgs(argv: string[]): ParsedArgs {
     }
   }
   return out;
-}
-
-/** parseTimeout reads HARNESS_WRAPPER_RUN_TIMEOUT (Go duration) → ms; default 15m. */
-export function parseTimeoutMs(raw: string | undefined): number {
-  if (!raw || raw.trim() === "") return DEFAULT_TIMEOUT_MS;
-  const ms = parseGoDuration(raw.trim());
-  return ms === null || ms <= 0 ? DEFAULT_TIMEOUT_MS : ms;
-}
-
-/** parseGoDuration parses a subset of Go durations ("15m", "90s", "1h30m", "500ms"). */
-export function parseGoDuration(s: string): number | null {
-  const re = /(\d+(?:\.\d+)?)(ns|us|µs|ms|s|m|h)/g;
-  const units: Record<string, number> = {
-    ns: 1e-6,
-    us: 1e-3,
-    µs: 1e-3,
-    ms: 1,
-    s: 1000,
-    m: 60_000,
-    h: 3_600_000,
-  };
-  let total = 0;
-  let matched = false;
-  let lastIndex = 0;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(s)) !== null) {
-    if (m.index !== lastIndex) return null; // gap → malformed
-    total += parseFloat(m[1]) * units[m[2]];
-    lastIndex = re.lastIndex;
-    matched = true;
-  }
-  if (!matched || lastIndex !== s.length) return null;
-  return total;
 }
 
 async function readStdin(): Promise<string> {

@@ -14,3 +14,9 @@ export {
 } from "./protocol.ts";
 
 export { parseLastJSONLine } from "./parse.ts";
+
+export {
+  DEFAULT_RUN_TIMEOUT_MS,
+  parseTimeoutMs,
+  parseGoDuration,
+} from "./duration.ts";
