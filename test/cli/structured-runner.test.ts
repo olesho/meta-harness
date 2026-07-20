@@ -2,16 +2,23 @@
 // integration over the fake harness asserting the JSON result-line contract.
 
 import { afterEach, describe, expect, test } from "vitest";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import {
   main,
   parseStructuredArgs,
+  buildGuestEnv,
   ExitOK,
 } from "../../src/cli/structured-runner.ts";
-import { New, PromptRef, EnvVar, fakeHarnessBin } from "../chat/fakeharness.ts";
+import {
+  New,
+  PromptRef,
+  EnvVar,
+  ArgvOutVar,
+  fakeHarnessBin,
+} from "../chat/fakeharness.ts";
 
 describe("parseStructuredArgs (safe-transport grammar)", () => {
   test("captures --prompt-file, effort, model, name, and forwarded harness args", () => {
@@ -76,6 +83,70 @@ describe("parseStructuredArgs (safe-transport grammar)", () => {
     expect(parseStructuredArgs(["--help"]).help).toBe(true);
     expect(parseStructuredArgs(["-h"]).help).toBe(true);
   });
+
+  test("--sandbox-defaults before <name> sets the flag; absent by default", () => {
+    const on = parseStructuredArgs([
+      "--prompt-file",
+      "/p",
+      "--sandbox-defaults",
+      "claude",
+      "--",
+      "--foo",
+    ]);
+    expect(on.error).toBeUndefined();
+    expect(on.sandboxDefaults).toBe(true);
+    expect(on.harnessArgs).toEqual(["--foo"]);
+    const off = parseStructuredArgs(["--prompt-file", "/p", "claude"]);
+    expect(off.error).toBeUndefined();
+    expect(off.sandboxDefaults).toBeUndefined();
+  });
+
+  test("--sandbox-defaults is valueless — the = form is rejected with the exact message", () => {
+    expect(parseStructuredArgs(["--sandbox-defaults=x", "claude"]).error).toBe(
+      "flag --sandbox-defaults takes no value",
+    );
+  });
+
+  test("--sandbox-defaults after <name> hits the positional rejection (runner grammar only)", () => {
+    const p = parseStructuredArgs([
+      "--prompt-file",
+      "/p",
+      "claude",
+      "--sandbox-defaults",
+      "--",
+      "x",
+    ]);
+    expect(p.error).toMatch(
+      /unexpected argument: --sandbox-defaults \(harness args must follow/,
+    );
+  });
+});
+
+describe("buildGuestEnv (frozen sandbox-defaults env semantics)", () => {
+  const isSandbox = (env: string[]) =>
+    env.filter((e) => e.startsWith("IS_SANDBOX="));
+
+  test("flag on, no host IS_SANDBOX → IS_SANDBOX=1 injected", () => {
+    const env = buildGuestEnv({ FOO: "bar" }, true);
+    expect(isSandbox(env)).toEqual(["IS_SANDBOX=1"]);
+    expect(env).toContain("FOO=bar");
+  });
+
+  test("flag off, no host IS_SANDBOX → nothing injected", () => {
+    const env = buildGuestEnv({ FOO: "bar" }, false);
+    expect(isSandbox(env)).toEqual([]);
+    expect(env).toContain("FOO=bar");
+  });
+
+  test("flag on, host-preset IS_SANDBOX → ONE entry, overwritten to 1 (no duplicate)", () => {
+    const env = buildGuestEnv({ IS_SANDBOX: "0", FOO: "bar" }, true);
+    expect(isSandbox(env)).toEqual(["IS_SANDBOX=1"]);
+  });
+
+  test("flag off, host-preset IS_SANDBOX → passes through VERBATIM (not stripped or rewritten)", () => {
+    const env = buildGuestEnv({ IS_SANDBOX: "host-set", FOO: "bar" }, false);
+    expect(isSandbox(env)).toEqual(["IS_SANDBOX=host-set"]);
+  });
 });
 
 describe("structured-runner main() — one-turn JSON contract (real pty + fake harness)", () => {
@@ -83,6 +154,7 @@ describe("structured-runner main() — one-turn JSON contract (real pty + fake h
   const keys = [
     "HARNESS_BINARY_CLAUDE_CODE",
     EnvVar,
+    ArgvOutVar,
     "LOOM_WORKTREE_PATH",
     "LOOM_LOCAL_TASK_TIMEOUT_MS",
   ];
@@ -171,6 +243,58 @@ describe("structured-runner main() — one-turn JSON contract (real pty + fake h
     // (best-effort telemetry, never a crash). Fixture-level extraction is
     // covered in test/transcript/usage.test.ts.
     expect(payload.usage).toBeUndefined();
+  }, 25000);
+
+  // stageTurn wires a minimal one-turn scenario through process.env (the same
+  // setEnv mechanism as above — main() spreads process.env into the guest env,
+  // which is how the fake harness receives its script AND its argv-dump path).
+  function stageTurn(): { promptPath: string; argvOut: string } {
+    const script = New("claude-code")
+      .Session("cli1234-0000-0000-0000-000000000002")
+      .Idle()
+      .AwaitSubmit()
+      .Working(30, "Thinking")
+      .Reply(40, "Answer: " + PromptRef(), "Synthesized", "5s")
+      .Build();
+    const scriptPath = join(
+      mkdtempSync(join(tmpdir(), "sr-script-")),
+      "script.json",
+    );
+    writeFileSync(scriptPath, JSON.stringify(script), { mode: 0o600 });
+    const promptPath = join(
+      mkdtempSync(join(tmpdir(), "sr-prompt-")),
+      "prompt.txt",
+    );
+    writeFileSync(promptPath, "Reply with OK");
+    const argvOut = join(mkdtempSync(join(tmpdir(), "sr-argv-")), "argv.json");
+
+    setEnv("HARNESS_BINARY_CLAUDE_CODE", fakeHarnessBin);
+    setEnv(EnvVar, scriptPath);
+    setEnv(ArgvOutVar, argvOut);
+    setEnv("LOOM_WORKTREE_PATH", mkdtempSync(join(tmpdir(), "sr-wd-")));
+    setEnv("LOOM_LOCAL_TASK_TIMEOUT_MS", "20000");
+    return { promptPath, argvOut };
+  }
+
+  test("--sandbox-defaults: --dangerously-skip-permissions PRESENT in the child argv", async () => {
+    const { promptPath, argvOut } = stageTurn();
+    const { code } = await captureMain([
+      "--prompt-file",
+      promptPath,
+      "--sandbox-defaults",
+      "claude",
+    ]);
+    expect(code).toBe(ExitOK);
+    const argv: string[] = JSON.parse(readFileSync(argvOut, "utf8"));
+    expect(argv).toContain("--dangerously-skip-permissions");
+  }, 25000);
+
+  test("default (no flag): no silent injection — --dangerously-skip-permissions ABSENT", async () => {
+    const { promptPath, argvOut } = stageTurn();
+    const { code } = await captureMain(["--prompt-file", promptPath, "claude"]);
+    expect(code).toBe(ExitOK);
+    const argv: string[] = JSON.parse(readFileSync(argvOut, "utf8"));
+    expect(argv).not.toContain("--dangerously-skip-permissions");
   }, 25000);
 });
 
