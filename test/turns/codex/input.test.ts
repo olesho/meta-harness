@@ -138,6 +138,29 @@ describe("codex input", () => {
     expect(dec.decode(keys!)).toBe("\r");
   });
 
+  test("sign-in wall is excluded (not a dismissable interstitial)", () => {
+    // Codex's logged-out sign-in wall renders "Press enter to continue" but is
+    // an auth wall handled by the auth-required path; DetectInput must return
+    // null so it never surfaces as a codex_notice nor gets blind-Entered (which
+    // could kick off a real sign-in). Screen text mirrors test/corpus/auth/codex.
+    const signinMenu = `
+  Welcome to Codex, OpenAI's command-line coding agent
+  Sign in with ChatGPT to use Codex as part of your paid plan
+  or connect an API key for usage-based billing
+> 1. Sign in with ChatGPT
+  2. Sign in with Device Code
+  3. Provide your own API key
+  Press enter to continue
+`;
+    expect(codex.DetectInput(signinMenu)).toBeNull();
+
+    const browserMenu = `
+  Finish signing in via your browser
+  Press enter to continue
+`;
+    expect(codex.DetectInput(browserMenu)).toBeNull();
+  });
+
   test("single-option notice auto-dismisses via bare Enter", () => {
     // The DetectInput fallback (no parsed menu rows → a lone "continue" option).
     const noticeOnly = `

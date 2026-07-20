@@ -2,6 +2,7 @@
 import { describe, expect, test } from "vitest";
 import { codex } from "../../src/turns/index.ts";
 import type { InputRequest as TurnsInputRequest } from "../../src/turns/index.ts";
+import { EventInputRequest } from "../../src/chat/index.ts";
 import { KeyRecorder, newTestConv } from "./helpers.ts";
 
 const enc = new TextEncoder();
@@ -30,9 +31,24 @@ function codexUpdateRequest(): TurnsInputRequest {
 }
 
 describe("codex auto-dismiss", () => {
-  test("default: update notice cleared by Skip, nothing surfaced", () => {
+  test("default: update menu surfaces to client, nothing written", () => {
     const rec = new KeyRecorder();
     const c = newTestConv({ harness: "codex" }, rec);
+    c.handleInputRequested(codexUpdateRequest());
+    expect(rec.text()).toBe("");
+    expect(c.inputSurfaced).toBe(true);
+    const ev = c.eventCh.tryReceive();
+    expect(ev.ok).toBe(true);
+    expect(ev.value?.type).toBe(EventInputRequest);
+    expect(ev.value?.input?.kind).toBe(codex.KindUpdateNotice);
+  });
+
+  test("autoSkipCodexUpdateNotice: update menu cleared by Skip, nothing surfaced", () => {
+    const rec = new KeyRecorder();
+    const c = newTestConv(
+      { harness: "codex", autoSkipCodexUpdateNotice: true },
+      rec,
+    );
     c.handleInputRequested(codexUpdateRequest());
     expect(rec.text()).toBe("2\r");
     expect(c.inputSurfaced).toBe(false);
