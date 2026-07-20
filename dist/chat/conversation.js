@@ -591,6 +591,13 @@ export class Conversation {
     tryAutoDismissCodex(req) {
         if (this.opts.harness !== "codex" || this.opts.disableCodexAutoDismiss)
             return false;
+        // The update menu is surfaced to the client by default so it can choose
+        // Update / Skip; only auto-Skip it when the caller opted in. The other
+        // interstitials (model migration, menu-less notice) carry no user choice
+        // and stay auto-dismissed.
+        if (req.kind === codex.KindUpdateNotice &&
+            !this.opts.autoSkipCodexUpdateNotice)
+            return false;
         const [keys, ok] = codex.AutoDismissKeys(req);
         if (!ok || !keys)
             return false;
