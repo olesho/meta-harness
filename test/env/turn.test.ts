@@ -99,7 +99,7 @@ describe("runStructuredTurn — happy path & transport", () => {
     expect(ws.execArgv.filter((t) => t === "--effort")).toHaveLength(0);
   });
 
-  test("threads binary, effort, model, harnessArgs into argv order", async () => {
+  test("threads binary, effort, model, sandboxDefaults, harnessArgs into argv order", async () => {
     const ws = new TurnFakeWorkspace({ code: 0, stdout: okLine(), stderr: "" });
     await runStructuredTurn(
       ctx,
@@ -108,9 +108,12 @@ describe("runStructuredTurn — happy path & transport", () => {
         binary: "/opt/bin/mh-structured",
         effort: "high",
         model: "sonnet",
+        sandboxDefaults: true,
         harnessArgs: ["--foo", "bar"],
       }),
     );
+    // --sandbox-defaults is a RUNNER flag: it must sit BEFORE <name>, never
+    // after `--` where it would be forwarded to the harness.
     expect(ws.execArgv).toEqual([
       "/opt/bin/mh-structured",
       "--prompt-file",
@@ -119,11 +122,18 @@ describe("runStructuredTurn — happy path & transport", () => {
       "high",
       "--model",
       "sonnet",
+      "--sandbox-defaults",
       "claude",
       "--",
       "--foo",
       "bar",
     ]);
+  });
+
+  test("sandboxDefaults defaults OFF — no --sandbox-defaults on the argv", async () => {
+    const ws = new TurnFakeWorkspace({ code: 0, stdout: okLine(), stderr: "" });
+    await runStructuredTurn(ctx, ws, cfg());
+    expect(ws.execArgv).not.toContain("--sandbox-defaults");
   });
 
   test("passes env and cwd through exec opts (cwd defaults to repo)", async () => {

@@ -63,6 +63,8 @@ function buildArgv(binary, promptPath, cfg) {
         argv.push("--effort", cfg.effort);
     if (cfg.model !== undefined)
         argv.push("--model", cfg.model);
+    if (cfg.sandboxDefaults)
+        argv.push("--sandbox-defaults");
     argv.push(cfg.harness);
     if (cfg.harnessArgs && cfg.harnessArgs.length > 0)
         argv.push("--", ...cfg.harnessArgs);
