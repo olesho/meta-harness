@@ -32,8 +32,10 @@ export declare const InputResolved: Kind;
  *
  * Go's Mode also carries an `Auto`, but only as a pre-resolution placeholder
  * that it latches to Stream|Hooks BEFORE any event is filtered. MH resolves the
- * concrete mode in planAcquisition (a later subtask) directly, so there is no
- * un-latched Auto value here to leak into the event path.
+ * concrete mode in planAcquisition directly, so there is no un-latched Auto
+ * value in THIS resolved union to leak into the event path. MH expresses Go's
+ * Auto placeholder instead as the request-only `RequestedAcquisitionMode`
+ * token below — consumed by planAcquisition and NEVER emitted by it.
  */
 export type AcquisitionMode = "off" | "stream" | "hooks";
 /** No live acquisition; fall back to the on-disk transcript. */
@@ -42,6 +44,21 @@ export declare const AcquisitionModeOff: AcquisitionMode;
 export declare const AcquisitionModeStream: AcquisitionMode;
 /** Acquire events from the harness hooks side-channel. */
 export declare const AcquisitionModeHooks: AcquisitionMode;
+/**
+ * RequestedAcquisitionMode is the request-only superset: the mode a CALLER may
+ * ask for. `auto` = "best available channel"; planAcquisition resolves it (to a
+ * concrete AcquisitionMode) and NEVER emits it. Mirrors Go's TranscriptAuto
+ * placeholder without adding an un-latched value to the resolved
+ * AcquisitionMode union (see the note above) — so `auto` can never reach the
+ * event path (StreamTap.mode, admitParent, describeAcquisitionMode).
+ */
+export type RequestedAcquisitionMode = AcquisitionMode | "auto";
+/**
+ * AcquisitionModeAuto is the request-only "best available channel" token.
+ * planAcquisition resolves it identically to a requested Hooks (hooks-if-viable
+ * → stream-if-eligible → Off); it is never returned as a resolved mode.
+ */
+export declare const AcquisitionModeAuto: "auto";
 /**
  * describeAcquisitionMode renders an AcquisitionMode for logs — the
  * `String()`-equivalent of Go's Mode.String(). Returns the canonical lowercase

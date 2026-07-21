@@ -1,4 +1,4 @@
-import type { Adapter, AcquisitionMode } from "../../turns/index.ts";
+import type { Adapter, AcquisitionMode, RequestedAcquisitionMode } from "../../turns/index.ts";
 import type { Info } from "../../discovery/discovery.ts";
 /**
  * The optional turns.Adapter capabilities that matter to acquisition, resolved
@@ -124,12 +124,16 @@ export declare function streamEligible(profile: ResolvedProfile): boolean;
  *                                     to Hooks (if viable) else Off.
  *   - requested Hooks               → Hooks when viable; else Stream when
  *                                     streamEligible; else Off.
+ *   - requested Auto                → best available: identical to the
+ *                                     requested-Hooks resolution above. `auto`
+ *                                     is a request-only token; it is resolved
+ *                                     to a concrete mode and never returned.
  *
  * Because streamEligible is false for all four current A1 adapters (none are
  * interleaved), real-adapter output is Hooks/Off; the Stream branch is reached
  * only by a synthetic interleaved fake.
  */
-export declare function planAcquisition(requested: AcquisitionMode, ctx: PlanContext): AcquisitionMode;
+export declare function planAcquisition(requested: RequestedAcquisitionMode, ctx: PlanContext): AcquisitionMode;
 /**
  * replanAfterStreamFailure is the runtime fall-back seam (belt and suspenders).
  * When a run planned to Stream but the live stream produced no parseable events

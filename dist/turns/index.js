@@ -4,7 +4,7 @@
 // adapter internals (DetectInput, parse helpers, regexes) stay behind this
 // barrel; only the public turn vocabulary, the Adapter contract + optional
 // capability interfaces, the Watcher, and the adapter constructors are exposed.
-export { AcquisitionModeHooks, AcquisitionModeOff, AcquisitionModeStream, Blocked, describeAcquisitionMode, Errored, InputRequested, InputResolved, ToolCall, TurnComplete, } from "./types.js";
+export { AcquisitionModeAuto, AcquisitionModeHooks, AcquisitionModeOff, AcquisitionModeStream, Blocked, describeAcquisitionMode, Errored, InputRequested, InputResolved, ToolCall, TurnComplete, } from "./types.js";
 export { StatusAPIError, StatusBinaryNotFound, StatusBlockedByCost, StatusFailed, StatusIdle, StatusInterrupted, StatusRetryLater, StatusStale, StatusUnknown, StatusWaitingForInput, } from "./wrapper.js";
 export { Watch, Watcher } from "./watcher.js";
 // Generic fallback adapter and the five per-harness adapters, exposed as

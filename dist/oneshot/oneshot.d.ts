@@ -1,6 +1,6 @@
 import { type InputPolicy } from "../chat/index.ts";
 import { Context } from "../internal/async/index.ts";
-import type { AcquisitionMode, Adapter } from "../turns/index.ts";
+import type { Adapter, RequestedAcquisitionMode } from "../turns/index.ts";
 import type { EventEnvelope } from "../transcript/index.ts";
 import type { YieldControl } from "../acquisition/internal/yield.ts";
 import type { StreamVersionPredicate } from "../acquisition/internal/planAcquisition.ts";
@@ -21,8 +21,8 @@ export interface OneShotConfig {
     idleGap?: number;
     /** Test-only marker-confirm window override (ms). Zero/undefined = package default. */
     markerGap?: number;
-    /** REQUESTED acquisition mode; planAcquisition latches it against the adapter. Absent ⇒ Off. */
-    acquisitionMode?: AcquisitionMode;
+    /** REQUESTED acquisition mode (incl. the request-only `auto` token); planAcquisition latches it against the adapter. Absent ⇒ Off. */
+    acquisitionMode?: RequestedAcquisitionMode;
     /** Acquisition event sink. Its presence is the sink gate (Go's `haveSink`); absent ⇒ plan degrades to Off. */
     onAcquisitionEvent?: (env: EventEnvelope) => void;
     /** Best-effort per-line display callback (bounded, may drop under back-pressure). */

@@ -27,6 +27,12 @@ export const AcquisitionModeStream = "stream";
 /** Acquire events from the harness hooks side-channel. */
 export const AcquisitionModeHooks = "hooks";
 /**
+ * AcquisitionModeAuto is the request-only "best available channel" token.
+ * planAcquisition resolves it identically to a requested Hooks (hooks-if-viable
+ * → stream-if-eligible → Off); it is never returned as a resolved mode.
+ */
+export const AcquisitionModeAuto = "auto";
+/**
  * describeAcquisitionMode renders an AcquisitionMode for logs — the
  * `String()`-equivalent of Go's Mode.String(). Returns the canonical lowercase
  * label ("off" | "stream" | "hooks").
