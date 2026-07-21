@@ -14,6 +14,7 @@ by [`test/contract.test.ts`](../../../test/contract.test.ts), so it matches what
 | [wrapper](wrapper.md)                | `meta-harness/wrapper`       | PTY supervision + output/exit classification into `Status`/`ErrorClass`.                                |
 | [turns](turns.md)                    | `meta-harness/turns`         | Per-harness turn-detection adapters + a `Watcher`.                                                      |
 | [transcript](transcript.md)          | `meta-harness/transcript`    | Parse a harness's on-disk log into a canonical `Event` stream.                                          |
+| [hooks](hooks.md)                    | `meta-harness/hooks`         | Manage a harness's hook config (`ensureSettingsJSONHooks`, `renderHookCommand`) + parse hook payloads.  |
 | [chat](chat.md)                      | `meta-harness/chat`          | The `Conversation`: one supervised harness + a chat API.                                                |
 | [oneshot](oneshot.md)                | `meta-harness/oneshot`       | Prompt → single reply → teardown, atop chat.                                                            |
 | [cli](cli.md)                        | `meta-harness-run`           | The one-shot loop as a disposable process.                                                              |
