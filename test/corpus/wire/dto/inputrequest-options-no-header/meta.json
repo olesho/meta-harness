@@ -1,0 +1,20 @@
+{
+  "surface": "inputRequest",
+  "description": "Question with options but no header and single-select — header/multi_select omitted, options present.",
+  "scope": "shared",
+  "input": {
+    "id": "r3",
+    "kind": "question",
+    "prompt": "One of these?",
+    "options": [
+      {
+        "id": "y",
+        "label": "Yes"
+      },
+      {
+        "id": "n",
+        "label": "No"
+      }
+    ]
+  }
+}

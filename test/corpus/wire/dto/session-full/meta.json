@@ -1,0 +1,12 @@
+{
+  "surface": "session",
+  "description": "Session with working_dir and harness_session_id both present.",
+  "scope": "shared",
+  "input": {
+    "id": "sess-1",
+    "harness": "claude",
+    "workingDir": "/repo",
+    "createdAt": "2026-01-01T00:00:00Z",
+    "harnessSessionID": "hs-abc"
+  }
+}

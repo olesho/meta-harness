@@ -1,0 +1,9 @@
+{
+  "keys": [
+    "harnessSessionID",
+    "reply",
+    "status",
+    "transcript_entries",
+    "working_dir"
+  ]
+}

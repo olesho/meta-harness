@@ -1,0 +1,9 @@
+{
+  "surface": "constants",
+  "description": "Frozen CLI exit codes + the deadline anchor line. Values only — no test may require Go to EMIT ExitUsage (Go carries 2 for fidelity, with no emit path).",
+  "exit_ok": 0,
+  "exit_error": 1,
+  "exit_usage": 2,
+  "exit_deadline": 124,
+  "deadline_line": "harness-wrapper run: context deadline exceeded"
+}

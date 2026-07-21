@@ -1,0 +1,16 @@
+{
+  "surface": "structuredResult",
+  "description": "Minimal structured run line: the five required keys, all three optionals absent.",
+  "scope": "shared",
+  "input": {
+    "status": "completed",
+    "reply": "the reply",
+    "harnessSessionID": "sess-1",
+    "transcript_entries": [
+      {
+        "role": "user"
+      }
+    ],
+    "working_dir": "/repo"
+  }
+}

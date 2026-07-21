@@ -1,0 +1,17 @@
+{
+  "surface": "turn",
+  "description": "retry_after must be omitted for a negative retryAfter (converter tests `> 0`, so negatives drop like zero).",
+  "scope": "shared",
+  "input": {
+    "id": "t3",
+    "sessionID": "s1",
+    "role": "user",
+    "state": "complete",
+    "text": "do it",
+    "reason": "",
+    "startedAt": "2026-01-01T00:00:00Z",
+    "completedAt": "2026-01-01T00:00:01Z",
+    "httpCode": 0,
+    "retryAfter": -5
+  }
+}

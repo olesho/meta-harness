@@ -1,0 +1,13 @@
+{
+  "surface": "screen",
+  "description": "Rendered-terminal snapshot mapped to snake_case screen response.",
+  "scope": "shared",
+  "input": {
+    "text": "hello world",
+    "cols": 80,
+    "rows": 24,
+    "cursorCol": 5,
+    "cursorRow": 2,
+    "generation": 7
+  }
+}

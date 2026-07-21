@@ -1,0 +1,19 @@
+{
+  "id": "r1",
+  "kind": "question",
+  "prompt": "Pick some",
+  "options": [
+    {
+      "id": "o1",
+      "alias": "a",
+      "label": "First",
+      "description": "the first one"
+    },
+    {
+      "id": "o2",
+      "label": "Second"
+    }
+  ],
+  "header": "Choose",
+  "multi_select": true
+}

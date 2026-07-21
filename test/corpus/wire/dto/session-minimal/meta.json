@@ -1,0 +1,12 @@
+{
+  "surface": "session",
+  "description": "Session with empty working_dir and harness_session_id — both omitted, leaving id/harness/created_at.",
+  "scope": "shared",
+  "input": {
+    "id": "sess-2",
+    "harness": "codex",
+    "workingDir": "",
+    "createdAt": "2026-01-01T00:00:00Z",
+    "harnessSessionID": ""
+  }
+}

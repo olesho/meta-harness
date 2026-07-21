@@ -1,0 +1,9 @@
+{
+  "surface": "answerRequest",
+  "description": "Empty option_ids[] is dropped (guard requires length > 0); option_id survives.",
+  "scope": "shared",
+  "input": {
+    "option_ids": [],
+    "option_id": "z"
+  }
+}

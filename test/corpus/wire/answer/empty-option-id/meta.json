@@ -1,0 +1,8 @@
+{
+  "surface": "answerRequest",
+  "description": "Empty option_id \"\" is dropped (falsy guard); nothing else set.",
+  "scope": "shared",
+  "input": {
+    "option_id": ""
+  }
+}

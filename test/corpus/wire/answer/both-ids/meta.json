@@ -1,0 +1,12 @@
+{
+  "surface": "answerRequest",
+  "description": "Both option_id and option_ids present: the DTO layer passes BOTH through (optionID + optionIDs). Precedence is a downstream conversation.ts contract, not encoded here.",
+  "scope": "shared",
+  "input": {
+    "option_ids": [
+      "a",
+      "b"
+    ],
+    "option_id": "z"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "keys": [
+    "harnessSessionID",
+    "reason",
+    "reply",
+    "status",
+    "transcript_entries",
+    "transcript_error",
+    "usage",
+    "working_dir"
+  ]
+}

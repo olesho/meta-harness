@@ -1,0 +1,8 @@
+{
+  "surface": "answerRequest",
+  "description": "Empty text \"\" is KEPT (guard tests !== undefined, not truthiness) — asymmetric with the id guards.",
+  "scope": "shared",
+  "input": {
+    "text": ""
+  }
+}
