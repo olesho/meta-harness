@@ -43,7 +43,7 @@ import {
 function capture(
   writer: (res: ServerResponse, err: unknown) => void,
   err: unknown,
-): { status: number; body: { code: string; message: string } } {
+): { status: number; body: { error: string; code: string } } {
   const res = new ServerResponse(new IncomingMessage(new Socket()));
   const chunks: Buffer[] = [];
   const origWrite = res.write.bind(res);
@@ -80,7 +80,7 @@ describe("writeChatError — sentinel table", () => {
     const got = capture(writeChatError, err);
     expect(got.status).toBe(status);
     expect(got.body.code).toBe(code);
-    expect(typeof got.body.message).toBe("string");
+    expect(typeof got.body.error).toBe("string");
   });
 
   test("ErrNotMultiSelect maps to 400 not_multi_select, NOT 500", () => {

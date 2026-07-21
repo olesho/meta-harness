@@ -111,6 +111,12 @@ export interface TurnResultDTO {
   history_source: string;
   /** True when runTurn intentionally stopped the harness after the turn. */
   process_stopped_after_turn: boolean;
+  /**
+   * Error string for an errored turn (Go's runTurnResponse.Error, omitempty).
+   * Left off entirely on a completed turn; set by the /v1/turns handler's
+   * errored-turn branch to the caught RunTurnError's message.
+   */
+  error?: string;
 }
 
 /** One item of GET .../conversations (list). Mirrors Go conversationSummary. */
@@ -267,7 +273,19 @@ export function openResponse(id: string): OpenResponseDTO {
   return { id };
 }
 
-/** turnResultDTO: MH TurnResult → wire JSON. Assembles the POST /v1/turns body. */
+/**
+ * turnResultDTO: MH TurnResult → wire JSON. Assembles the POST /v1/turns body.
+ *
+ * Conformance vs Go's runTurnResponse (the shared corpus, META-HARNESS-91 /
+ * HARNESS-WRAPPER-47, owns the golden diff — these are the recorded expectations):
+ *   - `error` (omitempty) is set only by the handler's errored-turn branch, never
+ *     here — a completed turn omits it, matching Go.
+ *   - `wrapper_status` / `wrapper_reason` (omitempty in Go) are OMITTED: this
+ *     Conversation/wrapper surface exposes no per-turn wrapper Result to populate
+ *     them (see runTurn.ts). Absent-vs-empty is a benign superset gap.
+ *   - `history_source` is an MH-only field (no Go counterpart); the corpus must
+ *     tolerate it as an MH superset.
+ */
 export function turnResultDTO(r: TurnResult): TurnResultDTO {
   return {
     turn: turnDTO(r.turn),
