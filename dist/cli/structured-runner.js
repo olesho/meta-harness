@@ -5,14 +5,15 @@
 // transcript_entries without a second round-trip.
 //
 // Contrast with run.ts: that is the reply-on-stdout CLI (the reply is the whole
-// contract, and it can't expose harnessSessionID). This one takes the prompt
-// via --prompt-file (a SAFE
-// transport — never shell-interpolated), reads the transcript back via the
-// per-harness Readers, and prints a structured result. Loom's sandbox task runner
-// parses the LAST stdout line as that result.
+// contract, and it can't expose harnessSessionID). This one takes the prompt via
+// --prompt-file when present, otherwise from stdin (Go-structured-run parity) —
+// file wins, stdin is the fallback. Both are SAFE transports (never
+// shell-interpolated). It reads the transcript back via the per-harness Readers
+// and prints a structured result. Loom's sandbox task runner parses the LAST
+// stdout line as that result.
 //
 // Grammar:
-//   structured-runner --prompt-file <path> [--effort E] [--model M] <name> -- <harness args...>
+//   structured-runner [--prompt-file <path>] [--effort E] [--model M] <name> -- <harness args...>
 //
 // Exit codes (coarse orchestration signal; the JSON payload is the source of truth):
 //   0   — completed
@@ -61,8 +62,9 @@ function resolveTimeoutMs(env) {
 /**
  * parseStructuredArgs — flags (--prompt-file/--effort/--model) precede <name>;
  * <name> is the first non-flag token; a `--` separator forwards the remainder to
- * the harness. The prompt is NEVER an argument (only --prompt-file), so a prompt
- * with quotes/newlines/leading-dashes can't corrupt the argv or the shell.
+ * the harness. The prompt is NEVER an argument (it comes from --prompt-file or
+ * stdin), so a prompt with quotes/newlines/leading-dashes can't corrupt the argv
+ * or the shell.
  */
 export function parseStructuredArgs(argv) {
     const out = { harnessArgs: [] };
@@ -168,11 +170,29 @@ function reasonOf(outcome) {
 function emit(payload) {
     process.stdout.write(JSON.stringify(payload) + "\n");
 }
+// readStdin mirrors src/cli/run.ts:196-210 verbatim — duplicated privately per
+// house style (run.ts and hooks.ts each keep their own copy) rather than exported.
+async function readStdin() {
+    const chunks = [];
+    for await (const chunk of process.stdin) {
+        chunks.push(chunk);
+    }
+    let len = 0;
+    for (const c of chunks)
+        len += c.length;
+    const buf = new Uint8Array(len);
+    let off = 0;
+    for (const c of chunks) {
+        buf.set(c, off);
+        off += c.length;
+    }
+    return new TextDecoder().decode(buf);
+}
 const HELP = `meta-harness structured-runner — one-shot harness turn → JSON result line
 
-usage: structured-runner --prompt-file <path> [--effort E] [--model M] <name> -- <harness args...>
+usage: structured-runner [--prompt-file <path>] [--effort E] [--model M] <name> -- <harness args...>
 
-  --prompt-file P   read the prompt from file P (required; safe transport)
+  --prompt-file P   read the prompt from file P (safe transport; falls back to stdin when absent)
   <name>            short alias: claude → claude-code, codex → codex
   --effort E        reasoning effort passed to the harness
   --model M         model passed to the harness
@@ -196,17 +216,26 @@ export async function main(argv) {
         process.stderr.write(`structured-runner: unknown harness: ${parsed.name}\n`);
         return ExitUsage;
     }
-    if (!parsed.promptFile) {
-        process.stderr.write("structured-runner: --prompt-file is required\n");
-        return ExitUsage;
-    }
+    // Prompt source: --prompt-file wins when present (stdin untouched); otherwise
+    // read stdin (Go-structured-run parity). Read-failure → ExitError on both.
     let prompt;
-    try {
-        prompt = readFileSync(parsed.promptFile, "utf8");
+    if (parsed.promptFile) {
+        try {
+            prompt = readFileSync(parsed.promptFile, "utf8");
+        }
+        catch (err) {
+            process.stderr.write("structured-runner: failed to read prompt file: " + String(err) + "\n");
+            return ExitError;
+        }
     }
-    catch (err) {
-        process.stderr.write("structured-runner: failed to read prompt file: " + String(err) + "\n");
-        return ExitError;
+    else {
+        try {
+            prompt = await readStdin();
+        }
+        catch (err) {
+            process.stderr.write("structured-runner: failed to read stdin: " + String(err) + "\n");
+            return ExitError;
+        }
     }
     if (prompt.trim() === "") {
         process.stderr.write("structured-runner: empty prompt\n");
