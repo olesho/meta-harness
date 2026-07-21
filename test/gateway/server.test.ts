@@ -750,6 +750,8 @@ describe("/v1/turns (one-shot RunTurn over a real pty + fake harness)", () => {
     expect(r.json.history.length).toBeGreaterThanOrEqual(2);
     expect(["transcript", "store"]).toContain(r.json.history_source);
     expect(r.json.process_stopped_after_turn).toBe(true);
+    // A completed turn omits `error` entirely (Go's runTurnResponse omitempty).
+    expect(r.json.error).toBeUndefined();
   });
 
   test("an errored turn returns 200 with the errored turn, NOT 500", async () => {
@@ -767,6 +769,8 @@ describe("/v1/turns (one-shot RunTurn over a real pty + fake harness)", () => {
     // turn throws before runTurn sets it), but exit_after_turn=true always stops
     // the process, so the wire envelope reports it stopped consistently.
     expect(r.json.process_stopped_after_turn).toBe(true);
+    // Item 1: Go's runTurnResponse.Error carries the bare ErrTurnErrored string.
+    expect(r.json.error).toBe("harness: turn errored");
   });
 
   test("timeout_seconds bounds a wedged turn → 504 timeout (§7)", async () => {
@@ -789,6 +793,9 @@ describe("/v1/turns (one-shot RunTurn over a real pty + fake harness)", () => {
     });
     expect(r.status).toBe(504);
     expect(r.json.code).toBe("timeout");
+    // Item 3: mapped errors ship Go's `{ error, code }` body — guard the `error`
+    // key the old `{ code, message }` shape never carried.
+    expect(typeof r.json.error).toBe("string");
   });
 });
 

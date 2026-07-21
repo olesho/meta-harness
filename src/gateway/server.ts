@@ -280,9 +280,11 @@ interface SendRequestBody {
 }
 
 // POST /v1/turns request. A superset of OpenRequestBody + `prompt`: the full
-// one-shot turn config. `inputPolicy`/`onInputRequest`/`turnHarness`/
-// `eventBuffer` on TurnConfig are policy/function/internal-tuning valued and are
-// deliberately NOT wire-decoded (the server installs its own unattended policy).
+// one-shot turn config. `inputPolicy`/`onInputRequest`/`eventBuffer` on
+// TurnConfig are policy/function/internal-tuning valued and are deliberately
+// NOT wire-decoded (the server installs its own unattended policy). `turnHarness`
+// IS decoded (`turn_harness` below) — it is a plain string with a real wire
+// counterpart (Go's runTurnRequest.TurnHarness, omitempty).
 interface RunTurnRequestBody {
   harness?: string;
   binary_path?: string;
@@ -294,6 +296,8 @@ interface RunTurnRequestBody {
   rows?: number;
   effort?: string;
   model?: string;
+  /** Overrides which chat adapter interprets the turn (Go's turn_harness). */
+  turn_harness?: string;
   /** One-shot only: defaults to true; false is rejected 400 unsupported. */
   exit_after_turn?: boolean;
   /** Bounds the whole run as a timed op (→ requestContext deadline). */
@@ -499,6 +503,7 @@ export class Server {
         model: body.model,
         cols: body.cols,
         rows: body.rows,
+        turnHarness: body.turn_harness,
         exitAfterTurn: true,
         // Unattended one-shot: no interactive client to answer prompts. Reuse
         // the one-shot loop's trust-prompt policy; the bounded ctx above guards
@@ -516,6 +521,10 @@ export class Server {
       if (err instanceof RunTurnError && isSentinel(err, ErrTurnErrored)) {
         const dto = turnResultDTO(err.result);
         dto.process_stopped_after_turn = true;
+        // Go's runTurnResponse.Error carries err.Error() — bare ErrTurnErrored's
+        // "harness: turn errored". err.message is byte-identical, so it is the
+        // correct source (not turn.reason, which would drift from Go).
+        dto.error = err.message;
         writeJSON(res, 200, dto);
         return;
       }
