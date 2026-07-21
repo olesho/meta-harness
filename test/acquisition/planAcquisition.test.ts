@@ -14,6 +14,7 @@ import type { Adapter, Event } from "../../src/turns/index.ts";
 import type { Status } from "../../src/turns/wrapper.ts";
 import type { Snapshot } from "../../src/screen/index.ts";
 import {
+  AcquisitionModeAuto,
   AcquisitionModeHooks,
   AcquisitionModeOff,
   AcquisitionModeStream,
@@ -281,6 +282,71 @@ describe("planAcquisition", () => {
       expect(
         planAcquisition(AcquisitionModeHooks, ctx(p, { hooksViable: false })),
       ).toBe(AcquisitionModeOff);
+    });
+  });
+
+  // ── requested Auto: the request-only token maps onto the Hooks resolution ──
+  // These do NOT re-test the resolution logic (already covered above); they
+  // assert only that `auto` resolves to the SAME mode as a requested `hooks`
+  // across the decision table, and that `auto` is never itself returned.
+  describe("requested Auto (best available channel)", () => {
+    test("no sink ⇒ Off (same as Hooks)", () => {
+      const p = profileFrom(interleavedFake, { streamVersionSupported: true });
+      const c = ctx(p, { haveSink: false });
+      expect(planAcquisition(AcquisitionModeAuto, c)).toBe(
+        planAcquisition(AcquisitionModeHooks, c),
+      );
+      expect(planAcquisition(AcquisitionModeAuto, c)).toBe(AcquisitionModeOff);
+    });
+
+    test("hooks-viable ⇒ Hooks (same as Hooks)", () => {
+      const p = profileFrom(realShapeAdapter, { streamVersionSupported: true });
+      const c = ctx(p);
+      expect(planAcquisition(AcquisitionModeAuto, c)).toBe(
+        planAcquisition(AcquisitionModeHooks, c),
+      );
+      expect(planAcquisition(AcquisitionModeAuto, c)).toBe(
+        AcquisitionModeHooks,
+      );
+    });
+
+    test("hooks-not-viable + stream-eligible ⇒ Stream (same as Hooks)", () => {
+      const p = profileFrom(interleavedFake, { streamVersionSupported: true });
+      const c = ctx(p, { hooksViable: false });
+      expect(planAcquisition(AcquisitionModeAuto, c)).toBe(
+        planAcquisition(AcquisitionModeHooks, c),
+      );
+      expect(planAcquisition(AcquisitionModeAuto, c)).toBe(
+        AcquisitionModeStream,
+      );
+    });
+
+    test("neither hooks-viable nor stream-eligible ⇒ Off (same as Hooks)", () => {
+      const p = profileFrom(realShapeAdapter, { streamVersionSupported: true });
+      const c = ctx(p, { hooksViable: false });
+      expect(planAcquisition(AcquisitionModeAuto, c)).toBe(
+        planAcquisition(AcquisitionModeHooks, c),
+      );
+      expect(planAcquisition(AcquisitionModeAuto, c)).toBe(AcquisitionModeOff);
+    });
+
+    test("auto is resolved to a concrete mode, never returned verbatim", () => {
+      for (const over of [
+        {},
+        { hooksViable: false },
+        { haveSink: false },
+      ] as const) {
+        const p = profileFrom(interleavedFake, {
+          streamVersionSupported: true,
+        });
+        const resolved = planAcquisition(AcquisitionModeAuto, ctx(p, over));
+        expect(resolved).not.toBe(AcquisitionModeAuto);
+        expect([
+          AcquisitionModeOff,
+          AcquisitionModeStream,
+          AcquisitionModeHooks,
+        ]).toContain(resolved);
+      }
     });
   });
 

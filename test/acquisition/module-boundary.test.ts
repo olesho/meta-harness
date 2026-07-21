@@ -143,4 +143,24 @@ describe("the turns barrel is the one sanctioned public path to the vocabulary",
     expect(turns.AcquisitionModeHooks).toBe("hooks");
     expect(typeof turns.describeAcquisitionMode).toBe("function");
   });
+
+  test("AcquisitionModeAuto is exported as a request-only token, NOT in the resolved union", async () => {
+    const turns = (await import(join(srcRoot, "turns", "index.ts"))) as Record<
+      string,
+      unknown
+    >;
+    // The request-only token is exported with its own string value…
+    expect(turns.AcquisitionModeAuto).toBe("auto");
+    // …but it must NOT be a member of the resolved {off, stream, hooks} set:
+    // a fourth resolved sibling equal to one of these would be the leak the
+    // no-un-latched-Auto invariant forbids. (Documentation-strength: the
+    // load-bearing guarantee is the compiler check in the type-level guards;
+    // this asserts the runtime value stayed distinct.)
+    const resolved = new Set([
+      turns.AcquisitionModeOff,
+      turns.AcquisitionModeStream,
+      turns.AcquisitionModeHooks,
+    ]);
+    expect(resolved.has(turns.AcquisitionModeAuto)).toBe(false);
+  });
 });

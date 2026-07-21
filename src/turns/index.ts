@@ -16,6 +16,7 @@ export type {
   MessageExtractor,
   Quitter,
   RawSessionIDExtractor,
+  RequestedAcquisitionMode,
   SessionControlFlags,
   SessionIDExtractor,
   SessionIDLocator,
@@ -29,6 +30,7 @@ export type {
 } from "./types.ts";
 
 export {
+  AcquisitionModeAuto,
   AcquisitionModeHooks,
   AcquisitionModeOff,
   AcquisitionModeStream,

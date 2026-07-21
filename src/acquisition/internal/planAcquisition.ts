@@ -39,8 +39,13 @@
 // Hooks/Off and the Stream branch is reachable only by a synthetic interleaved
 // fake. This is the accepted A1 outcome — the Stream branch is scaffolding.
 
-import type { Adapter, AcquisitionMode } from "../../turns/index.ts";
+import type {
+  Adapter,
+  AcquisitionMode,
+  RequestedAcquisitionMode,
+} from "../../turns/index.ts";
 import {
+  AcquisitionModeAuto,
   AcquisitionModeHooks,
   AcquisitionModeOff,
   AcquisitionModeStream,
@@ -244,13 +249,17 @@ export function streamEligible(profile: ResolvedProfile): boolean {
  *                                     to Hooks (if viable) else Off.
  *   - requested Hooks               → Hooks when viable; else Stream when
  *                                     streamEligible; else Off.
+ *   - requested Auto                → best available: identical to the
+ *                                     requested-Hooks resolution above. `auto`
+ *                                     is a request-only token; it is resolved
+ *                                     to a concrete mode and never returned.
  *
  * Because streamEligible is false for all four current A1 adapters (none are
  * interleaved), real-adapter output is Hooks/Off; the Stream branch is reached
  * only by a synthetic interleaved fake.
  */
 export function planAcquisition(
-  requested: AcquisitionMode,
+  requested: RequestedAcquisitionMode,
   ctx: PlanContext,
 ): AcquisitionMode {
   if (!ctx.haveSink) {
@@ -267,6 +276,10 @@ export function planAcquisition(
         return AcquisitionModeStream;
       }
       return ctx.hooksViable ? AcquisitionModeHooks : AcquisitionModeOff;
+    // `auto` resolves to "best available channel" — identical to a requested
+    // Hooks. Routed through the SAME arm (bare fall-through) so the two can
+    // never diverge; the distinct string literals make the fall-through safe.
+    case AcquisitionModeAuto:
     case AcquisitionModeHooks:
       if (ctx.hooksViable) {
         return AcquisitionModeHooks;
@@ -276,7 +289,8 @@ export function planAcquisition(
       }
       return AcquisitionModeOff;
     default:
-      // Exhaustive over AcquisitionMode; unreachable. Conservative default.
+      // Exhaustive over RequestedAcquisitionMode (off/stream/hooks/auto);
+      // `requested` narrows to `never` here. Conservative dead-but-safe net.
       return AcquisitionModeOff;
   }
 }

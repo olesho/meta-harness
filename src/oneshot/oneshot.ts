@@ -20,7 +20,7 @@ import {
   type Turn,
 } from "../chat/index.ts";
 import { Context, ctxDeadlineExceeded } from "../internal/async/index.ts";
-import type { AcquisitionMode, Adapter } from "../turns/index.ts";
+import type { Adapter, RequestedAcquisitionMode } from "../turns/index.ts";
 import type { EventEnvelope } from "../transcript/index.ts";
 import type { YieldControl } from "../acquisition/internal/yield.ts";
 import type { StreamVersionPredicate } from "../acquisition/internal/planAcquisition.ts";
@@ -52,8 +52,8 @@ export interface OneShotConfig {
   // behaviour unchanged (no tap fan-off). They mirror the matching acquisition
   // fields on chat.Options one-for-one.
 
-  /** REQUESTED acquisition mode; planAcquisition latches it against the adapter. Absent ⇒ Off. */
-  acquisitionMode?: AcquisitionMode;
+  /** REQUESTED acquisition mode (incl. the request-only `auto` token); planAcquisition latches it against the adapter. Absent ⇒ Off. */
+  acquisitionMode?: RequestedAcquisitionMode;
   /** Acquisition event sink. Its presence is the sink gate (Go's `haveSink`); absent ⇒ plan degrades to Off. */
   onAcquisitionEvent?: (env: EventEnvelope) => void;
   /** Best-effort per-line display callback (bounded, may drop under back-pressure). */

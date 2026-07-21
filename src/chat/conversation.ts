@@ -86,7 +86,7 @@ import {
   readyForInput,
 } from "./ready.ts";
 import { cleanHarnessEnv } from "./env.ts";
-import type { AcquisitionMode } from "../turns/index.ts";
+import type { RequestedAcquisitionMode } from "../turns/index.ts";
 import { AcquisitionModeOff, AcquisitionModeHooks } from "../turns/index.ts";
 import type { EventEnvelope } from "../transcript/index.ts";
 import {
@@ -179,11 +179,13 @@ export interface Options {
 
   /**
    * The REQUESTED acquisition mode. planAcquisition resolves it against the
-   * resolved adapter's capabilities to the LATCHED mode actually used. Absent ⇒
-   * Off (no live acquisition; the tap is created only if raw session-id capture
-   * needs it, exactly as before).
+   * resolved adapter's capabilities to the LATCHED mode actually used. Accepts
+   * the request-only `auto` token ("best available channel"); planAcquisition
+   * resolves it and never emits it downstream. Absent ⇒ Off (no live
+   * acquisition; the tap is created only if raw session-id capture needs it,
+   * exactly as before).
    */
-  acquisitionMode?: AcquisitionMode;
+  acquisitionMode?: RequestedAcquisitionMode;
   /**
    * The acquisition event bridge. Admitted, stamped EventEnvelopes are delivered
    * here as the run streams. Its presence is the acquisition sink (Go's
