@@ -1,0 +1,17 @@
+{
+  "surface": "turn",
+  "description": "Sub-second/fractional backoff formats as a Go duration string (1500ms -> \"1.5s\").",
+  "scope": "shared",
+  "input": {
+    "id": "t5",
+    "sessionID": "s1",
+    "role": "assistant",
+    "state": "complete",
+    "text": "wait",
+    "reason": "",
+    "startedAt": "2026-01-01T00:00:00Z",
+    "completedAt": "2026-01-01T00:00:02Z",
+    "httpCode": 503,
+    "retryAfter": 1500
+  }
+}

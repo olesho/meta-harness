@@ -1,0 +1,17 @@
+{
+  "surface": "turn",
+  "description": "Minimal turn: empty text/reason, epoch completion, zero http_code and retryAfter — only the five required keys remain.",
+  "scope": "shared",
+  "input": {
+    "id": "t4",
+    "sessionID": "s1",
+    "role": "user",
+    "state": "pending",
+    "text": "",
+    "reason": "",
+    "startedAt": "2026-01-01T00:00:00Z",
+    "completedAt": null,
+    "httpCode": 0,
+    "retryAfter": 0
+  }
+}

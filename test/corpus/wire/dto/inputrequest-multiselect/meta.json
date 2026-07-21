@@ -1,0 +1,24 @@
+{
+  "surface": "inputRequest",
+  "description": "Multi-select question exposing the MH superset: header, multi_select, and per-option alias/description (present and absent).",
+  "scope": "shared",
+  "input": {
+    "id": "r1",
+    "kind": "question",
+    "prompt": "Pick some",
+    "header": "Choose",
+    "multiSelect": true,
+    "options": [
+      {
+        "id": "o1",
+        "alias": "a",
+        "label": "First",
+        "description": "the first one"
+      },
+      {
+        "id": "o2",
+        "label": "Second"
+      }
+    ]
+  }
+}

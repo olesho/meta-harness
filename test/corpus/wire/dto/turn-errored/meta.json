@@ -1,0 +1,17 @@
+{
+  "surface": "turn",
+  "description": "Errored turn: reason set, empty text, not-yet-complete (completedAt is the epoch sentinel), no http_code, no backoff.",
+  "scope": "shared",
+  "input": {
+    "id": "t2",
+    "sessionID": "s1",
+    "role": "assistant",
+    "state": "errored",
+    "text": "",
+    "reason": "boom: the harness exploded",
+    "startedAt": "2026-01-01T00:00:00Z",
+    "completedAt": null,
+    "httpCode": 0,
+    "retryAfter": 0
+  }
+}

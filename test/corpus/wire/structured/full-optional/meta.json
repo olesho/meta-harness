@@ -1,0 +1,22 @@
+{
+  "surface": "structuredResult",
+  "description": "Full structured run line: the five required keys plus usage, reason, transcript_error.",
+  "scope": "shared",
+  "input": {
+    "status": "errored",
+    "reply": "",
+    "harnessSessionID": "sess-2",
+    "transcript_entries": [
+      {
+        "role": "assistant"
+      }
+    ],
+    "working_dir": "/repo",
+    "usage": {
+      "input_tokens": 10,
+      "output_tokens": 20
+    },
+    "reason": "boom",
+    "transcript_error": "read failed"
+  }
+}

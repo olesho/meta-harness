@@ -1,0 +1,10 @@
+{
+  "surface": "inputRequest",
+  "description": "Single trust prompt: no options, no header, multiSelect false — options/header/multi_select all omitted.",
+  "scope": "shared",
+  "input": {
+    "id": "r2",
+    "kind": "trust_prompt",
+    "prompt": "OK?"
+  }
+}

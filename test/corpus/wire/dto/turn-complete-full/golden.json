@@ -1,0 +1,11 @@
+{
+  "id": "t1",
+  "session_id": "s1",
+  "role": "assistant",
+  "state": "complete",
+  "text": "hello there",
+  "started_at": "2026-01-01T00:00:00Z",
+  "completed_at": "2026-01-01T00:00:05Z",
+  "http_code": 429,
+  "retry_after": "30s"
+}

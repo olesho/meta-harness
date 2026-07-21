@@ -1,0 +1,11 @@
+{
+  "surface": "answerRequest",
+  "description": "MH-only multi-select answer: option_ids[] alone maps to optionIDs.",
+  "scope": "mh-superset",
+  "input": {
+    "option_ids": [
+      "x",
+      "y"
+    ]
+  }
+}

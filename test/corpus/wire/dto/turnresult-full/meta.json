@@ -1,0 +1,54 @@
+{
+  "surface": "turnResult",
+  "description": "One-shot RunTurn envelope: nested turn, session, and a two-item history[], exercising the comparator's recursion and per-depth timestamp keys. The non-serializable conversation? field is intentionally not represented.",
+  "scope": "shared",
+  "input": {
+    "turn": {
+      "id": "t1",
+      "sessionID": "s1",
+      "role": "assistant",
+      "state": "complete",
+      "text": "final answer",
+      "reason": "",
+      "startedAt": "2026-01-01T00:00:00Z",
+      "completedAt": "2026-01-01T00:00:05Z",
+      "httpCode": 0,
+      "retryAfter": 0
+    },
+    "session": {
+      "id": "s1",
+      "harness": "claude",
+      "workingDir": "/repo",
+      "createdAt": "2026-01-01T00:00:00Z",
+      "harnessSessionID": "hs-1"
+    },
+    "history": [
+      {
+        "id": "h1",
+        "sessionID": "s1",
+        "role": "user",
+        "state": "complete",
+        "text": "the question",
+        "reason": "",
+        "startedAt": "2026-01-01T00:00:00Z",
+        "completedAt": "2026-01-01T00:00:01Z",
+        "httpCode": 0,
+        "retryAfter": 0
+      },
+      {
+        "id": "h2",
+        "sessionID": "s1",
+        "role": "assistant",
+        "state": "complete",
+        "text": "final answer",
+        "reason": "",
+        "startedAt": "2026-01-01T00:00:02Z",
+        "completedAt": "2026-01-01T00:00:05Z",
+        "httpCode": 0,
+        "retryAfter": 0
+      }
+    ],
+    "historySource": "transcript",
+    "processStoppedAfterTurn": true
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "id": "t5",
+  "session_id": "s1",
+  "role": "assistant",
+  "state": "complete",
+  "text": "wait",
+  "started_at": "2026-01-01T00:00:00Z",
+  "completed_at": "2026-01-01T00:00:02Z",
+  "http_code": 503,
+  "retry_after": "1.5s"
+}

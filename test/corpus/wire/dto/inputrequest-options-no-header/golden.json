@@ -1,0 +1,15 @@
+{
+  "id": "r3",
+  "kind": "question",
+  "prompt": "One of these?",
+  "options": [
+    {
+      "id": "y",
+      "label": "Yes"
+    },
+    {
+      "id": "n",
+      "label": "No"
+    }
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "id": "t3",
+  "session_id": "s1",
+  "role": "user",
+  "state": "complete",
+  "text": "do it",
+  "started_at": "2026-01-01T00:00:00Z",
+  "completed_at": "2026-01-01T00:00:01Z"
+}

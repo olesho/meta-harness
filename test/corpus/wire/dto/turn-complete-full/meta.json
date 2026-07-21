@@ -1,0 +1,17 @@
+{
+  "surface": "turn",
+  "description": "Completed assistant turn with text, a completion instant, an upstream 429, and a positive retry_after backoff.",
+  "scope": "shared",
+  "input": {
+    "id": "t1",
+    "sessionID": "s1",
+    "role": "assistant",
+    "state": "complete",
+    "text": "hello there",
+    "reason": "",
+    "startedAt": "2026-01-01T00:00:00Z",
+    "completedAt": "2026-01-01T00:00:05Z",
+    "httpCode": 429,
+    "retryAfter": 30000
+  }
+}
