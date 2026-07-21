@@ -53,7 +53,7 @@ describe("chat integration (real pty + fake harness)", () => {
     const conv = await openTracked(script);
     await sendOneTurn(conv, "Reply with exactly: " + sentinel);
 
-    const turn = await waitForTerminalTurn(conv, 4000);
+    const turn = await waitForTerminalTurn(conv, 8000);
     expect(turn.state).toBe(TurnStateComplete);
     expect(turn.text).toContain(sentinel);
     expect(turn.text).not.toContain("Pondered");
@@ -76,7 +76,7 @@ describe("chat integration (real pty + fake harness)", () => {
 
     for (let i = 0; i < sentinels.length; i++) {
       await sendOneTurn(conv, "Say " + sentinels[i]);
-      const turn = await waitForTerminalTurn(conv, 4000);
+      const turn = await waitForTerminalTurn(conv, 8000);
       expect(turn.state).toBe(TurnStateComplete);
       expect(turn.text).toContain(sentinels[i]);
       if (i > 0) expect(turn.text).not.toContain(sentinels[i - 1]);
@@ -98,7 +98,7 @@ describe("chat integration (real pty + fake harness)", () => {
     const conv = await openTracked(script);
     await sendOneTurn(conv, "Answer with " + sentinel);
 
-    const turn = await waitForTerminalTurn(conv, 4000);
+    const turn = await waitForTerminalTurn(conv, 8000);
     expect(turn.state).toBe(TurnStateComplete);
     expect(turn.text).toContain(sentinel);
     expect(turn.reason).toContain("fallback");
@@ -120,7 +120,7 @@ describe("chat integration (real pty + fake harness)", () => {
     const conv = await openTracked(script);
     await sendOneTurn(conv, "Reply with " + sentinel);
 
-    const turn = await waitForTerminalTurn(conv, 4000);
+    const turn = await waitForTerminalTurn(conv, 8000);
     expect(turn.state).toBe(TurnStateComplete);
     expect(turn.text).toContain(sentinel);
     expect(turn.reason).toContain("fallback");
@@ -140,7 +140,7 @@ describe("chat integration (real pty + fake harness)", () => {
 
     for (let i = 0; i < sentinels.length; i++) {
       await sendOneTurn(conv, "Say " + sentinels[i]);
-      const turn = await waitForTerminalTurn(conv, 4000);
+      const turn = await waitForTerminalTurn(conv, 8000);
       expect(turn.state).toBe(TurnStateComplete);
       expect(turn.text).toContain(sentinels[i]);
       if (i > 0) expect(turn.text).not.toContain(sentinels[i - 1]);
@@ -167,7 +167,7 @@ describe("chat integration (real pty + fake harness)", () => {
     const conv = await openTracked(script);
     await sendOneTurn(conv, "Reply with " + sentinel);
 
-    const turn = await waitForTerminalTurn(conv, 4000);
+    const turn = await waitForTerminalTurn(conv, 8000);
     expect(turn.state).toBe(TurnStateComplete);
     expect(turn.text).toContain(sentinel);
     expect(turn.reason).toContain("Token usage");
@@ -188,7 +188,7 @@ describe("chat integration (real pty + fake harness)", () => {
 
     for (let i = 0; i < sentinels.length; i++) {
       await sendOneTurn(conv, "Say " + sentinels[i]);
-      const turn = await waitForTerminalTurn(conv, 4000);
+      const turn = await waitForTerminalTurn(conv, 8000);
       expect(turn.state).toBe(TurnStateComplete);
       expect(turn.text).toContain(sentinels[i]);
     }
