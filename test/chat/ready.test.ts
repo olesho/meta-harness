@@ -5,6 +5,7 @@ import {
   requiresPromptReadiness,
   readyForInput,
   authRequired,
+  usageLimitMessage,
 } from "../../src/chat/ready.ts";
 
 const dec = new TextDecoder();
@@ -326,5 +327,56 @@ describe("authRequired", () => {
   });
   test("unknown harness never fires", () => {
     expect(authRequired("some-other-harness", "Not logged in")).toBe(false);
+  });
+});
+
+describe("usageLimitMessage(claude-code)", () => {
+  // Captured live from claude-code 2.1.216 (2026-07-20): the usage window is
+  // exhausted, so the CLI renders the wall AS the assistant reply for the turn.
+  const sessionLimitReply =
+    "You've hit your session limit · resets 10:20pm (Europe/Warsaw)";
+
+  test("detects the session-limit wall and returns the full line", () => {
+    expect(usageLimitMessage("claude-code", sessionLimitReply)).toBe(
+      sessionLimitReply,
+    );
+  });
+
+  test("captures the '· resets …' reset tail for the reason detail", () => {
+    const msg = usageLimitMessage(
+      "claude-code",
+      "  ⏺ You have hit your usage limit · resets at 6:40pm\n",
+    );
+    expect(msg).toBe("You have hit your usage limit · resets at 6:40pm");
+  });
+
+  test("matches under a tool-result decoration glyph in scrollback", () => {
+    const screen = [
+      "────────────────────────────────────────",
+      "  ⎿  You've hit your session limit · resets 10:20pm",
+      "────────────────────────────────────────",
+      "❯",
+    ].join("\n");
+    expect(usageLimitMessage("claude-code", screen)).toBe(
+      "You've hit your session limit · resets 10:20pm",
+    );
+  });
+
+  test("no false positive on a genuine reply mentioning limits in prose", () => {
+    // A real model reply discussing the feature — must NOT be mistaken for the
+    // wall. The CLI's wall always leads its line with "You've/You have hit your".
+    expect(
+      usageLimitMessage(
+        "claude-code",
+        "⏺ I added a check for when the user hits their session limit, resetting the counter.",
+      ),
+    ).toBeNull();
+  });
+
+  test("does not fire for other harnesses (claude-only wall today)", () => {
+    expect(usageLimitMessage("codex", sessionLimitReply)).toBeNull();
+    expect(
+      usageLimitMessage("some-other-harness", sessionLimitReply),
+    ).toBeNull();
   });
 });

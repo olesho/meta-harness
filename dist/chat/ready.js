@@ -197,6 +197,39 @@ export function onboardingWall(harness, text) {
             return false;
     }
 }
+// --- usage / session-limit wall detection ---
+//
+// When the subscription's rolling usage window is exhausted, claude-code renders
+// a wall line IN PLACE of an assistant reply, e.g.
+//   "You've hit your session limit · resets 10:20pm (Europe/Warsaw)"
+// The TUI paints it as an assistant bubble, so extractMessage captures it and it
+// would otherwise be persisted as a genuine reply (a false success whose "text"
+// is the wall). usageLimitMessage lets the completion path detect it and error the
+// turn with a usage-limit reason instead (see Conversation.usageLimitRelabel).
+//
+// Mirrored inline from the wrapper's sessionLimitRE (src/wrapper/internal/harness/
+// claude.ts), per this file's turns-free convention. Anchored to the wall's own
+// sentence and captured to end-of-line so the reset time rides along in the
+// reason — a genuine reply merely mentioning a "usage limit" in prose won't match,
+// because the CLI only ever emits this exact phrasing, and the leading glyph +
+// "hit your … limit" anchor rejects incidental prose.
+const claudeUsageLimitRE = /^[^\S\r\n]*(?:[⎿·●⏺]\s*)?(You(?:'ve|\s+have)\s+hit\s+your\s+(?:session|usage)\s+limit[^\r\n]*)$/im;
+/**
+ * usageLimitMessage returns the harness usage/session-limit wall line (its "out of
+ * quota" screen, rendered in place of a reply) when present — trimmed, including
+ * the "· resets …" tail — or null. Returns null for any harness without a known
+ * wall (only claude-code today).
+ */
+export function usageLimitMessage(harness, text) {
+    switch (harness) {
+        case "claude-code": {
+            const m = claudeUsageLimitRE.exec(text);
+            return m ? m[1].trim() : null;
+        }
+        default:
+            return null;
+    }
+}
 /**
  * authRequired reports whether the rendered screen shows a harness login-expiry /
  * logged-out banner OR a first-run onboarding wizard — either way the turn can

@@ -11,6 +11,13 @@ export declare function readyForInput(harness: string, text: string): boolean;
  */
 export declare function onboardingWall(harness: string, text: string): boolean;
 /**
+ * usageLimitMessage returns the harness usage/session-limit wall line (its "out of
+ * quota" screen, rendered in place of a reply) when present — trimmed, including
+ * the "· resets …" tail — or null. Returns null for any harness without a known
+ * wall (only claude-code today).
+ */
+export declare function usageLimitMessage(harness: string, text: string): string | null;
+/**
  * authRequired reports whether the rendered screen shows a harness login-expiry /
  * logged-out banner OR a first-run onboarding wizard — either way the turn can
  * produce no assistant output until the human authenticates. Returns false for

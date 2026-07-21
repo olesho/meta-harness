@@ -38,6 +38,7 @@ export {
   HistorySourceTranscript,
   HistorySourceStore,
   ReasonAuthRequired,
+  ReasonUsageLimited,
 } from "./types.ts";
 
 export type { Store } from "./store.ts";
