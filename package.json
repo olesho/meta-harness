@@ -36,6 +36,11 @@
       "types": "./dist/turns/index.d.ts",
       "import": "./dist/turns/index.js"
     },
+    "./hooks": {
+      "bun": "./src/hooks/index.ts",
+      "types": "./dist/hooks/index.d.ts",
+      "import": "./dist/hooks/index.js"
+    },
     "./transcript": {
       "bun": "./src/transcript/index.ts",
       "types": "./dist/transcript/index.d.ts",

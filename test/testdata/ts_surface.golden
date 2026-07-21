@@ -289,5 +289,45 @@ env-daytona/index.ts
   fileCredentialInjector: function
   sweep: function
 
+hooks/index.ts
+  ClaudeHookPayload: type
+  ClaudeHookProvider: class{ensureConfig,parsePayload}
+  EventTurnBoundary: string="turn_boundary"
+  HookContext: type
+  HookEntry: type
+  HookEventPostTask: string="PostTask"
+  HookEventPostToolUse: string="PostToolUse"
+  HookEventSessionStart: string="SessionStart"
+  HookEventStop: string="Stop"
+  HookEventSubagentStop: string="SubagentStop"
+  HookProvider: type
+  HookSpec: type
+  LockOptions: type
+  ManagedHooks: type
+  PathEscapeError: class{}
+  RenderHookCommandOptions: type
+  SettingsHookCmd: type
+  SettingsHookMatcher: type
+  StaticHookProfile: type
+  appendSpool: function
+  atomicWriteFileSync: function
+  claudeHookOwner: string="harness/claude"
+  drainSpool: function
+  ensureSettingsJSONHooks: function
+  guardPath: function
+  hookMarkerPrefix: string="meta-harness-hook"
+  isManagedHookCommand: function
+  isWithinBase: function
+  lockStaleTTLMs: number=30000
+  parseClaudeHookPayload: function
+  removeManagedHooks: function
+  renderHookCommand: function
+  resolveWithinBase: function
+  sessionMatches: function
+  specFromProfile: function
+  spoolFileName: string="events.jsonl"
+  spoolFilePath: function
+  withLockedFile: function
+
 index.ts
   VERSION: string="0.0.0"

@@ -32,6 +32,7 @@ const PUBLIC_BARRELS = [
   "env/index.ts",
   "env-openshell/index.ts",
   "env-daytona/index.ts",
+  "hooks/index.ts",
   "index.ts",
 ];
 
@@ -156,6 +157,24 @@ describe("public TS surface contract", () => {
         if (name === "default") continue;
         expect(internalNames.has(name)).toBe(false);
       }
+    }
+  });
+
+  // The published ./hooks subpath re-exports its three headline library
+  // functions (the Go parity surface: EnsureSettingsJSONHooks / RenderHookCommand
+  // / WithLockedFile). scripts/verify-exports.mjs load-tests the dist artifact
+  // under Node; here we freeze the named contract against the source barrel.
+  test("hooks barrel re-exports the named library functions", async () => {
+    const mod = (await import(join(srcRoot, "hooks/index.ts"))) as Record<
+      string,
+      unknown
+    >;
+    for (const name of [
+      "ensureSettingsJSONHooks",
+      "renderHookCommand",
+      "withLockedFile",
+    ]) {
+      expect(typeof mod[name]).toBe("function");
     }
   });
 
