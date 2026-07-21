@@ -74,6 +74,12 @@ export interface TurnResultDTO {
     history_source: string;
     /** True when runTurn intentionally stopped the harness after the turn. */
     process_stopped_after_turn: boolean;
+    /**
+     * Error string for an errored turn (Go's runTurnResponse.Error, omitempty).
+     * Left off entirely on a completed turn; set by the /v1/turns handler's
+     * errored-turn branch to the caught RunTurnError's message.
+     */
+    error?: string;
 }
 /** One item of GET .../conversations (list). Mirrors Go conversationSummary. */
 export interface ConversationSummaryDTO {

@@ -344,6 +344,7 @@ export class Server {
                 model: body.model,
                 cols: body.cols,
                 rows: body.rows,
+                turnHarness: body.turn_harness,
                 exitAfterTurn: true,
                 // Unattended one-shot: no interactive client to answer prompts. Reuse
                 // the one-shot loop's trust-prompt policy; the bounded ctx above guards
@@ -362,6 +363,10 @@ export class Server {
             if (err instanceof RunTurnError && isSentinel(err, ErrTurnErrored)) {
                 const dto = turnResultDTO(err.result);
                 dto.process_stopped_after_turn = true;
+                // Go's runTurnResponse.Error carries err.Error() — bare ErrTurnErrored's
+                // "harness: turn errored". err.message is byte-identical, so it is the
+                // correct source (not turn.reason, which would drift from Go).
+                dto.error = err.message;
                 writeJSON(res, 200, dto);
                 return;
             }

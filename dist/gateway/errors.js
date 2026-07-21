@@ -13,6 +13,10 @@
 //      multi-select answer throws ErrNotMultiSelect on the `answer` path; without
 //      this row it would fall through to a generic 500.
 //
+// The wire body is Go's errorResponse shape: `{ error, code }` (Error json:"error",
+// Code json:"code,omitempty"). Every mapping carries a non-empty code, so no
+// omitempty handling is needed JS-side.
+//
 // The table is EXPLICIT and ORDERED. Each entry maps a sentinel to {status,code}.
 import { ErrClosed, ErrInputPending, ErrInvalidOptions, ErrNoControl, ErrNoInputPending, ErrNotMultiSelect, ErrStaleInputRequest, ErrTurnInFlight, ErrUnknownHarness, ErrUnknownOption, isSentinel, } from "../chat/errors.js";
 import { ctxCanceled, ctxDeadlineExceeded, } from "../internal/async/index.js";
@@ -66,9 +70,9 @@ export function mapChatError(err) {
 export function mapRunTurnError(err) {
     return lookup(err, RUN_TURN_TABLE) ?? mapChatError(err);
 }
-/** Write a JSON error body `{ code, message }` with the given status. */
+/** Write Go's errorResponse body `{ error, code }` with the given status. */
 function writeError(res, mapping, message) {
-    const body = JSON.stringify({ code: mapping.code, message });
+    const body = JSON.stringify({ error: message, code: mapping.code });
     res.statusCode = mapping.status;
     res.setHeader("Content-Type", "application/json");
     res.end(body);
