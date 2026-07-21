@@ -1,0 +1,1 @@
+{"version":3,"file":"duration.d.ts","sourceRoot":"","sources":["../../src/turnproto/duration.ts"],"names":[],"mappings":"AAUA,qFAAqF;AACrF,eAAO,MAAM,sBAAsB,QAAiB,CAAC;AAErD,mFAAmF;AACnF,wBAAgB,cAAc,CAC5B,GAAG,EAAE,MAAM,GAAG,SAAS,EACvB,SAAS,GAAE,MAA+B,GACzC,MAAM,CAIR;AAED,wFAAwF;AACxF,wBAAgB,eAAe,CAAC,CAAC,EAAE,MAAM,GAAG,MAAM,GAAG,IAAI,CAuBxD"}

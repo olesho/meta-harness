@@ -10,8 +10,12 @@ import {
   main,
   parseStructuredArgs,
   buildGuestEnv,
+  resolveTimeoutMs,
   ExitOK,
+  ExitDeadline,
+  DeadlineLine,
 } from "../../src/cli/structured-runner.ts";
+import { DEFAULT_RUN_TIMEOUT_MS } from "../../src/turnproto/index.ts";
 import {
   New,
   PromptRef,
@@ -157,6 +161,7 @@ describe("structured-runner main() — one-turn JSON contract (real pty + fake h
     ArgvOutVar,
     "LOOM_WORKTREE_PATH",
     "LOOM_LOCAL_TASK_TIMEOUT_MS",
+    "HARNESS_WRAPPER_RUN_TIMEOUT",
   ];
   afterEach(() => {
     for (const k of keys) {
@@ -168,14 +173,29 @@ describe("structured-runner main() — one-turn JSON contract (real pty + fake h
     saved[k] = process.env[k];
     process.env[k] = v;
   }
+  // deleteEnv records the value like setEnv so the afterEach restore covers it —
+  // a var exported by the developer/CI environment can't leak into a test that
+  // needs it unset, and is put back afterwards.
+  function deleteEnv(k: string) {
+    saved[k] = process.env[k];
+    delete process.env[k];
+  }
 
   async function captureMain(
     argv: string[],
-  ): Promise<{ code: number; payload: any }> {
+  ): Promise<{ code: number; payload: any; stderr: string }> {
     const chunks: string[] = [];
+    const errChunks: string[] = [];
     const orig = process.stdout.write.bind(process.stdout);
+    const origErr = process.stderr.write.bind(process.stderr);
     process.stdout.write = (chunk: string | Uint8Array) => {
       chunks.push(
+        typeof chunk === "string" ? chunk : Buffer.from(chunk).toString(),
+      );
+      return true;
+    };
+    process.stderr.write = (chunk: string | Uint8Array) => {
+      errChunks.push(
         typeof chunk === "string" ? chunk : Buffer.from(chunk).toString(),
       );
       return true;
@@ -185,10 +205,11 @@ describe("structured-runner main() — one-turn JSON contract (real pty + fake h
       code = await main(argv);
     } finally {
       process.stdout.write = orig;
+      process.stderr.write = origErr;
     }
     const line =
       chunks.join("").trim().split("\n").filter(Boolean).pop() ?? "{}";
-    return { code, payload: JSON.parse(line) };
+    return { code, payload: JSON.parse(line), stderr: errChunks.join("") };
   }
 
   test("completed: emits one JSON line with reply + harnessSessionID; transcript read is best-effort", async () => {
@@ -296,6 +317,73 @@ describe("structured-runner main() — one-turn JSON contract (real pty + fake h
     const argv: string[] = JSON.parse(readFileSync(argvOut, "utf8"));
     expect(argv).not.toContain("--dangerously-skip-permissions");
   }, 25000);
+
+  test("forced deadline via HARNESS_WRAPPER_RUN_TIMEOUT: exit 124 + JSON status deadline + stderr anchor", async () => {
+    const script = New("claude-code")
+      .Idle()
+      .AwaitSubmit()
+      .Working(30, "Thinking")
+      .StayAliveUntilStopped()
+      .Build();
+    const scriptPath = join(
+      mkdtempSync(join(tmpdir(), "sr-script-")),
+      "script.json",
+    );
+    writeFileSync(scriptPath, JSON.stringify(script), { mode: 0o600 });
+    const promptPath = join(
+      mkdtempSync(join(tmpdir(), "sr-prompt-")),
+      "prompt.txt",
+    );
+    writeFileSync(promptPath, "hang");
+    const wd = mkdtempSync(join(tmpdir(), "sr-wd-"));
+
+    setEnv("HARNESS_BINARY_CLAUDE_CODE", fakeHarnessBin);
+    setEnv(EnvVar, scriptPath);
+    setEnv("LOOM_WORKTREE_PATH", wd);
+    // The shared var must apply on its own — the loom override stays unset.
+    deleteEnv("LOOM_LOCAL_TASK_TIMEOUT_MS");
+    setEnv("HARNESS_WRAPPER_RUN_TIMEOUT", "600ms");
+
+    const { code, payload, stderr } = await captureMain([
+      "--prompt-file",
+      promptPath,
+      "claude",
+    ]);
+
+    // The full deadline contract: coarse exit code, the JSON result line
+    // (emitted BEFORE the stderr anchor), and the frozen DeadlineLine.
+    expect(code).toBe(ExitDeadline);
+    expect(payload.status).toBe("deadline");
+    expect(stderr).toContain(DeadlineLine);
+  }, 25000);
+
+  describe("resolveTimeoutMs precedence (LOOM ms → HARNESS_WRAPPER_RUN_TIMEOUT → default)", () => {
+    test("both set → LOOM_LOCAL_TASK_TIMEOUT_MS wins (structured-runner-only override)", () => {
+      setEnv("LOOM_LOCAL_TASK_TIMEOUT_MS", "12000");
+      setEnv("HARNESS_WRAPPER_RUN_TIMEOUT", "5m");
+      expect(resolveTimeoutMs(process.env)).toBe(12_000);
+    });
+
+    test("invalid LOOM + valid HARNESS_WRAPPER_RUN_TIMEOUT → the Go-duration var applies", () => {
+      // Behavior change vs the old runner: a malformed LOOM value no longer
+      // collapses straight to the default — the shared var gets its turn.
+      setEnv("LOOM_LOCAL_TASK_TIMEOUT_MS", "not-a-number");
+      setEnv("HARNESS_WRAPPER_RUN_TIMEOUT", "5m");
+      expect(resolveTimeoutMs(process.env)).toBe(300_000);
+    });
+
+    test("LOOM keeps plain-Number() parsing: scientific notation and floats pass", () => {
+      setEnv("LOOM_LOCAL_TASK_TIMEOUT_MS", "1e4");
+      setEnv("HARNESS_WRAPPER_RUN_TIMEOUT", "5m");
+      expect(resolveTimeoutMs(process.env)).toBe(10_000);
+    });
+
+    test("neither set → shared 15m default", () => {
+      deleteEnv("LOOM_LOCAL_TASK_TIMEOUT_MS");
+      deleteEnv("HARNESS_WRAPPER_RUN_TIMEOUT");
+      expect(resolveTimeoutMs(process.env)).toBe(DEFAULT_RUN_TIMEOUT_MS);
+    });
+  });
 });
 
 test("readUsage: empty session id → null (no locate attempted)", async () => {

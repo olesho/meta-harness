@@ -4,4 +4,5 @@
 // deps into any of them.
 export { ExitOK, ExitError, ExitUsage, ExitDeadline, DeadlineLine, } from "./protocol.js";
 export { parseLastJSONLine } from "./parse.js";
+export { DEFAULT_RUN_TIMEOUT_MS, parseTimeoutMs, parseGoDuration, } from "./duration.js";
 //# sourceMappingURL=index.js.map

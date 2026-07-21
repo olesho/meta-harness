@@ -53,9 +53,8 @@ import {
   ExitUsage,
   ExitDeadline,
   DeadlineLine,
+  parseTimeoutMs,
 } from "../turnproto/index.ts";
-
-const DEFAULT_TIMEOUT_MS = 30 * 60 * 1000;
 
 // resolveHarnessName / resolveBinaryPath are NOT protocol (the exit codes now
 // live in src/turnproto). They mirror run.ts's helpers and stay local to each
@@ -105,10 +104,19 @@ export function buildGuestEnv(
   return Object.entries(merged).map(([k, v]) => `${k}=${v ?? ""}`);
 }
 
-function resolveTimeoutMs(env: Record<string, string | undefined>): number {
+/**
+ * resolveTimeoutMs — precedence: LOOM_LOCAL_TASK_TIMEOUT_MS (plain milliseconds,
+ * structured-runner-only loom override) → HARNESS_WRAPPER_RUN_TIMEOUT (Go
+ * duration, shared with the run CLI and the Go wrapper) → 15m default. Invalid
+ * or non-positive values fall through to the next source in the chain.
+ */
+export function resolveTimeoutMs(
+  env: Record<string, string | undefined>,
+): number {
   const raw = (env.LOOM_LOCAL_TASK_TIMEOUT_MS ?? "").trim();
   const ms = Number(raw);
-  return Number.isFinite(ms) && ms > 0 ? ms : DEFAULT_TIMEOUT_MS;
+  if (Number.isFinite(ms) && ms > 0) return ms;
+  return parseTimeoutMs(env.HARNESS_WRAPPER_RUN_TIMEOUT);
 }
 
 export interface StructuredArgs {

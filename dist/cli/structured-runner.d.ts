@@ -7,6 +7,13 @@ export declare function resolveHarnessName(name: string): "claude-code" | "codex
  *  the host env passes through verbatim: a host-preset IS_SANDBOX is neither
  *  stripped nor rewritten. Composed with cleanEnv by the caller. */
 export declare function buildGuestEnv(baseEnv: Record<string, string | undefined>, sandboxDefaults: boolean): string[];
+/**
+ * resolveTimeoutMs — precedence: LOOM_LOCAL_TASK_TIMEOUT_MS (plain milliseconds,
+ * structured-runner-only loom override) → HARNESS_WRAPPER_RUN_TIMEOUT (Go
+ * duration, shared with the run CLI and the Go wrapper) → 15m default. Invalid
+ * or non-positive values fall through to the next source in the chain.
+ */
+export declare function resolveTimeoutMs(env: Record<string, string | undefined>): number;
 export interface StructuredArgs {
     help?: boolean;
     error?: string;
