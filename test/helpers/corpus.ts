@@ -32,17 +32,20 @@ export function walkFiles(
 
 /**
  * computeManifest renders the canonical `MANIFEST.sha256` body for `root`:
- * one `"<sha256>  <posix-relative-path>"` line per file (sorted by that line),
- * trailing newline. `exclude` holds root-relative paths to leave out — always
- * the manifest itself, plus any non-frozen docs (e.g. README.md).
+ * one `"<sha256>  <posix-relative-path>"` line per file, **sorted by relative
+ * path** (byte order, matching `LC_ALL=C sort` in scripts/sync-corpus.sh so the
+ * script and this helper produce byte-identical manifests), trailing newline.
+ * `exclude` holds root-relative paths to leave out — always the manifest itself,
+ * plus any non-frozen docs (e.g. README.md).
  */
 export function computeManifest(root: string, exclude: Set<string>): string {
-  const lines = walkFiles(root, exclude).map((f) => {
+  const entries = walkFiles(root, exclude).map((f) => {
     const hash = createHash("sha256").update(readFileSync(f)).digest("hex");
     const rel = relative(root, f).split(/[\\/]/).join("/");
-    return `${hash}  ${rel}`;
+    return { rel, line: `${hash}  ${rel}` };
   });
-  lines.sort();
+  entries.sort((a, b) => (a.rel < b.rel ? -1 : a.rel > b.rel ? 1 : 0));
+  const lines = entries.map((e) => e.line);
   return lines.join("\n") + "\n";
 }
 

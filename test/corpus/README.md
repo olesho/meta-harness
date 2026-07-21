@@ -1,7 +1,19 @@
-# Bake-off corpus
+# Corpus
 
-Recorded PTY byte streams: the substrate for the [emulator bake-off](../../docs/md/internal/decisions/adr-001-vt100.md)
-and the input to the Layer-2 adapter replay tests and the drift pipeline.
+`test/corpus/` holds several **distinct** corpus types. Do not assume one schema
+covers the tree — each subtree documents its own:
+
+| Corpus | Path | What it freezes | Consumer |
+| --- | --- | --- | --- |
+| **PTY bake-off** | `<harness>/<scenario>/` | recorded PTY byte streams (`bytes.raw` + `meta.json` [+ `expected.txt`]) | emulator bake-off / adapter replay / drift pipeline |
+| **Wire** | [`wire/`](./wire/) | cross-language gateway-DTO / StructuredTurnResult / exit-code goldens | `test/wire_corpus.test.ts` |
+
+> The **wire** corpus (and, when it lands here, an **auth** corpus alongside it)
+> is an **OFFLINE** golden check — vendored fixtures compared to the pure
+> converters. It is DISTINCT from `test/conformance.test.ts`, the gated *live*
+> suite that drives real installed binaries. See [`wire/README.md`](./wire/README.md).
+
+The rest of this file documents the **PTY bake-off** corpus.
 
 > 📖 Full story — canonical scenarios, adversarial recordings, recording workflow, privacy — is in the
 > **[Corpus docs](../../docs/md/internal/testing/corpus.md)**.
