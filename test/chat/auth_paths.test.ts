@@ -16,6 +16,7 @@ import { afterEach, describe, expect, test } from "vitest";
 import { Context } from "../../src/internal/async/index.ts";
 import {
   ReasonAuthRequired,
+  ReasonUsageLimited,
   TurnStateErrored,
   authRequired,
   onboardingWall,
@@ -103,6 +104,40 @@ describe("auth reachability (real pty + fake harness)", () => {
     const turn = await waitForTerminalTurn(conv, 6000);
     expect(turn.state).toBe(TurnStateErrored);
     expect(turn.reason).toBe(ReasonAuthRequired);
+    expect(turn.text).toBe("");
+  });
+
+  // Usage-limit wall: the quota window is exhausted, so claude-code paints its
+  // wall AS the assistant reply (a "⏺" bubble) on a screen that also carries the
+  // end-of-turn marker — so the turn completes via the marker path with a NON-empty
+  // extraction. authRelabel's empty-extraction gate would skip it, persisting the
+  // wall as a false success; usageLimitRelabel catches it and errors the turn with
+  // ReasonUsageLimited (wall line in the detail), so a transient quota outage is a
+  // distinguishable, blameless failure rather than a bogus reply that blocks work.
+  test("claude: usage-limit wall as reply WITH marker → ReasonUsageLimited", async () => {
+    const wall =
+      "You've hit your session limit · resets 10:20pm (Europe/Warsaw)";
+    const script = New("claude-code").Idle().AwaitSubmit().Build();
+    const wallWithMarker: Step = {
+      frame: {
+        delay_ms: 0,
+        screen:
+          "Claude Code\n\n❯ review the plan\n" +
+          `⏺ ${wall}\n\n` +
+          "✻ Brewed for 0s\n\n❯ \n",
+        echo: false,
+      },
+    };
+    script.steps.push(wallWithMarker, { hold: {} });
+
+    const conv = await openTracked(script);
+    await sendOneTurn(conv, "review the plan");
+
+    const turn = await waitForTerminalTurn(conv, 6000);
+    expect(turn.state).toBe(TurnStateErrored);
+    expect(turn.reason.startsWith("usage_limit:")).toBe(true);
+    expect(turn.reason).toContain(ReasonUsageLimited);
+    expect(turn.reason).toContain(wall);
     expect(turn.text).toBe("");
   });
 

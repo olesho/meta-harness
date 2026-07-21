@@ -7,7 +7,7 @@
 // Note: `isSentinel` is intentionally NOT re-exported here — it belongs to the
 // internal async toolkit. Callers match the cause-chain sentinels exported below
 // against it by importing it from the internal toolkit in their own code/tests.
-export { RoleUser, RoleAssistant, RoleSystem, TurnStatePending, TurnStateStreaming, TurnStateComplete, TurnStateErrored, EventTurn, EventInputRequest, EventInputResolved, DispositionAsk, DispositionAnswer, DispositionDeny, HistorySourceTranscript, HistorySourceStore, ReasonAuthRequired, } from "./types.js";
+export { RoleUser, RoleAssistant, RoleSystem, TurnStatePending, TurnStateStreaming, TurnStateComplete, TurnStateErrored, EventTurn, EventInputRequest, EventInputResolved, DispositionAsk, DispositionAnswer, DispositionDeny, HistorySourceTranscript, HistorySourceStore, ReasonAuthRequired, ReasonUsageLimited, } from "./types.js";
 export { MemStore, newMemStore } from "./memstore.js";
 export { cleanHarnessEnv } from "./env.js";
 export { ErrInvalidOptions, ErrUnknownHarness, ErrNoControl, ErrTurnInFlight, ErrClosed, ErrInputPending, ErrNoInputPending, ErrStaleInputRequest, ErrUnknownOption, ErrNotMultiSelect, ErrQuitUnsupported, ErrResumeUnsupported, ErrNoHarnessSession, } from "./errors.js";

@@ -368,6 +368,7 @@ export declare class Conversation {
     private assistantText;
     private cleanAssistantText;
     private authRelabel;
+    private usageLimitRelabel;
     private adapterPromptNotAccepted;
     /**
      * The transcript-backed swallow override applies only to adapters that CAN
