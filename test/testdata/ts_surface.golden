@@ -48,6 +48,7 @@ wrapper/index.ts
 
 turns/index.ts
   AcquisitionMode: type
+  AcquisitionModeAuto: string="auto"
   AcquisitionModeHooks: string="hooks"
   AcquisitionModeOff: string="off"
   AcquisitionModeStream: string="stream"
@@ -64,6 +65,7 @@ turns/index.ts
   MessageExtractor: type
   Quitter: type
   RawSessionIDExtractor: type
+  RequestedAcquisitionMode: type
   SessionControlFlags: type
   SessionEvent: type
   SessionIDExtractor: type
