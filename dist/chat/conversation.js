@@ -17,10 +17,10 @@ import { start as wrapperStart, } from "../wrapper/index.js";
 import { Context, isSentinel, wrap } from "../internal/async/index.js";
 import { ErrEmptySessionID, ErrSessionNotFound } from "../transcript/errors.js";
 import { stripIDEContextTags } from "../transcript/stripTags.js";
-import { RoleUser, RoleAssistant, TurnStatePending, TurnStateComplete, TurnStateErrored, EventTurn, EventInputRequest, EventInputResolved, DispositionAnswer, DispositionDeny, HistorySourceTranscript, HistorySourceStore, ReasonAuthRequired, newID, } from "./types.js";
+import { RoleUser, RoleAssistant, TurnStatePending, TurnStateComplete, TurnStateErrored, EventTurn, EventInputRequest, EventInputResolved, DispositionAnswer, DispositionDeny, HistorySourceTranscript, HistorySourceStore, ReasonAuthRequired, ReasonUsageLimited, newID, } from "./types.js";
 import { ErrInvalidOptions, ErrUnknownHarness, ErrNoControl, ErrTurnInFlight, ErrClosed, ErrInputPending, ErrAuthRequired, ErrNoInputPending, ErrStaleInputRequest, ErrUnknownOption, ErrNotMultiSelect, ErrQuitUnsupported, ErrResumeUnsupported, ErrNoHarnessSession, } from "./errors.js";
 import { newControlQueue } from "./control.js";
-import { submitKeyForHarness, requiresPromptReadiness, readyForInput, authRequired, onboardingWall, } from "./ready.js";
+import { submitKeyForHarness, requiresPromptReadiness, readyForInput, authRequired, onboardingWall, usageLimitMessage, } from "./ready.js";
 import { cleanHarnessEnv } from "./env.js";
 import { AcquisitionModeOff, AcquisitionModeHooks } from "../turns/index.js";
 import { StreamTap, adapterStreamParser, } from "../acquisition/internal/streamTap.js";
@@ -770,9 +770,12 @@ export class Conversation {
                 turn.reason = ev.reason;
                 if (ev.snap) {
                     turn.text = this.assistantText(ev.snap);
-                    // A "completed" turn that yielded no real reply on a logged-out /
-                    // not-onboarded screen is not a success — relabel it ReasonAuthRequired.
-                    this.authRelabel(turn, ev.snap);
+                    // A "completed" turn whose reply is really a usage-limit wall, or that
+                    // yielded no real reply on a logged-out / not-onboarded screen, is not a
+                    // success — relabel it (usage-limit wins; its wall IS a non-empty reply,
+                    // so authRelabel's empty-extraction gate would skip it).
+                    if (!this.usageLimitRelabel(turn, ev.snap))
+                        this.authRelabel(turn, ev.snap);
                 }
                 break;
             case Blocked:
@@ -983,8 +986,10 @@ export class Conversation {
         // The claude-code false-success lands HERE: a logged-out turn ends on a
         // "✻ … for 0s" marker (marker === true) and would otherwise complete with the
         // raw banner screen as its reply. Relabel it ReasonAuthRequired when no real
-        // reply was extracted.
-        this.authRelabel(turn, snap);
+        // reply was extracted — or ReasonUsageLimited when the "reply" is a usage-limit
+        // wall (which, being a non-empty extraction, would slip past authRelabel).
+        if (!this.usageLimitRelabel(turn, snap))
+            this.authRelabel(turn, snap);
         try {
             await this.store.updateTurn(turn);
         }
@@ -1327,6 +1332,30 @@ export class Conversation {
             return false;
         turn.state = TurnStateErrored;
         turn.reason = ReasonAuthRequired;
+        turn.text = "";
+        return true;
+    }
+    // usageLimitRelabel converts a turn whose extracted "reply" is in fact the CLI's
+    // usage/session-limit WALL — "You've hit your session limit · resets 10:20pm …",
+    // which claude-code paints as an assistant bubble — into a ReasonUsageLimited
+    // failure with the wall line as the reason detail and the reply cleared. Without
+    // it the wall is persisted as a SUCCESS whose text is the wall, and a downstream
+    // validator (e.g. a plan reviewer) rejects it as a bad reply, retries, and trips
+    // the orchestrator's runaway guard so a TRANSIENT quota outage BLOCKS the ticket.
+    //
+    // Distinct from authRelabel, which is gated on an EMPTY extraction: the wall IS
+    // the (non-empty) extracted reply. Precise because the match is anchored to the
+    // CLI's exact wall phrasing, which a genuine model reply does not emit — so the
+    // extracted reply is probed first, with the whole screen as a fallback only when
+    // nothing was extracted. Returns true if it relabeled the turn.
+    usageLimitRelabel(turn, snap) {
+        const reply = this.cleanAssistantText(snap);
+        const probe = reply.trim() !== "" ? reply : snap.text;
+        const message = usageLimitMessage(this.opts.harness, probe);
+        if (message === null)
+            return false;
+        turn.state = TurnStateErrored;
+        turn.reason = `${ReasonUsageLimited} (${message})`;
         turn.text = "";
         return true;
     }
