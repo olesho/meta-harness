@@ -270,6 +270,7 @@ interface OpenRequestBody {
   effort?: string;
   model?: string;
   disable_codex_auto_dismiss?: boolean;
+  auto_skip_codex_update_notice?: boolean;
 }
 
 interface SendRequestBody {
@@ -566,6 +567,7 @@ export class Server {
         effort: body.effort,
         model: body.model,
         disableCodexAutoDismiss: body.disable_codex_auto_dismiss,
+        autoSkipCodexUpdateNotice: body.auto_skip_codex_update_notice,
       } as Options);
     } catch (err) {
       writeChatError(res, err);

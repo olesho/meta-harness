@@ -11,6 +11,15 @@ export declare const ErrTurnInFlight: Sentinel;
 export declare const ErrClosed: Sentinel;
 /** Returned by Send when the harness is blocked on an interactive prompt. */
 export declare const ErrInputPending: Sentinel;
+/**
+ * Thrown by waitReadyForSend when the harness cannot reach a ready prompt because
+ * it is sitting in a logged-out / not-onboarded screen (a sign-in wizard,
+ * login-method picker, or re-auth banner) that never clears on its own. send()
+ * catches it and records a terminal assistant turn carrying ReasonAuthRequired,
+ * so the onboarding case surfaces the same canonical signal as the completion-
+ * and error-path cases instead of hanging to the run deadline.
+ */
+export declare const ErrAuthRequired: Sentinel;
 /** Returned by Answer when no interactive prompt is currently pending. */
 export declare const ErrNoInputPending: Sentinel;
 /** Returned by Answer when the supplied request ID does not match the prompt. */

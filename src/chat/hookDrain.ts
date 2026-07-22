@@ -106,20 +106,9 @@ export interface HookDrainOptions {
   fallbackMs?: number;
 }
 
-// sleep is a cancelable timer, mirroring conversation.ts's helper so the drain
-// loop never leaks a pending setTimeout on the wake/close paths.
-function sleep(ms: number): { promise: Promise<void>; cancel: () => void } {
-  let timeout: ReturnType<typeof setTimeout>;
-  const promise = new Promise<void>((resolve) => {
-    timeout = setTimeout(resolve, ms);
-  });
-  return {
-    promise,
-    cancel: () => {
-      clearTimeout(timeout);
-    },
-  };
-}
+/** Coalescing window for fs.watch raises, so a Linux inotify burst on the spool
+ * dir wakes the drain loop once (macrotask-paced) instead of spinning it. */
+const WATCH_DEBOUNCE_MS = 5;
 
 /**
  * HookDrain runs the spool → canonical-Event integration for one Conversation.
@@ -137,6 +126,7 @@ export class HookDrain {
   /** eventIDs already routed to onEvents — dedup across successive drains. */
   private readonly emitted = new Set<string>();
   private watcher: fs.FSWatcher | null = null;
+  private watchDebounce: ReturnType<typeof setTimeout> | null = null;
   private started = false;
   private stopped = false;
 
@@ -270,8 +260,17 @@ export class HookDrain {
       // the coalesced wake Signal; the loop drains once per wake. On platforms
       // where fs.watch is unreliable this may miss events — the bounded fallback
       // timer is the backstop, so correctness never depends on the watch.
+      //
+      // Debounce the raise: on Linux, fs.watch can fire a burst (or continuously)
+      // for the drain's own spool-dir churn. Signalling per raw event would spin
+      // the drain loop on a microtask treadmill that starves the event loop. A
+      // short setTimeout coalesces a burst into one macrotask-paced wake.
       this.watcher = fs.watch(this._spoolDir, () => {
-        this.o.wake.signal();
+        if (this.watchDebounce) return;
+        this.watchDebounce = setTimeout(() => {
+          this.watchDebounce = null;
+          this.o.wake.signal();
+        }, WATCH_DEBOUNCE_MS);
       });
       this.watcher.on("error", () => {
         this.stopWatch();
@@ -283,6 +282,10 @@ export class HookDrain {
   }
 
   private stopWatch(): void {
+    if (this.watchDebounce) {
+      clearTimeout(this.watchDebounce);
+      this.watchDebounce = null;
+    }
     if (this.watcher) {
       try {
         this.watcher.close();
@@ -294,19 +297,20 @@ export class HookDrain {
   }
 
   private async loop(): Promise<void> {
+    // Wake the loop once when the Conversation closes so it re-checks
+    // isClosed() and exits promptly. The previous code did
+    // `this.o.closed.then(...)` inside a Promise.race EVERY iteration; race never
+    // releases its losing arms, so each iteration leaked a handler on the
+    // long-lived `closed` promise (and an abandoned wake/timer promise). When the
+    // wake fires rapidly — e.g. fs.watch churn on Linux — the loop spins and
+    // those pending promises accumulate until the worker runs out of heap.
+    void this.o.closed.then(() => {
+      this.o.wake.signal();
+    });
+
     for (;;) {
       if (this.stopped || this.o.isClosed()) return;
-      const timer = sleep(this.fallbackMs);
-      try {
-        const which = await Promise.race([
-          this.o.wake.receive().then(() => "wake" as const),
-          this.o.closed.then(() => "closed" as const),
-          timer.promise.then(() => "timer" as const),
-        ]);
-        if (which === "closed") return;
-      } finally {
-        timer.cancel();
-      }
+      await this.waitWake();
       if (this.stopped || this.o.isClosed()) return;
       try {
         this.drainOnce();
@@ -315,5 +319,25 @@ export class HookDrain {
         // the next wake/timer retries.
       }
     }
+  }
+
+  /**
+   * Wait for the next wake signal or the fallback timer. Every arm settles or is
+   * cleared exactly once, so nothing accumulates across iterations even when the
+   * wake fires continuously (fs.watch churn on Linux previously spun this loop
+   * and leaked pending promises until the worker OOM'd).
+   */
+  private waitWake(): Promise<void> {
+    return new Promise<void>((resolve) => {
+      let settled = false;
+      const finish = (): void => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        resolve();
+      };
+      const timer = setTimeout(finish, this.fallbackMs);
+      void this.o.wake.receive().then(finish, finish);
+    });
   }
 }

@@ -111,13 +111,30 @@ function handleControl(type, payload) {
   }
 }
 
-// If the parent closes our stdin, treat it as a teardown request.
+// If the parent closes our stdin, treat it as a teardown request. We must
+// guarantee our own exit: a harness that ignores SIGTERM would otherwise leave
+// node-pty holding the PTY open, keeping this bridge process alive forever —
+// leaking a process (and its memory) per session the wrapper ever opened.
+// Escalate SIGTERM -> SIGKILL, then force-exit unconditionally as a backstop.
 process.stdin.on("end", () => {
-  if (!exited) {
+  if (exited) return;
+  try {
+    proc.kill("SIGTERM");
+  } catch {
+    /* already gone */
+  }
+  // Escalate to SIGKILL if the harness hasn't died; onExit (which force-exits)
+  // normally fires well before either timer.
+  setTimeout(() => {
     try {
-      proc.kill("SIGTERM");
+      proc.kill("SIGKILL");
     } catch {
       /* already gone */
     }
-  }
+  }, 2000);
+  // Ultimate backstop: exit even if onExit never fires (wedged harness / stuck
+  // PTY fd). The parent has stopped reading us, so there is nothing to flush.
+  setTimeout(() => {
+    if (!exited) process.exit(0);
+  }, 3000);
 });

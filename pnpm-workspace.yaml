@@ -1,6 +1,6 @@
 allowBuilds:
-  node-pty: set this to true or false
-  protobufjs: set this to true or false
+  node-pty: true
+  protobufjs: true
 # pnpm 11 reads settings from here (no longer from the "pnpm" field in
 # package.json). By default pnpm treats any dependency whose install/build script
 # it skipped as a hard error (ERR_PNPM_IGNORED_BUILDS), which would fail every

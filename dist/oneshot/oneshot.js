@@ -118,6 +118,9 @@ export async function runOneShotDetailed(ctx, cfg) {
             markerGap: cfg.markerGap,
             store: newMemStore(),
             inputPolicy: AutoAcceptTrust,
+            // Unattended one-shot: no client to answer Codex's update menu, so
+            // auto-Skip it rather than wedge the run on the pending prompt.
+            autoSkipCodexUpdateNotice: true,
             // Inherit acquisition from THIS single chat seam — the StreamTap attaches
             // once inside Open/Watch. oneshot forwards the opt-in and NEVER attaches
             // its own tap (that would double-write the session record).
