@@ -14,7 +14,7 @@
 1. enter the injection guard in `argsWithHarnessPermissionMode` (`pkg/wrapper/wrapper.go:598`;
    claude guard at `:612`, codex guard at `:624`);
 2. enter the matching arm of `EffectiveLaunchRung` (`:775`; claude arm `:777-785`, codex arm
-   `:786-797`) — resolving to a **rung** when argv *proves* one, and to `""` when it does not;
+   `:786-797`) — resolving to a **rung** when argv _proves_ one, and to `""` when it does not;
 3. get rows in the argv conformance corpus (Ticket 4).
 
 Skipping (2) converts a guard into a **fail-open on `StructuredTurnResult.permission_mode`**:
@@ -40,11 +40,11 @@ both sides.
 
 ## The three rows
 
-| # | Divergence | Go today | Fix |
-|---|---|---|---|
-| a | codex `-p` / `--profile` | absent from the codex guard — `grep -n profile pkg/wrapper/*.go` returns nothing | guard (`wrapper.go:624`) **+** replay rule → `""` **+** corpus rows including `-pwide` and `--profile=wide` |
-| b | codex `-c sandbox_mode=` / `-c approval_policy=` | absent from the codex guard **and** from the replay | guard via `argsContainConfigKey` (`:936`) **+** replay rules (`sandbox_mode` == `danger-full-access` → `bypass` through a new `configKeyValue` helper; otherwise `""`) **+** corpus rows |
-| c | claude `--allow-dangerously-skip-permissions` | absent from the claude guard (`:612`), from `BypassEnablingFlags` (`:739`), **and** from `EffectiveLaunchRung`'s claude arm (`:777-785`) | all three sites |
+| #   | Divergence                                       | Go today                                                                                                                                 | Fix                                                                                                                                                                                      |
+| --- | ------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| a   | codex `-p` / `--profile`                         | absent from the codex guard — `grep -n profile pkg/wrapper/*.go` returns nothing                                                         | guard (`wrapper.go:624`) **+** replay rule → `""` **+** corpus rows including `-pwide` and `--profile=wide`                                                                              |
+| b   | codex `-c sandbox_mode=` / `-c approval_policy=` | absent from the codex guard **and** from the replay                                                                                      | guard via `argsContainConfigKey` (`:936`) **+** replay rules (`sandbox_mode` == `danger-full-access` → `bypass` through a new `configKeyValue` helper; otherwise `""`) **+** corpus rows |
+| c   | claude `--allow-dangerously-skip-permissions`    | absent from the claude guard (`:612`), from `BypassEnablingFlags` (`:739`), **and** from `EffectiveLaunchRung`'s claude arm (`:777-785`) | all three sites                                                                                                                                                                          |
 
 ## The new helper: `configKeyValue(args []string, key string) (string, bool)`
 
@@ -63,7 +63,7 @@ Requirements:
   emitted form is `key="value"` (`prependArgs(args, "-c", "model_reasoning_effort=\""+…+"\"")` at
   `wrapper.go:443`, and `"model=\""+model+"\""` at `:473`), so an un-stripped read of
   `sandbox_mode="danger-full-access"` compares against the literal
-  `"danger-full-access"` *with quotes* and never matches the sandbox constant
+  `"danger-full-access"` _with quotes_ and never matches the sandbox constant
   (`codexSandboxDangerFullAccess`, declared near `:538`). Strip exactly one matched pair —
   `"a"b"` is not a shell, do not try to be one.
 - Return `("", false)` when the key is absent; `("", true)` when present but unreadable (trailing
@@ -92,7 +92,7 @@ Today, `Args: ["--allow-dangerously-skip-permissions"]` + `PermissionMode: "plan
   per-harness slices.
 - `TestBypassEnablingFlagsNeverIncludesNonexistentFlag` (`:81-90`) asserts the returned flags are
   only `SkipPermissionsFlag` / `codexBypassFlag`, with the comment at `:82`:
-  *"--allow-dangerously-skip-permissions does not exist in this repo."*
+  _"--allow-dangerously-skip-permissions does not exist in this repo."_
 
 Adding the flag to the **injection guard** alone trips neither. Adding it to
 **`BypassEnablingFlags`** trips both. **That comment is factually wrong at claude 2.1.217 and must
@@ -110,8 +110,8 @@ fails on the new rows.
 
 ### Blast radius, stated honestly
 
-`BypassEnablingFlags` has **no non-test callers** today — its doc comment's *"pkg/chat's
-ring-length calculation"* (`:733-734`) is aspirational, not current. So the only production
+`BypassEnablingFlags` has **no non-test callers** today — its doc comment's _"pkg/chat's
+ring-length calculation"_ (`:733-734`) is aspirational, not current. So the only production
 consequence of row (c) is that `--allow-dangerously-skip-permissions` paired with a non-bypass
 rung becomes a hard `ErrInvalidConfig`. That is the intended fail-closed direction, but it **is a
 new rejection** for argv that is accepted today. Call it out in the commit message.
@@ -140,7 +140,7 @@ for every `--print` invocation — the single most common claude shape in this r
 codex arms of the guard, of `suppressionFlagsFor`, and of `EffectiveLaunchRung` must be edited
 independently. Ticket 4 freezes a dedicated counter-row for exactly this.
 
-## Why `-p` is *suppressed* while a bypass flag is *rejected*
+## Why `-p` is _suppressed_ while a bypass flag is _rejected_
 
 Put this paragraph in `EffectiveLaunchRung`'s doc comment (`wrapper.go:750-774`):
 
@@ -155,13 +155,13 @@ answer is `""` (UNKNOWN, never "default" — see the existing `:762-767`).
 **Evidence** — `codex debug prompt-input` with `CODEX_HOME` holding `wide.config.toml`
 (`sandbox_mode = "danger-full-access"`, `approval_policy = "never"`), codex-cli **0.144.5**:
 
-| argv | resolved sandbox | resolved approval |
-|---|---|---|
-| `-p wide` | `danger-full-access` | `never` |
-| `-s read-only -p wide` | `read-only` | `never` |
-| `-p wide -s read-only` | `read-only` | `never` |
-| `-c sandbox_mode="read-only" -p wide` (either order) | `read-only` | `never` |
-| `-s read-only -a untrusted -p wide` | `read-only` | not `never` |
+| argv                                                 | resolved sandbox     | resolved approval |
+| ---------------------------------------------------- | -------------------- | ----------------- |
+| `-p wide`                                            | `danger-full-access` | `never`           |
+| `-s read-only -p wide`                               | `read-only`          | `never`           |
+| `-p wide -s read-only`                               | `read-only`          | `never`           |
+| `-c sandbox_mode="read-only" -p wide` (either order) | `read-only`          | `never`           |
+| `-s read-only -a untrusted -p wide`                  | `read-only`          | not `never`       |
 
 **A flag or `-c` override beats the profile on the axis it sets, in either order — but the profile
 still supplies every axis you leave unset.**

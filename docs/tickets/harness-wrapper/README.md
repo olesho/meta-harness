@@ -17,18 +17,18 @@ The first `# ` heading of each file is the ticket title; everything below it is 
 Ship them in numeric order so the dependency notes (Ticket 4 blocks on 1–3) reference tickets that
 already exist.
 
-| File | Ticket | Lands with |
-|---|---|---|
-| `01-guard-set-reconciliation.md` | Guard sets: codex `-p`/`--profile`, codex `-c sandbox_mode=`/`approval_policy=`, claude `--allow-dangerously-skip-permissions` | one commit with 02 + 03 |
-| `02-mapping-reconciliation.md` | codex `manual` → `-s workspace-write -a untrusted`; codex accepts `plan`; two-axis replay + single-axis ceiling | one commit with 01 + 03 |
-| `03-wire-contract-text.md` | `turnproto.PermissionMode` doc caveats + crossrepo mirror | rides in 02's commit |
-| `04-exported-api-and-argv-corpus.md` | Export `PermissionArgs` / `ValidatePermissionMode`, `test/conformance/permissions/argv.json`, `CONFORMANCE=1` live gate | **blocked on 01–03** |
-| `05-crossrepo-note.md` | Fourth `crossrepo/meta-harness/` note + HW-77/HW-101 attribution fix | independent |
+| File                                 | Ticket                                                                                                                         | Lands with              |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------ | ----------------------- |
+| `01-guard-set-reconciliation.md`     | Guard sets: codex `-p`/`--profile`, codex `-c sandbox_mode=`/`approval_policy=`, claude `--allow-dangerously-skip-permissions` | one commit with 02 + 03 |
+| `02-mapping-reconciliation.md`       | codex `manual` → `-s workspace-write -a untrusted`; codex accepts `plan`; two-axis replay + single-axis ceiling                | one commit with 01 + 03 |
+| `03-wire-contract-text.md`           | `turnproto.PermissionMode` doc caveats + crossrepo mirror                                                                      | rides in 02's commit    |
+| `04-exported-api-and-argv-corpus.md` | Export `PermissionArgs` / `ValidatePermissionMode`, `test/conformance/permissions/argv.json`, `CONFORMANCE=1` live gate        | **blocked on 01–03**    |
+| `05-crossrepo-note.md`               | Fourth `crossrepo/meta-harness/` note + HW-77/HW-101 attribution fix                                                           | independent             |
 
 ## The rule every ticket restates up front
 
 **A guard entry is a three-site change.** Anything that suppresses injection must (i) enter the
-injection guard, (ii) enter `EffectiveLaunchRung`'s arm — a rung when argv *proves* one, `""` when
+injection guard, (ii) enter `EffectiveLaunchRung`'s arm — a rung when argv _proves_ one, `""` when
 it does not — and (iii) get corpus rows. Skipping (ii) converts a guard into a fail-open on
 `StructuredTurnResult.permission_mode`.
 
@@ -55,7 +55,7 @@ Everything else matched exactly: `wrapper.go:359`, `:367-372`, `:598`, `:612`, `
 `src/turns/harness/codex.ts:271`.
 
 **One reconstruction to reconcile before shipping Ticket 2.** META-HARNESS-132 step 2d's
-*seven-step ordered resolution rule* and *single-axis ceiling table* were to be copied verbatim.
+_seven-step ordered resolution rule_ and _single-axis ceiling table_ were to be copied verbatim.
 META-HARNESS-145 runs without `orche` access, so both were **reconstructed** in
 `02-mapping-reconciliation.md` from the evidence carried in this subtask's own description — the
 `codex debug prompt-input` probe table, the enumerated moving and non-moving frozen rows, and the

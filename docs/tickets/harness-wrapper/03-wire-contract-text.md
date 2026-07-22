@@ -15,8 +15,8 @@ consume side models this field off that block. Tickets 1 and 2 change two of its
 the block changes in the same commit.
 
 The block's existing structure is a bullet list of caveats, including the two that these edits
-attach to: *"Presence of `bypass` is trustworthy for turns that reached the harness"* and
-*"ABSENT NEVER MEANS SAFE"*.
+attach to: _"Presence of `bypass` is trustworthy for turns that reached the harness"_ and
+_"ABSENT NEVER MEANS SAFE"_.
 
 ## Caveat (i) — the reported rung may differ from the requested rung
 
@@ -26,21 +26,21 @@ Add, as its own bullet:
 > as `plan` launches `-s read-only -a untrusted` and is reported as `manual`.
 
 This is a **new class of divergence** for this field. The block already documents a divergence
-between *this* field and `cmd/harness-chatd`'s `conversationSummary.permission_mode` (the
+between _this_ field and `cmd/harness-chatd`'s `conversationSummary.permission_mode` (the
 `DIVERGENCE` paragraph at `:145-152`: requested-verbatim vs effective-canonical). Caveat (i) is
-different and must not be folded into it: here the *same* field, on the *same* turn, reports a rung
+different and must not be folded into it: here the _same_ field, on the _same_ turn, reports a rung
 the caller did not ask for. A consumer that round-trips request → result and asserts equality is
 correct today and wrong after Ticket 2.
 
-## Caveat (ii) — scope the bypass-trustworthiness bullet to postures argv *proves*
+## Caveat (ii) — scope the bypass-trustworthiness bullet to postures argv _proves_
 
 The existing bullet reads:
 
-> *"Presence of `bypass` is trustworthy for turns that reached the harness: every unrestricted
+> _"Presence of `bypass` is trustworthy for turns that reached the harness: every unrestricted
 > launch path reports it, including the ones carrying no canonical `--permission-mode` at all
 > (`--sandbox-defaults`' injected `--dangerously-skip-permissions`, a raw
 > `--dangerously-skip-permissions` after `--`, codex's `-s danger-full-access` in every
-> spelling)."*
+> spelling)."_
 
 Scope it: the guarantee is over postures argv **proves**. A caller-supplied `-p` / `--profile`
 yields `""`, **not** `bypass`, even when the referenced profile is entirely unrestricted — because
@@ -75,7 +75,7 @@ field (`:8`) states: at 120 cols with a long cwd, codex truncates the left half 
 with `…` and leaves a **single space** before `Plan mode`. `collaborationPlanRE`
 (`pkg/turns/harness/codex/permmode.go:59`, used at `:94`) requires the marker to be preceded by
 start-of-row or two-or-more horizontal spaces, so it does not match and the adapter reports
-**`"default"`** — *a wrong axis value, not an unreadable screen*. The 200-col capture of the same
+**`"default"`** — _a wrong axis value, not an unreadable screen_. The 200-col capture of the same
 session parses correctly, which pins the gutter rule as the cause (see also
 `test/corpus/permission-mode/README.md:182`).
 
@@ -85,7 +85,7 @@ width real sessions run at**. Say this plainly in the ticket and in 2c's doc com
 **Widening the gutter rule belongs to the parser ticket** (META-HARNESS-102 / the
 HARNESS-WRAPPER-106 follow-up). **Name it as a dependency; do not fold it in.** Folding a regex
 widening into a permission-argv commit mixes a screen-parsing change with a launch-argv change and
-makes both harder to bisect. The `pending_parser` field is dropped by *that* ticket, not this one.
+makes both harder to bisect. The `pending_parser` field is dropped by _that_ ticket, not this one.
 
 ## Acceptance
 

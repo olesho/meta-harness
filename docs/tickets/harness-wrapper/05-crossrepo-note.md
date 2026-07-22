@@ -22,8 +22,8 @@ the other three. Add the back-link near the top of each, where HW-101 already ca
 
 ### 1. The parity bar, distinguished from HW-78
 
-HW-78 sets a **weaker** bar and says so: its `--sandbox-defaults` argv parity is *"up to position,
-not byte-equality"* (`HARNESS-WRAPPER-78-sandbox-defaults-argv.md:64`), and its host-set
+HW-78 sets a **weaker** bar and says so: its `--sandbox-defaults` argv parity is _"up to position,
+not byte-equality"_ (`HARNESS-WRAPPER-78-sandbox-defaults-argv.md:64`), and its host-set
 `IS_SANDBOX` divergence (`:57-64`) **stays open and is out of scope here**.
 
 Permission-mode argv is **exact token-sequence equality**. Both languages inject through
@@ -61,7 +61,7 @@ Therefore **`scripts/sync-versions.sh --check` is EXPECTED RED on a dev machine 
 Write this in the note in exactly those terms, because the failure mode is somebody "fixing" it by
 reverting the Go pins — which would silently un-verify Ticket 4's live gate and Ticket 1(c)'s
 `claude --help` evidence. This mirrors the treatment HW-77 (`:73`) and HW-101 (`:107`) already give
-`scripts/check-conformance-corpus.sh`: *"That failure is the expected state"*, not a bug.
+`scripts/check-conformance-corpus.sh`: _"That failure is the expected state"_, not a bug.
 
 ### 5. The codex-`plan` → `manual` caveat
 
@@ -75,9 +75,9 @@ A codex turn requested as `plan` launches `-s read-only -a untrusted` and is **r
 
 Both notes attribute the conformance **vendoring/pull script** to META-HARNESS-101:
 
-- `HARNESS-WRAPPER-77-permission-mode.md:68-70` — *"`scripts/check-conformance-corpus.sh:5-14` in
+- `HARNESS-WRAPPER-77-permission-mode.md:68-70` — _"`scripts/check-conformance-corpus.sh:5-14` in
   this repo is deliberately check-only and never writes into the sibling; the pull/vendoring script
-  is META-HARNESS-101's deliverable."*
+  is META-HARNESS-101's deliverable."_
 - `HARNESS-WRAPPER-101-structured-result-permission-mode.md:103-104` — same sentence.
 
 **That attribution is wrong.** META-HARNESS-101 is **request-side only** and its description does
@@ -85,8 +85,8 @@ not contain the vendoring script. Point both notes at **META-HARNESS-132** inste
 
 The specific sentence to re-attribute is **HW-101's Acceptance item 3** (`:117`):
 
-> *"Re-vendor `test/conformance/` in meta-harness, then `scripts/check-conformance-corpus.sh` goes
-> green."*
+> _"Re-vendor `test/conformance/` in meta-harness, then `scripts/check-conformance-corpus.sh` goes
+> green."_
 
 Correct the same claim in HW-77's Acceptance (`:79-80`). This is a one-line edit in each file — do
 not restructure either note.
@@ -99,7 +99,7 @@ not restructure either note.
 - [ ] HW-77 (`:68-70`, `:79-80`) and HW-101 (`:103-104`, `:117`) re-attribute the vendoring script
       from META-HARNESS-101 to META-HARNESS-132.
 - [ ] The note states the parity bar as **exact token-sequence equality** and explicitly contrasts
-      it with HW-78's *"up to position"* bar, leaving HW-78's `IS_SANDBOX` divergence out of scope.
+      it with HW-78's _"up to position"_ bar, leaving HW-78's `IS_SANDBOX` divergence out of scope.
 - [ ] The note states that `scripts/sync-versions.sh --check` is expected red until
       META-HARNESS-102 bumps the meta-harness pins, and that reverting the Go pins is **not** the
       fix.

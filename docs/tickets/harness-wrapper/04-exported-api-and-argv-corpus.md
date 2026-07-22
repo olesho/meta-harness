@@ -13,7 +13,7 @@
 
 **A guard entry is a three-site change:** (i) the injection guard in
 `argsWithHarnessPermissionMode` (`pkg/wrapper/wrapper.go:598`), (ii) the matching arm of
-`EffectiveLaunchRung` (`:775`) — a rung when argv *proves* one, `""` when it does not — and
+`EffectiveLaunchRung` (`:775`) — a rung when argv _proves_ one, `""` when it does not — and
 (iii) **corpus rows**. This ticket is site (iii), and it is where the first two get audited: a row
 whose `effective_rung` disagrees with its `argv` is a visible, reviewable diff.
 
@@ -63,7 +63,7 @@ With the exported API, the generator lives in `./test/conformance/` and **no Mak
 needed**: `regen-conformance` (`Makefile:155-163`) already runs
 `UPDATE_GOLDEN=1 go test ./test/conformance/` as its second ordered step.
 
-*Alternative, if growing the Go API turns out to be unwanted:* put the generator in `pkg/wrapper`
+_Alternative, if growing the Go API turns out to be unwanted:_ put the generator in `pkg/wrapper`
 and add a **third `UPDATE_GOLDEN` line BEFORE the manifest-writing line** in `regen-conformance`
 (the `./test/conformance/` line at `Makefile:162`) — and then **delete the "no Makefile change"
 claim from the commit message.** Say which path you took in the commit.
@@ -71,7 +71,7 @@ claim from the commit message.** Say which path you took in the commit.
 ### Declaration order is a real hazard — read before creating any file
 
 `TestConformance_Manifest` (`test/conformance/conformance_test.go:284`) is documented at `:283`:
-*"Declared LAST so under UPDATE_GOLDEN it hashes freshly-emitted bytes."*
+_"Declared LAST so under UPDATE_GOLDEN it hashes freshly-emitted bytes."_
 
 Go runs tests in **file-then-declaration order, with files sorted by name.** A new
 `test/conformance/permissions_test.go` sorts **after** `conformance_test.go`, therefore runs
@@ -182,8 +182,8 @@ while meta-harness's are not; a gate added there would fail on `test/conformance
 version-drift half for an unrelated reason, and the resulting red would train people to ignore it.
 
 **Record the version floor in the test**, following the existing convention in
-`src/turns/harness/codex.ts:271` (meta-harness): *"VERIFIED against codex-cli 0.142.5
-(2026-07-03)"*. Here that becomes codex-cli **0.144.5** and claude **2.1.217**.
+`src/turns/harness/codex.ts:271` (meta-harness): _"VERIFIED against codex-cli 0.142.5
+(2026-07-03)"_. Here that becomes codex-cli **0.144.5** and claude **2.1.217**.
 
 This closes META-HARNESS-99's open item asking for `plan` / `manual` / `auto` to be confirmed
 against a real codex before the table is frozen.
@@ -201,6 +201,6 @@ against a real codex before the table is frozen.
 - [ ] Every row class in "Rows to cover" is present, including the claude `-p` counter-row and the
       `PermissionRungs()` slice row.
 - [ ] Corpus README documents: `caller_args` are opaque literal tokens; `error_substring` asserts
-      *which* rejection fired and full error-text parity is not claimed.
+      _which_ rejection fired and full error-text parity is not claimed.
 - [ ] `CONFORMANCE=1` live gate exists on the Go side, asserts both `claude --help` flags and the
       `codex doctor --json` axes, and records the 0.144.5 / 2.1.217 floor.
