@@ -146,7 +146,9 @@ for (const subdir of ["gateway", "turnresult"]) {
         expect(spec.length, `${dto}: no fields`).toBeGreaterThan(0);
         for (const f of spec) {
           expect(typeof f.name, `${dto}.${f.name}`).toBe("string");
-          expect(typeof f.json_tag, `${dto}.${f.name}: json_tag`).toBe("string");
+          expect(typeof f.json_tag, `${dto}.${f.name}: json_tag`).toBe(
+            "string",
+          );
           expect(typeof f.optional, `${dto}.${f.name}: optional`).toBe(
             "boolean",
           );
@@ -162,12 +164,12 @@ for (const subdir of ["gateway", "turnresult"]) {
     for (const inst of instances) {
       test(`${inst.name} conforms to fields.json[${inst.dto}]`, () => {
         const spec = fields[inst.dto];
-        expect(spec, `${inst.name}: no fields.json entry for ${inst.dto}`)
-          .toBeDefined();
+        expect(
+          spec,
+          `${inst.name}: no fields.json entry for ${inst.dto}`,
+        ).toBeDefined();
         const tags = new Set(spec.map((f) => f.json_tag));
-        const required = spec
-          .filter((f) => !f.optional)
-          .map((f) => f.json_tag);
+        const required = spec.filter((f) => !f.optional).map((f) => f.json_tag);
         const got = Object.keys(inst.value);
         expect(
           got.filter((k) => !tags.has(k)),
@@ -235,10 +237,9 @@ describe("conformance corpus — CLI exit-code + deadline pins", () => {
   });
 
   test("cli/emit_pairing.json agrees with the exit-code table", () => {
-    const pairing = readJSON(join(CORPUS, "cli", "emit_pairing.json")) as Record<
-      string,
-      { exit_code: number; stderr_anchor: string }
-    >;
+    const pairing = readJSON(
+      join(CORPUS, "cli", "emit_pairing.json"),
+    ) as Record<string, { exit_code: number; stderr_anchor: string }>;
     expect(Object.keys(pairing).length).toBeGreaterThan(0);
     const known = new Set([
       codes.ExitOK,
@@ -259,10 +260,9 @@ describe("conformance corpus — CLI exit-code + deadline pins", () => {
   });
 
   test("every emit_pairing status has a StructuredTurnResult golden", () => {
-    const pairing = readJSON(join(CORPUS, "cli", "emit_pairing.json")) as Record<
-      string,
-      unknown
-    >;
+    const pairing = readJSON(
+      join(CORPUS, "cli", "emit_pairing.json"),
+    ) as Record<string, unknown>;
     const statuses = new Set(
       walkFiles(join(CORPUS, "turnresult"))
         .filter((f) => basename(f).startsWith("StructuredTurnResult."))
