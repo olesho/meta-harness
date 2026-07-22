@@ -13,11 +13,11 @@ that decision so the ticket is not re-opened as pending work.
 
 Both were ported under META-HARNESS-7 (commit `aa9666d`) and are consumed today:
 
-- **`parseFromBytes`** — `src/transcript/parse.ts:23` (header: *"Ported from harness-wrapper's
-  parse.go"*). Consumers: `src/transcript/claudecode/parseClaude.ts` (`events`) and
+- **`parseFromBytes`** — `src/transcript/parse.ts:23` (header: _"Ported from harness-wrapper's
+  parse.go"_). Consumers: `src/transcript/claudecode/parseClaude.ts` (`events`) and
   `src/transcript/usage.ts` (`usageFromClaudeJSONL`).
-- **`stripIDEContextTags`** — `src/transcript/stripTags.ts:17` (header: *"Ported from
-  harness-wrapper's strip_tags.go"*). Consumers: `parseClaude.ts:76,97`,
+- **`stripIDEContextTags`** — `src/transcript/stripTags.ts:17` (header: _"Ported from
+  harness-wrapper's strip_tags.go"_). Consumers: `parseClaude.ts:76,97`,
   `src/transcript/codex/parseCodex.ts:118`, and the production swallowed-prompt detector
   `tryTranscriptProof` in `src/chat/conversation.ts:1619,1624`.
 
@@ -40,12 +40,12 @@ Critically, **both sites already route their tag-stripping through the shared
 them is genuinely format-specific structural traversal (Claude walks `message.content` as a
 string-or-`text`-block array; Codex iterates `item.content` blocks). A shared helper could
 collapse only the trailing `strip-and-drop-empty` step — close to a no-op — so the inline logic
-is left as-is. Extract a helper only if a *named* consumer specifically wants a standalone symbol.
+is left as-is. Extract a helper only if a _named_ consumer specifically wants a standalone symbol.
 
 ### 3. Offset-read primitives are intentionally absent
 
 The Go `ParseFromFileAtLine` / `SliceFromLine` (line/byte-offset file reads) have **no** TS
-equivalent by design. The TS side tracks a *turn-count watermark*
+equivalent by design. The TS side tracks a _turn-count watermark_
 (`captureTranscriptWatermark`, `src/chat/conversation.ts:1532`) and re-reads the whole transcript
 via the adapter's `readTranscriptTurns` (`conversation.ts:1513`), slicing by array index;
 `usage.ts` and the readers consume whole-file `parseFromBytes`. Nothing needs an
@@ -56,8 +56,8 @@ along with the specific function it needs.
 ## Why no "byte-identical vs Go" acceptance criterion
 
 There are **zero `.go` files in this repo** and the Go `harness-wrapper` is frozen —
-`docs/design/pluggable-environments.md:24` declares it *"frozen as-is and never grows environment
-code"* with TypeScript as the consolidation target. A cross-repo "byte-identical output vs Go on a
+`docs/design/pluggable-environments.md:24` declares it _"frozen as-is and never grows environment
+code"_ with TypeScript as the consolidation target. A cross-repo "byte-identical output vs Go on a
 shared fixture set" gate is therefore untestable in-repo and architecturally backwards for
 TS-owned code. Correctness of these utilities is asserted against self-contained TS fixtures.
 
