@@ -94,7 +94,7 @@ turns/index.ts
   Watch: function
   Watcher: class{close,events,observation,pumpDone,send}
   claudecode: object{ClaudeCodeAdapter,DetectInput,DetectQuestion,New}
-  codex: object{AutoDismissKeys,CODEX_STATUS_MIN_COLS,CodexAdapter,DetectInput,KindApproval,KindModelMigration,KindNotice,KindUpdateNotice,New,PromptReady}
+  codex: object{AutoDismissKeys,CODEX_STATUS_MIN_COLS,CodexAdapter,DetectInput,KindApproval,KindModelMigration,KindNotice,KindPermissions,KindUpdateNotice,New,PromptReady}
   describeAcquisitionMode: function
   generic: object{GenericAdapter,New}
   opencode: object{New,OpenCodeAdapter}
