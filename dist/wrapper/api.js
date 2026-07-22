@@ -10,6 +10,7 @@ export { StatusIdle, StatusFailed, StatusBlockedByCost, StatusRetryLater, Status
 export { ErrInvalidConfig, ErrBinaryNotFound, isBinaryNotFound, validateConfig, } from "./internal/config.js";
 export { argsWithHarnessEffort, harnessSupportsEffort, isSupportedEffort, } from "./internal/effort.js";
 export { argsWithHarnessModel } from "./internal/model.js";
+export { effectiveLaunchRung, morePermissive, permissionRungs, } from "./internal/permissionrungs.js";
 // PTY supervision surface.
 export { start, run } from "./internal/run.js";
 export { Session, ClassifierFunc, classifyExit, EventChannel, } from "./internal/session.js";
