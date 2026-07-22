@@ -1,155 +1,277 @@
 # meta-harness
 
-TypeScript project for autonomous plan → ship → release → redeploy.
+A TypeScript toolkit for running CLI agent harnesses (Claude Code, Codex, OpenCode, pi, …)
+under supervision and exposing them as programmable chat sessions.
+Each of these tools ships as an interactive CLI with its own TUI, its own output format,
+its own session-log layout, and its own idea of "the turn is done" — meta-harness hides
+those differences behind one small, stable API. The package layers in five steps:
 
-## Documentation
+1. **`meta-harness/screen`** — a headless VT100 emulator ([`@xterm/headless`](https://www.npmjs.com/package/@xterm/headless))
+   that turns the harness's raw PTY byte stream into queryable `Snapshot` state.
+2. **`meta-harness/wrapper`** — supervises a harness process under a PTY, streams its
+   output, and classifies the run into a small vocabulary of normalized states
+   (`idle`, `failed`, `interrupted`, `waiting_for_input`, `blocked_by_cost`,
+   `retry_later`, …).
+3. **`meta-harness/turns`** — per-harness adapters that translate screen state +
+   wrapper status into a small set of chat events (`TurnComplete`, `ToolCall`,
+   `Blocked`, `Errored`).
+4. **`meta-harness/transcript`** — read-only parsers for each harness's own on-disk
+   session logs, normalized into one canonical event stream.
+5. **`meta-harness/chat`** — the `Conversation` API: `Open`, `acquireControl`, `send`,
+   `events`, `history`. Storage is pluggable via the `Store` interface;
+   `newMemStore()` ships the in-memory default.
 
-Docs live in [`docs/`](docs/README.md), split by format:
+Two entry points sit on top: [`meta-harness/oneshot`](docs/md/modules/oneshot.md)
+(_prompt in → clean reply out_, one turn, then teardown) and the
+[`meta-harness-run` CLI](docs/md/modules/cli.md) (the same loop across a process
+boundary). Transport layers stay out of the core: this repo ships one gateway,
+`meta-harness-chatd` (HTTP + SSE) — see [Use over HTTP](#use-over-http).
 
-- **Markdown** ([`docs/md/`](docs/md/README.md)) — the written docs: the
-  [architecture overview](docs/md/architecture.md), the [getting-started guide](docs/md/getting-started.md),
-  the [module reference](docs/md/modules/README.md), and the [task guides](docs/md/guides/README.md).
-- **HTML** ([`docs/html/`](docs/html/index.html)) — a single-page visual overview with SVG
-  architecture and turn-flow diagrams.
-- **Environments** ([`docs/env/`](docs/env/README.md)) — the canonical doc for the
-  pluggable-environments layer (`./env`, `./env-openshell`, `./env-daytona`).
-- **Design specs** ([`docs/design/`](docs/design/pluggable-environments.md)) — e.g. the
-  pluggable-environments design.
+```
+                ┌──────────────────────────────┐
+   entry points │ cli (run) · oneshot          │
+                └──────────────┬───────────────┘
+                               │
+                ┌──────────────▼───────────────┐
+   the core     │ chat (Conversation API)      │
+                └──────────────┬───────────────┘
+                               │
+            ┌──────────────────┴──────────────────┐
+            │                                     │
+   ┌────────▼──────────┐               ┌──────────▼──────────┐
+   │ turns             │               │ transcript          │
+   │  +harness/codex   │               │  +codex             │
+   │  +harness/cc      │               │  +claudecode        │
+   │  +harness/opencode│               │  +pi                │
+   │  +harness/pi      │               │ (read-only JSONL)   │
+   │  +generic         │               └─────────────────────┘
+   └────────┬──────────┘
+            │
+   ┌────────▼──────────┐
+   │ screen            │  headless VT100 → Snapshot
+   └────────┬──────────┘
+            │
+   ┌────────▼──────────┐
+   │ wrapper           │  PTY supervisor + status classifier
+   └───────────────────┘
 
-## Develop
-
-```bash
-npm install
-npm test        # the release gate
+   sideband: env / env-openshell / env-daytona (sandboxed turns)
+             discovery · versions (harness ops)   async (Context, …)
 ```
 
-## Session resume
+> 📖 **Full documentation** lives under [`docs/md/`](docs/md/README.md) (canonical
+> markdown, renders on GitHub), with a single-page visual overview at
+> [`docs/html/index.html`](docs/html/index.html) and the pluggable-environments doc
+> under [`docs/env/`](docs/env/README.md).
+>
+> Start at the [Getting started](docs/md/getting-started.md) guide, the
+> [Architecture](docs/md/architecture.md) overview, or the
+> [Concepts](docs/md/concepts.md) vocabulary.
 
-A conversation can be relaunched against a harness that supports resuming a prior
-session (currently `claude-code` and `codex`). Two entry points, both in
-`src/chat`:
+## Install
 
-- `Open(ctx, { ..., resume })` — low level. `resume` names the _harness_ session
-  id (not the chat session id). The resolved adapter's resume args are prepended
-  to `args` at launch and the new chat session's `harnessSessionID` is seeded.
-  Throws `ErrResumeUnsupported` when the harness has no resume sequence.
-- `Reopen(ctx, opts)` — convenience. Loads a stored chat `Session` by
-  `opts.sessionID`, derives `harness`/`workingDir` from the record and the resume
-  id from its `harnessSessionID`, and relaunches reusing the **same** chat session
-  id so `sessionID()` and history reflect the resumed session.
+Not published to npm — consumers pin a commit of this repo:
 
-The stored `Session` persists only `harness`, `workingDir`, and
-`harnessSessionID`. All other launch knobs (`binaryPath`, `env`, `args`, `effort`,
-`model`, `cols`/`rows`, input policy, …) must still be supplied by the caller via
-`ReopenOptions`. `Reopen` throws `ErrNoHarnessSession` when the stored session
-never captured a harness session id, and surfaces `ErrResumeUnsupported` when its
-harness cannot resume.
+```sh
+npm install github:olesho/meta-harness#<commit-sha>
+```
 
-## Clarifying questions (harness asks the user something)
-
-When Claude Code stops mid-turn to ask a clarifying question (its
-`AskUserQuestion` dialog), the turn does not complete — the question surfaces
-as an `EventInputRequest` of kind `question` (then `question_review` for the
-Submit/Cancel confirmation of multi-question / multi-select dialogs), and the
-turn resumes once it is answered:
+`dist/` is committed, so a git install needs no build step. Node ≥ 18 (the docs target
+≥ 20); the one native dep is `node-pty` for the PTY bridge. Every layer is a separate
+subpath export — import only what you need:
 
 ```ts
-for await (const ev of conv.events()) {
-  if (ev.type === EventInputRequest && ev.input?.kind === "question") {
-    // ev.input.prompt = "Which color should I use?", ev.input.options = Red/Blue/…
-    const release = await conv.acquireControl(ctx);
-    try {
-      await conv.answer(ctx, ev.input.id, { optionID: "Blue" });
-    } finally {
-      release();
-    }
-  }
-  if (ev.type === EventTurn && ev.turn?.state === TurnStateComplete) break;
-}
+import { Open } from "meta-harness/chat";
+import { runOneShot } from "meta-harness/oneshot";
+import { ClaudeCodeReader } from "meta-harness/transcript";
 ```
 
-`Conversation.pendingInput()` is the polling counterpart (the pending question,
-or null). Free-text answers are a two-step: answer the `"other"`-aliased option
-(the dialog closes and the turn completes as "declined"), then `send` the text
-as the next message. Recipes:
-[Guides › Handling input](docs/md/guides/handling-input.md#clarifying-questions-question--question_review).
-Live round-trip test: `LIVE_CLAUDE=1 npx vitest run test/chat/live_question.test.ts`.
+## Use the chat library
 
-## Autonomous pipeline
-
-This project is wired to the `META-HARNESS` fleet-db workspace via the
-`autonomous-dev-deploy` pipeline. Ship a plan from Claude Code with "ship this
-plan", or check agents with "are the agents running?".
-
-## Reading session history
-
-`Conversation.historyWithSource()` (from `meta-harness/chat`) returns the
-conversation's turns together with a tag saying where they came from:
+A `Conversation` is a long-lived, multi-turn, resumable session. The shape is always
+**Open → acquire control → send → observe events → close.**
 
 ```ts
 import {
   Open,
-  HistorySourceStore,
-  HistorySourceTranscript,
+  newMemStore,
+  EventTurn,
+  TurnStateComplete,
 } from "meta-harness/chat";
+import { Context } from "meta-harness/async";
 
-const conv = await Open(ctx, { harness: "claude-code", workingDir, store });
-const [turns, source] = await conv.historyWithSource();
+const ctx = Context.background();
 
-if (source === HistorySourceTranscript) {
-  // history was parsed from the harness's on-disk transcript
-} else if (source === HistorySourceStore) {
-  // history came from the Store
+const conv = await Open(ctx, {
+  harness: "claude-code", // adapter + classifier selector
+  binaryPath: "/usr/local/bin/claude", // the harness executable
+  workingDir: process.cwd(),
+  store: newMemStore(), // required; in-memory default
+});
+
+const release = await conv.acquireControl(ctx); // one mutating op at a time
+try {
+  const turnID = await conv.send(ctx, "summarize this project");
+  for await (const ev of conv.events()) {
+    if (
+      ev.type === EventTurn &&
+      ev.turn?.id === turnID &&
+      ev.turn.state === TurnStateComplete
+    )
+      break;
+  }
+} finally {
+  release();
+}
+
+const turns = await conv.history();
+await conv.close(ctx);
+```
+
+See the [Chat API reference](docs/md/modules/chat.md) and the
+[Conversation guide](docs/md/guides/conversation.md) for the full library reference.
+
+## Use one-shot turns
+
+```ts
+import { runOneShot } from "meta-harness/oneshot";
+import { Context } from "meta-harness/async";
+
+const { ctx, cancel } = Context.withDeadline(Context.background(), 120_000);
+try {
+  const reply = await runOneShot(ctx, {
+    harness: "claude-code",
+    binaryPath: "/usr/local/bin/claude",
+    workingDir: process.cwd(),
+    prompt: "Summarize README.md in one sentence.",
+  });
+  console.log(reply);
+} finally {
+  cancel();
 }
 ```
 
-**Selection rule** (`src/chat/conversation.ts:891`): the transcript source is
-used **only** when the adapter implements a `readTranscript` method **and**
-`session.harnessSessionID` is non-empty. In every other case history comes from
-the `Store` and is tagged `HistorySourceStore`.
+Failure modes are typed: `EmptyPromptError`, `DeadlineError`, `TurnErroredError`. See
+[One-shot turns](docs/md/guides/one-shot-turns.md).
 
-> **Fallback behavior.** When the adapter has a reader but the transcript is
-> missing or not yet flushed, `historyWithSource()` degrades to store history:
-> a `readTranscript` that throws `ErrSessionNotFound` or `ErrEmptySessionID` is
-> caught and the `Store` is read instead (tagged `HistorySourceStore`). Genuine
-> reader failures (parse errors, permission problems, etc.) are **not** masked —
-> they propagate. (OpenCode defines no `readTranscript` at all, so its
-> `historyWithSource()` always uses the store.)
+## Use as a CLI
 
-### Transcript reader classes
-
-Independent of the chat layer, `meta-harness/transcript` ships low-level parsers
-that turn a harness's on-disk session logs into a canonical event stream. These
-are public and work today:
-
-```ts
-import {
-  ClaudeCodeReader,
-  CodexReader,
-  PiReader,
-  type Reader,
-  ErrEmptySessionID,
-  ErrEmptyWorkingDir,
-  ErrSessionNotFound,
-} from "meta-harness/transcript";
-
-const reader: Reader = new ClaudeCodeReader();
-const events = reader.read(harnessSessionID, workingDir);
+```sh
+echo "Summarize README.md in one sentence." | npx meta-harness-run claude -- --some-flag
 ```
 
-`read(harnessSessionID, workingDir)` returns the parsed `Event[]` and throws on
-missing or malformed input — including the sentinels `ErrEmptySessionID`,
-`ErrEmptyWorkingDir`, and `ErrSessionNotFound`.
+stdin is the prompt, stdout the clean reply; exit codes are the orchestrator contract
+(`0` complete, `1` errored, `2` usage, `124` deadline). The
+[CLI guide](docs/md/modules/cli.md) documents the flags, the exit codes, and the
+`HARNESS_WRAPPER_RUN_TIMEOUT` / `HARNESS_BINARY_*` environment overrides.
 
-### Support matrix
+Five more bins ship alongside it: `meta-harness-wrapper` (foreground TTY passthrough +
+tmux-detached subcommands — see [wrapper-cli](docs/md/modules/wrapper-cli.md)),
+`meta-harness-structured-run` (one turn → one JSON line carrying reply **and**
+transcript, for sandboxed runners), `meta-harness-check-versions` (offline drift check),
+`meta-harness-hooks` (the out-of-process harness-hook entry point), and
+`meta-harness-screenbench-record` (the corpus recorder behind `rebake-corpus`).
 
-| Harness     | Transcript reader class (`meta-harness/transcript`) | Chat-history adapter integration (`historyWithSource()` transcript path) |
-| ----------- | :-------------------------------------------------: | :----------------------------------------------------------------------: |
-| Claude Code |                ✓ `ClaudeCodeReader`                 |                 ✓ `readTranscript` reads the on-disk log                 |
-| Codex       |                   ✓ `CodexReader`                   |                 ✓ `readTranscript` reads the on-disk log                 |
-| pi          |                    ✓ `PiReader`                     |                 ✓ `readTranscript` reads the on-disk log                 |
-| OpenCode    |                          ✗                          |             n/a — no `readTranscript`, always uses the store             |
+## Use over HTTP
 
-Claude Code, Codex, and pi read history from the harness's on-disk transcript
-once a `harnessSessionID` has been captured, falling back to the `Store` when the
-transcript is missing or not yet flushed. OpenCode is always store-backed.
+`meta-harness-chatd` exposes the chat layer over HTTP + Server-Sent Events so non-Node
+clients can drive multi-turn conversations across a process boundary:
+
+```sh
+npx meta-harness-chatd --bind 127.0.0.1:8080
+```
+
+It serves a stateless one-shot (`POST /v1/turns`) and a stateful multi-turn surface
+(`/v1/conversations/**` + an SSE event stream). The daemon **spawns harness processes on
+request**; v1 has no auth — bind to localhost only, never `0.0.0.0`. See the
+[HTTP gateway guide](docs/md/modules/gateway.md) for the endpoint reference, the
+control-token lifecycle, the SSE stream contract, the sentinel → HTTP error table, and a
+**known defect that currently blocks `POST /v1/conversations`**.
+
+## Supported harnesses
+
+| Harness         | name          | binary     | pinned¹ | chat adapter²   | effort / model | transcript history³   |
+| --------------- | ------------- | ---------- | ------- | --------------- | -------------- | --------------------- |
+| **Claude Code** | `claude-code` | `claude`   | 2.1.201 | ✅ full         | ✅ / ✅        | ✅ `ClaudeCodeReader` |
+| **Codex**       | `codex`       | `codex`    | 0.142.5 | ✅ full         | ✅ / ✅        | ✅ `CodexReader`      |
+| **pi**          | `pi`          | `pi`       | 0.76.0  | ✅ full         | ❌ / ❌        | ✅ `PiReader`⁴        |
+| **OpenCode**    | `opencode`    | `opencode` | —       | ◑ stub          | ❌ / ❌        | ❌ store only         |
+| **Cursor**      | `cursor`      | —          | —       | ❌ wrapper-only | ❌ / ❌        | ❌ n/a                |
+| _(fallback)_    | `generic`     | any        | —       | ◑ status-only   | ❌ / ❌        | ❌ store only         |
+
+¹ From [`versions.json`](src/versions/versions.json) — the upstream release each adapter
+is verified against. ² Whether `chat.resolveAdapter` maps the name. ³ Whether
+`historyWithSource()` can serve transcript-backed history rather than the `Store`.
+⁴ `PiReader.read` returns the lossy `Turn[]` view, not `Event[]`.
+
+The per-capability detail (busy detection, session-id extraction, resume, input
+requests) is in [Harnesses](docs/md/harnesses.md); the "adding a harness" workflow is in
+[Adding a harness](docs/md/guides/adding-a-harness.md). Other harnesses are supported by
+implementing the `Adapter` interface (plus the optional capability interfaces
+`SessionIDExtractor` / `SessionResumer` / `TranscriptReader` / …).
+
+## Layout
+
+- `src/screen/` — headless VT100 emulator → `Snapshot`
+- `src/wrapper/` — PTY supervisor + `Status` vocabulary; `src/wrapper/trace/` diagnostics
+- `src/turns/` — turn-detection interface, `generic` fallback, per-harness adapters under `harness/`
+- `src/transcript/` — read-only harness JSONL parsers (`claudecode`, `codex`, `pi`)
+- `src/chat/` — `Conversation` API, `Store` interface, in-memory store, control token
+- `src/oneshot/` — the harness-agnostic one-shot turn loop
+- `src/harness/` — `runTurn` / `TurnResult`: one complete turn, opened and torn down
+- `src/turnproto/` — the structured turn-result wire protocol
+- `src/acquisition/` — output-acquisition planning for a turn
+- `src/cli/` — `run`, `wrapper`, `structured-runner`, `check-versions`, `hooks`, `screenbench-record` front-ends
+- `src/gateway/` — HTTP + SSE gateway (`meta-harness-chatd`) exposing `chat` to non-Node clients
+- `src/env/`, `src/env-openshell/`, `src/env-daytona/` — pluggable environments: Provisioner × Containment for sandboxed turns
+- `src/hooks/` — harness-hook providers, guards, and the event spool
+- `src/discovery/` — "is harness X installed on PATH, at what version?"
+- `src/versions/` — read API for the embedded `versions.json` (pinned upstream versions per harness)
+- `src/async/` — the public `Context`; `src/internal/async/` the Go-style concurrency primitives behind it
+- `test/corpus/` — recorded PTY byte streams used by the adapter compatibility tests
+- `docs/md/` — canonical documentation sources; `docs/html/` — the rendered visual overview
+
+## Testing
+
+```sh
+harness test      # vitest run — the release gate
+harness ci        # the authoritative gate: pin-check + verify + lint + test
+harness lint      # or: pnpm typecheck / pnpm build
+```
+
+The suite needs **no network and no harness binaries**: it exercises the wrapper
+classifier, the turn adapters (replaying `test/corpus/`), the chat state machine
+(against an in-process fake harness), the transcript parsers, and the public-surface
+contract (`test/exports-guard.test.ts`, `test/contract.test.ts`).
+
+Per-harness adapter tests double as the **compatibility test suite** — they replay
+recorded byte streams and assert that turn detection still fires correctly.
+
+## Drift-detection pipeline
+
+When an upstream CLI ships a new version, TUI markers / classifier strings / transcript
+schemas can shift and break the adapters. A local, developer-on-demand pipeline catches
+that before users do:
+
+```sh
+pnpm check-versions   # offline pinned-vs-latest check for every pinned harness (npm registry)
+pnpm drift-canary     # the tightest single-harness signal — codex (@openai/codex) only
+pnpm rebake-corpus    # re-record the scripted scenarios against the real binaries (paid)
+```
+
+`check-versions` and `drift-canary` share one exit-code contract: `0` match, non-zero
+drift. `src/versions/versions.json` pins each harness to the upstream version its adapter
+was last verified against.
+
+`rebake-corpus` drives the `meta-harness-screenbench-record` bin (build the tree first,
+or point `META_HARNESS_SCREENBENCH_RECORD` at `dist/cli/screenbench-record.js`); it exits
+`3` when the recorder is absent. Coverage is per-harness: `claude-code` records
+_multi-turn_, _tool-call_, and _interrupted-mid-reply_; `codex` records the first two
+(it has no interrupt seam); `pi` is pinned but has no scripted corpus and is skipped by
+design.
+
+## Autonomous pipeline
+
+This project is wired to the `META-HARNESS` fleet-db workspace via the
+`autonomous-dev-deploy` pipeline. Ship a plan from Claude Code with "ship this plan", or
+check agents with "are the agents running?".

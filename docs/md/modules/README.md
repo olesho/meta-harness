@@ -19,6 +19,7 @@ by [`test/contract.test.ts`](../../../test/contract.test.ts), so it matches what
 | [oneshot](oneshot.md)                | `meta-harness/oneshot`       | Prompt → single reply → teardown, atop chat.                                                            |
 | [cli](cli.md)                        | `meta-harness-run`           | The one-shot loop as a disposable process.                                                              |
 | [wrapper-cli](wrapper-cli.md)        | `meta-harness-wrapper`       | Foreground TTY passthrough + tmux-detached subcommands + delegated one-shot `run`.                      |
+| [gateway](gateway.md)                | `meta-harness-chatd`         | `chat` + one-shot turns over HTTP + SSE, for non-Node clients.                                          |
 | [discovery](discovery.md)            | `meta-harness/discovery`     | Probe installed harness CLIs and their versions.                                                        |
 | [versions](versions.md)              | `meta-harness/versions`      | The pinned harness-version catalog.                                                                     |
 | [env](../../env/README.md)           | `meta-harness/env`           | Pluggable sandboxed environments: Provisioner × Containment, credential injectors, `runStructuredTurn`. |
