@@ -54,7 +54,7 @@ export {
   harnessSupportsEffort,
   isSupportedEffort,
 } from "./internal/effort.ts";
-export { argsWithHarnessModel } from "./internal/mode.ts";
+export { argsWithHarnessModel } from "./internal/model.ts";
 
 // PTY supervision surface.
 export { start, run, type RunContext } from "./internal/run.ts";

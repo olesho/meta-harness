@@ -56,7 +56,7 @@ or [`claude.ts`](../../../src/wrapper/internal/harness/claude.ts) (rich, with AP
 session-limit matchers) as templates. This is what lets
 [`classifyOutput("newcli", …)`](../modules/wrapper.md#classification) recognize the CLI's
 rate-limit and error prose. If the CLI supports reasoning effort or a model flag, add its
-translation to `src/wrapper/internal/effort.ts` / `mode.ts`.
+translation to `src/wrapper/internal/effort.ts` / `model.ts`.
 
 ---
 

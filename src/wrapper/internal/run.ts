@@ -7,7 +7,7 @@
 import { isSentinel } from "../../internal/async/errors.ts";
 import { type Config, ErrBinaryNotFound, validateConfig } from "./config.ts";
 import { argsWithHarnessEffort } from "./effort.ts";
-import { argsWithHarnessModel } from "./mode.ts";
+import { argsWithHarnessModel } from "./model.ts";
 import { binaryNotFoundError, PtyProcess } from "./pty.ts";
 import { resolvePath } from "../../discovery/discovery.ts";
 import {

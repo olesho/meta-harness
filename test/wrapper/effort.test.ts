@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import {
   argsWithHarnessEffort,
+  harnessSupportsEffort,
   isSupportedEffort,
 } from "../../src/wrapper/internal/effort.ts";
 
@@ -76,4 +77,13 @@ test("isSupportedEffort", () => {
     expect(isSupportedEffort(e)).toBe(true);
   }
   expect(isSupportedEffort("ultra")).toBe(false);
+});
+
+test("harness name normalization: claude-code reaches claude effort path", () => {
+  expect(harnessSupportsEffort("claude-code")).toBe(true);
+  expect(argsWithHarnessEffort("claude-code", ["-p"], "high")).toEqual([
+    "--effort",
+    "high",
+    "-p",
+  ]);
 });

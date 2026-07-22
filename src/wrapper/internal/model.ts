@@ -1,6 +1,7 @@
 // Per-harness model override translation (Claude Code --model, Codex
-// -c model="…"). The "mode" policy layer selects a model; this applies it to
-// the harness CLI args. An explicit model flag already in args wins.
+// -c model="…"). The caller picks the model (Config.model, applied by
+// start() in run.ts); this only translates it to harness CLI args. An
+// explicit model flag already in args wins.
 
 import {
   argsContainConfigKey,

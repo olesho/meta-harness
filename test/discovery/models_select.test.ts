@@ -5,7 +5,7 @@
 import { describe, expect, test } from "vitest";
 import { newScreen } from "../../src/screen/index.ts";
 import { parseModelPicker, isKnownModel } from "../../src/discovery/models.ts";
-import { argsWithHarnessModel } from "../../src/wrapper/internal/mode.ts";
+import { argsWithHarnessModel } from "../../src/wrapper/internal/model.ts";
 import { corpusBytes } from "../turns/corpus.ts";
 
 async function discoverFromFixture(harness: string) {

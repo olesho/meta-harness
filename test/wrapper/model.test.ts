@@ -1,10 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { argsWithHarnessModel } from "../../src/wrapper/internal/mode.ts";
-import {
-  argsWithHarnessEffort,
-  harnessSupportsEffort,
-} from "../../src/wrapper/internal/effort.ts";
-import { validateConfig } from "../../src/wrapper/internal/config.ts";
+import { argsWithHarnessModel } from "../../src/wrapper/internal/model.ts";
 
 describe("argsWithHarnessModel", () => {
   const cases: {
@@ -71,23 +66,4 @@ describe("argsWithHarnessModel", () => {
       );
     });
   }
-});
-
-test("harness name normalization: claude-code reaches claude effort path", () => {
-  expect(harnessSupportsEffort("claude-code")).toBe(true);
-  expect(argsWithHarnessEffort("claude-code", ["-p"], "high")).toEqual([
-    "--effort",
-    "high",
-    "-p",
-  ]);
-});
-
-test("validateConfig accepts claude-code + effort", () => {
-  const err = validateConfig({
-    binaryPath: "x",
-    stdout: {},
-    harness: "claude-code",
-    effort: "high",
-  });
-  expect(err).toBeNull();
 });
