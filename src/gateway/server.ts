@@ -33,6 +33,7 @@ import {
   EventInputRequest,
   EventInputResolved,
   Open,
+  newMemStore,
   type ConversationEvent,
   type InputAnswer,
   type InputRequest,
@@ -89,7 +90,21 @@ export type Opener = (opts: Options) => Promise<ConversationLike>;
 // for the lifetime of the harness process; a request-scoped context would cancel
 // when the open handler returns and kill the harness (Go opens with
 // context.Background() for exactly this reason).
-const defaultOpener: Opener = (opts) => Open(Context.background(), opts);
+//
+// It must also SUPPLY THE STORE. `Open` rejects a missing one with
+// ErrInvalidOptions, and `store` is a live object with no wire representation —
+// openConv decodes JSON, so it can never carry one. Without this, every
+// POST /v1/conversations on the shipped binary failed 400 invalid_options and
+// the whole /v1/conversations/** surface was unreachable; the route tests all
+// inject their own Opener, so nothing exercised this path.
+//
+// One store PER CONVERSATION, not one per daemon: MemStore is keyed by session
+// id and would serve either, but a per-conversation store is released with the
+// conversation on close, whereas a daemon-lifetime store accumulates every
+// session's turns for as long as the process runs. An injected opts.store
+// (tests, embedders) still wins.
+const defaultOpener: Opener = (opts) =>
+  Open(Context.background(), { ...opts, store: opts.store ?? newMemStore() });
 
 // ── newToken (port of Go sse.go newToken) ────────────────────────────────────
 

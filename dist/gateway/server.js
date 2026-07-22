@@ -22,7 +22,7 @@
 // Bun (project memory `meta-harness-node-pty-bun-broken`). There is no
 // "works under Bun" path.
 import { createServer, } from "node:http";
-import { EventInputRequest, EventInputResolved, Open, } from "../chat/index.js";
+import { EventInputRequest, EventInputResolved, Open, newMemStore, } from "../chat/index.js";
 import { isSentinel } from "../chat/errors.js";
 import { ErrTurnErrored, RunTurnError, runTurn } from "../harness/index.js";
 import { AutoAcceptTrust } from "../oneshot/index.js";
@@ -36,7 +36,20 @@ import { streamSSE } from "./sse.js";
 // for the lifetime of the harness process; a request-scoped context would cancel
 // when the open handler returns and kill the harness (Go opens with
 // context.Background() for exactly this reason).
-const defaultOpener = (opts) => Open(Context.background(), opts);
+//
+// It must also SUPPLY THE STORE. `Open` rejects a missing one with
+// ErrInvalidOptions, and `store` is a live object with no wire representation —
+// openConv decodes JSON, so it can never carry one. Without this, every
+// POST /v1/conversations on the shipped binary failed 400 invalid_options and
+// the whole /v1/conversations/** surface was unreachable; the route tests all
+// inject their own Opener, so nothing exercised this path.
+//
+// One store PER CONVERSATION, not one per daemon: MemStore is keyed by session
+// id and would serve either, but a per-conversation store is released with the
+// conversation on close, whereas a daemon-lifetime store accumulates every
+// session's turns for as long as the process runs. An injected opts.store
+// (tests, embedders) still wins.
+const defaultOpener = (opts) => Open(Context.background(), { ...opts, store: opts.store ?? newMemStore() });
 // ── newToken (port of Go sse.go newToken) ────────────────────────────────────
 /** Mint an opaque 16-byte hex token (control tokens; matches Go's `newToken`). */
 export function newToken() {

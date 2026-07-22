@@ -797,6 +797,49 @@ describe("/v1/turns (one-shot RunTurn over a real pty + fake harness)", () => {
     // key the old `{ code, message }` shape never carried.
     expect(typeof r.json.error).toBe("string");
   });
+
+  // Regression: the DEFAULT opener must supply a Store. Every other route test
+  // injects its own Opener, so defaultOpener was never exercised and shipped
+  // without one — Open rejected it ErrInvalidOptions, POST /v1/conversations
+  // returned 400 for every caller, and the whole /v1/conversations/** surface
+  // was unreachable on the real binary. `store` is a live object with no wire
+  // representation, so the daemon has to provide it. This uses the DEFAULT
+  // server (no `open` argument) — that is the entire point of the test.
+  test("POST /v1/conversations opens on the DEFAULT opener (supplies a Store)", async () => {
+    const script = New("claude-code").Idle().StayAliveUntilStopped().Build();
+    const { base } = await start();
+
+    const open = await req(base, "POST", "/v1/conversations", {
+      harness: "claude-code",
+      binary_path: fakeHarnessBin,
+      env: fakeLaunchEnv(script),
+      // Required in practice: with no working_dir the claude-code transcript
+      // reader throws ErrEmptyWorkingDir, which historyWithSource does NOT
+      // degrade to store history (only ErrSessionNotFound / ErrEmptySessionID),
+      // so GET /history would 500. `working_dir` is optional on the wire.
+      working_dir: process.cwd(),
+    });
+    expect(open.status).toBe(201);
+    expect(typeof open.json.id).toBe("string");
+    expect(open.json.id.length).toBeGreaterThan(0);
+
+    // Registered and store-backed: it lists, and history reads without the
+    // 500 history_failed a missing store would produce.
+    const list = await req(base, "GET", "/v1/conversations");
+    expect(list.status).toBe(200);
+    expect(list.json.map((c: { id: string }) => c.id)).toContain(open.json.id);
+
+    const hist = await req(
+      base,
+      "GET",
+      `/v1/conversations/${open.json.id}/history`,
+    );
+    expect(hist.status).toBe(200);
+    expect(Array.isArray(hist.json.turns)).toBe(true);
+
+    const del = await req(base, "DELETE", `/v1/conversations/${open.json.id}`);
+    expect(del.status).toBe(204);
+  }, 30_000);
 });
 
 // ── SSE collection helper ────────────────────────────────────────────────────

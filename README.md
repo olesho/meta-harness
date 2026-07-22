@@ -185,8 +185,7 @@ It serves a stateless one-shot (`POST /v1/turns`) and a stateful multi-turn surf
 (`/v1/conversations/**` + an SSE event stream). The daemon **spawns harness processes on
 request**; v1 has no auth — bind to localhost only, never `0.0.0.0`. See the
 [HTTP gateway guide](docs/md/modules/gateway.md) for the endpoint reference, the
-control-token lifecycle, the SSE stream contract, the sentinel → HTTP error table, and a
-**known defect that currently blocks `POST /v1/conversations`**.
+control-token lifecycle, the SSE stream contract, and the sentinel → HTTP error table.
 
 ## Supported harnesses
 

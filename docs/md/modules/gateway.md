@@ -19,17 +19,13 @@ event stream). It runs on **Node** from the compiled
 > classes (`Server`, `Fanout`, `streamSSE`) are importable only from a source checkout,
 > and are not frozen by [`test/contract.test.ts`](../../../test/contract.test.ts).
 
-> ⚠️ **Known defect — the conversation endpoints cannot currently be used.**
-> `chat.Open` requires a `Store`, but the daemon's `defaultOpener` never supplies one
-> and `store` is not a wire field. Every `POST /v1/conversations` on the shipped binary
-> therefore fails `400 invalid_options` ("Store is required"), and without an open
-> conversation the whole `/v1/conversations/**` surface is unreachable — leaving
-> [`POST /v1/turns`](#post-v1turns), which builds its own store inside `runTurn`, as the
-> only working endpoint. The gateway tests inject a fake `Opener` and so never exercise
-> `defaultOpener`. The fix is one line in
-> [`src/gateway/server.ts`](../../../src/gateway/server.ts): `defaultOpener` must pass
-> `store: newMemStore()`. Everything else on this page is verified against the running
-> daemon.
+> **Storage.** `chat.Open` requires a `Store`, and `store` is a live object with no wire
+> representation — so the daemon supplies one: `defaultOpener` gives each conversation
+> its own `newMemStore()`, released when the conversation closes. An embedder passing a
+> custom `Opener` can inject any `Store` instead. (Until this was fixed, `defaultOpener`
+> supplied none and every `POST /v1/conversations` failed `400 invalid_options`, making
+> the entire `/v1/conversations/**` surface unreachable on the shipped binary; the route
+> tests all injected their own `Opener`, so nothing caught it.)
 
 ---
 
@@ -129,9 +125,16 @@ registry key.
 The conversation is opened with a **background** context, not a request-scoped one — the
 harness must outlive the HTTP request that started it.
 
-Failure modes: `400 invalid_json`, `400 unknown_harness`, `409 already_open` (a
-conversation already exists for that session id), `503 shutting_down` — and, until the
-defect noted at the top of this page is fixed, `400 invalid_options` for _every_ open.
+Failure modes: `400 invalid_json`, `400 invalid_options`, `400 unknown_harness`,
+`409 already_open` (a conversation already exists for that session id),
+`503 shutting_down`.
+
+> **Pass `working_dir` if you intend to read history.** It is optional on the wire, but
+> for a harness with a transcript reader (Claude Code, Codex, pi) an empty working dir
+> makes the reader throw `ErrEmptyWorkingDir` — which
+> [`historyWithSource()`](../guides/reading-history.md) does **not** degrade to store
+> history (it only falls back on `ErrSessionNotFound` / `ErrEmptySessionID`). The error
+> propagates and `GET .../history` answers `500 history_failed`.
 
 ### `GET /v1/conversations`
 
