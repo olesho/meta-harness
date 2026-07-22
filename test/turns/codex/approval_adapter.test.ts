@@ -74,6 +74,35 @@ describe("CodexAdapter.onScreen — approval prompt transitions", () => {
   });
 });
 
+describe("CodexAdapter.onScreen — /permissions dialog transitions", () => {
+  test("InputRequested once, then InputResolved when the dialog clears", async () => {
+    // Same false-completion class as the approval dialog (META-HARNESS-104): the
+    // permissions picker was invisible to DetectInput, so lastInputID stayed
+    // empty and a quiet dialog screen still mapped to TurnComplete.
+    const dialog = await corpusText("permissions-dialog");
+    const a = codex.New();
+
+    const first = a.onScreen(textSnap(dialog));
+    expect(first.length).toBe(1);
+    expect(first[0].kind).toBe(InputRequested);
+    expect(first[0].input!.kind).toBe(codex.KindPermissions);
+    const id = first[0].input!.id;
+    expect(id).not.toBe("");
+
+    // Redraw of the same dialog — the id is unchanged, so nothing re-fires.
+    expect(a.onScreen(textSnap(dialog)).length).toBe(0);
+
+    const cleared = a.onScreen(textSnap(readyScreen));
+    expect(cleared.length).toBe(1);
+    expect(cleared[0].kind).toBe(InputResolved);
+    expect(cleared[0].input!.id).toBe(id);
+    expect(cleared[0].input!.kind).toBe(codex.KindPermissions);
+
+    // Resolved once only.
+    expect(a.onScreen(textSnap(readyScreen)).length).toBe(0);
+  });
+});
+
 describe("CodexAdapter.onWrapperStatus — no false TurnComplete mid-dialog", () => {
   test("waiting_for_input completes the turn when no dialog is pending", () => {
     const a = codex.New();
@@ -89,6 +118,12 @@ describe("CodexAdapter.onWrapperStatus — no false TurnComplete mid-dialog", ()
     // finds no task_complete in the rollout and treats the reply as errored.
     const a = codex.New();
     a.onScreen(textSnap(await corpusText("approval-command")));
+    expect(a.onWrapperStatus(StatusWaitingForInput, "quiet")).toEqual([]);
+  });
+
+  test("waiting_for_input is suppressed while the /permissions dialog is up", async () => {
+    const a = codex.New();
+    a.onScreen(textSnap(await corpusText("permissions-dialog")));
     expect(a.onWrapperStatus(StatusWaitingForInput, "quiet")).toEqual([]);
   });
 
