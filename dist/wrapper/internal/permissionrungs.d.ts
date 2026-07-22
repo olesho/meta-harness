@@ -16,7 +16,7 @@ export declare const CodexApprovalNever = "never";
  * Claude Code's blanket permission-bypass flags. Both spellings exist at
  * claude-code 2.1.217; either one in argv leaves the harness unrestricted.
  */
-export declare const ClaudeSkipPermissionsFlags: string[];
+export declare const ClaudeSkipPermissionsFlags: readonly string[];
 /** codex's blanket approval+sandbox bypass flag. */
 export declare const CodexBypassFlag = "--dangerously-bypass-approvals-and-sandbox";
 /**
@@ -38,12 +38,6 @@ export declare function permissionRungs(): string[];
  * whenever either side is not a canonical rung.
  */
 export declare function morePermissive(a: string, b: string): boolean;
-/**
- * bypassEnablingFlags returns the harness argv flags that, when present at
- * launch, leave the harness able to reach the bypass rung. Harnesses with no
- * launch-time permission axis at all return an empty array.
- */
-export declare function bypassEnablingFlags(harness: string): string[];
 /**
  * effectiveLaunchRung reports the rung the harness ACTUALLY launched with,
  * given the caller's argv and the requested permission mode — i.e. it replays

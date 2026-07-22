@@ -13,8 +13,8 @@ export function prependArgs(args: string[], ...prefix: string[]): string[] {
 // token only, while Go's effort/model guards use the three-spelling matcher
 // (argsContainAnyFlag). So effort.ts's `--effort` guard and model.ts's
 // `--model` guard are weaker than Go's on `--effort=high` / `--model=x`. That
-// is a pre-existing effort/model divergence, NOT a permission-mode one; it is
-// tracked as its own ticket. Do not widen argsContainFlag here, and do not
+// is a pre-existing effort/model divergence, NOT a permission-mode one, and it
+// belongs in its own ticket. Do not widen argsContainFlag here, and do not
 // freeze the current behaviour here either.
 export function argsContainFlag(args: string[], flag: string): boolean {
   return args.includes(flag);
@@ -43,7 +43,10 @@ function isShortFlag(flag: string): boolean {
  * argv is left exactly as written) rather than emitting a second -s/-a. It is
  * still a silent drop of the requested mode, so it is called out here.
  */
-export function argsContainAnyFlag(args: string[], flags: string[]): boolean {
+export function argsContainAnyFlag(
+  args: string[],
+  flags: readonly string[],
+): boolean {
   for (const arg of args) {
     for (const flag of flags) {
       if (arg === flag || arg.startsWith(flag + "=")) return true;

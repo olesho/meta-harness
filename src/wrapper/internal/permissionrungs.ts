@@ -44,7 +44,7 @@ export const CodexApprovalNever = "never";
  * Claude Code's blanket permission-bypass flags. Both spellings exist at
  * claude-code 2.1.217; either one in argv leaves the harness unrestricted.
  */
-export const ClaudeSkipPermissionsFlags = [
+export const ClaudeSkipPermissionsFlags: readonly string[] = [
   "--dangerously-skip-permissions",
   "--allow-dangerously-skip-permissions",
 ];
@@ -53,7 +53,10 @@ export const ClaudeSkipPermissionsFlags = [
 export const CodexBypassFlag = "--dangerously-bypass-approvals-and-sandbox";
 
 /** codex's profile flag: a profile can set BOTH permission axes out of band. */
-const codexProfileFlags = ["-p", "--profile"];
+const codexProfileFlags: readonly string[] = ["-p", "--profile"];
+
+/** codex's approval-axis flag. */
+const codexApprovalFlags: readonly string[] = ["-a", "--ask-for-approval"];
 
 /** codex config keys that move a permission axis out of band. */
 const codexSandboxConfigKey = "sandbox_mode";
@@ -99,23 +102,6 @@ export function morePermissive(a: string, b: string): boolean {
   const bi = rungIndex(b);
   if (ai < 0 || bi < 0) return false;
   return ai > bi;
-}
-
-/**
- * bypassEnablingFlags returns the harness argv flags that, when present at
- * launch, leave the harness able to reach the bypass rung. Harnesses with no
- * launch-time permission axis at all return an empty array.
- */
-export function bypassEnablingFlags(harness: string): string[] {
-  switch (normHarness(harness)) {
-    case "claude":
-    case "claude-code":
-      return [...ClaudeSkipPermissionsFlags];
-    case "codex":
-      return [CodexBypassFlag];
-    default:
-      return [];
-  }
 }
 
 /**
@@ -248,7 +234,7 @@ function codexLaunchRung(args: string[], mode: string): string {
   }
 
   // 6. Whole-directive suppression fired with no sandbox value to read.
-  if (argsContainAnyFlag(args, ["-a", "--ask-for-approval"])) return "";
+  if (argsContainAnyFlag(args, codexApprovalFlags)) return "";
 
   // 7. Nothing in argv: replay the knob.
   return codexRung(mode);

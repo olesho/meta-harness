@@ -16,7 +16,7 @@ export declare function argsContainFlag(args: string[], flag: string): boolean;
  * argv is left exactly as written) rather than emitting a second -s/-a. It is
  * still a silent drop of the requested mode, so it is called out here.
  */
-export declare function argsContainAnyFlag(args: string[], flags: string[]): boolean;
+export declare function argsContainAnyFlag(args: string[], flags: readonly string[]): boolean;
 /**
  * flagValue extracts the operand of the LAST occurrence of any of names, in
  * each of the spellings argsContainAnyFlag recognizes: the attached long form

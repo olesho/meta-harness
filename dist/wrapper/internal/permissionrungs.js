@@ -40,6 +40,8 @@ export const ClaudeSkipPermissionsFlags = [
 export const CodexBypassFlag = "--dangerously-bypass-approvals-and-sandbox";
 /** codex's profile flag: a profile can set BOTH permission axes out of band. */
 const codexProfileFlags = ["-p", "--profile"];
+/** codex's approval-axis flag. */
+const codexApprovalFlags = ["-a", "--ask-for-approval"];
 /** codex config keys that move a permission axis out of band. */
 const codexSandboxConfigKey = "sandbox_mode";
 const codexApprovalConfigKey = "approval_policy";
@@ -82,22 +84,6 @@ export function morePermissive(a, b) {
     if (ai < 0 || bi < 0)
         return false;
     return ai > bi;
-}
-/**
- * bypassEnablingFlags returns the harness argv flags that, when present at
- * launch, leave the harness able to reach the bypass rung. Harnesses with no
- * launch-time permission axis at all return an empty array.
- */
-export function bypassEnablingFlags(harness) {
-    switch (normHarness(harness)) {
-        case "claude":
-        case "claude-code":
-            return [...ClaudeSkipPermissionsFlags];
-        case "codex":
-            return [CodexBypassFlag];
-        default:
-            return [];
-    }
 }
 /**
  * effectiveLaunchRung reports the rung the harness ACTUALLY launched with,
@@ -223,7 +209,7 @@ function codexLaunchRung(args, mode) {
         return codexSandboxRung(sandbox);
     }
     // 6. Whole-directive suppression fired with no sandbox value to read.
-    if (argsContainAnyFlag(args, ["-a", "--ask-for-approval"]))
+    if (argsContainAnyFlag(args, codexApprovalFlags))
         return "";
     // 7. Nothing in argv: replay the knob.
     return codexRung(mode);

@@ -10,8 +10,8 @@ export function prependArgs(args, ...prefix) {
 // token only, while Go's effort/model guards use the three-spelling matcher
 // (argsContainAnyFlag). So effort.ts's `--effort` guard and model.ts's
 // `--model` guard are weaker than Go's on `--effort=high` / `--model=x`. That
-// is a pre-existing effort/model divergence, NOT a permission-mode one; it is
-// tracked as its own ticket. Do not widen argsContainFlag here, and do not
+// is a pre-existing effort/model divergence, NOT a permission-mode one, and it
+// belongs in its own ticket. Do not widen argsContainFlag here, and do not
 // freeze the current behaviour here either.
 export function argsContainFlag(args, flag) {
     return args.includes(flag);
