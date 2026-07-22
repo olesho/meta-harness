@@ -6,7 +6,7 @@
 import { isSentinel } from "../../internal/async/errors.js";
 import { ErrBinaryNotFound, validateConfig } from "./config.js";
 import { argsWithHarnessEffort } from "./effort.js";
-import { argsWithHarnessModel } from "./mode.js";
+import { argsWithHarnessModel } from "./model.js";
 import { binaryNotFoundError, PtyProcess } from "./pty.js";
 import { resolvePath } from "../../discovery/discovery.js";
 import { applyDefaults, startSession, } from "./session.js";

@@ -4,7 +4,7 @@ export { ErrNone, ErrRateLimited, ErrAuth, ErrBilling, ErrModelNotFound, ErrCont
 export { StatusIdle, StatusFailed, StatusBlockedByCost, StatusRetryLater, StatusAPIError, StatusWaitingForInput, StatusStale, StatusInterrupted, StatusUnknown, StatusBinaryNotFound, type Status, } from "./internal/status.ts";
 export { ErrInvalidConfig, ErrBinaryNotFound, isBinaryNotFound, validateConfig, type Config, } from "./internal/config.ts";
 export { argsWithHarnessEffort, harnessSupportsEffort, isSupportedEffort, } from "./internal/effort.ts";
-export { argsWithHarnessModel } from "./internal/mode.ts";
+export { argsWithHarnessModel } from "./internal/model.ts";
 export { start, run, type RunContext } from "./internal/run.ts";
 export { Session, ClassifierFunc, classifyExit, EventChannel, type Result, type Snapshot, type SessionEvent, type StdoutSink, type EventRecv, } from "./internal/session.ts";
 export { OutputFanout, SINK_CAP_BYTES, type OutputSink, type OutputSinkHandle, } from "./internal/fanout.ts";

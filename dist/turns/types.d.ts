@@ -22,8 +22,10 @@ export declare const InputRequested: Kind;
 export declare const InputResolved: Kind;
 /**
  * AcquisitionMode selects HOW live transcript events are acquired for a run.
- * Mirrors harness-wrapper's pkg/harness Mode (renamed here because MH already
- * has a `Mode` in src/wrapper/internal/mode.ts). Values:
+ * Mirrors harness-wrapper's pkg/harness Mode (renamed here to keep the bare
+ * name `Mode` free in MH, where "mode" is ambiguous across the wrapper's
+ * model/effort knobs and the permission knob planned in META-HARNESS-100).
+ * Values:
  *
  *   - Off    — no live acquisition; the run relies on the on-disk transcript.
  *   - Stream — parse events from the harness's stream-json interleaved with the

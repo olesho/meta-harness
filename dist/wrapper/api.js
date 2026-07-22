@@ -9,7 +9,7 @@ export { ErrNone, ErrRateLimited, ErrAuth, ErrBilling, ErrModelNotFound, ErrCont
 export { StatusIdle, StatusFailed, StatusBlockedByCost, StatusRetryLater, StatusAPIError, StatusWaitingForInput, StatusStale, StatusInterrupted, StatusUnknown, StatusBinaryNotFound, } from "./internal/status.js";
 export { ErrInvalidConfig, ErrBinaryNotFound, isBinaryNotFound, validateConfig, } from "./internal/config.js";
 export { argsWithHarnessEffort, harnessSupportsEffort, isSupportedEffort, } from "./internal/effort.js";
-export { argsWithHarnessModel } from "./internal/mode.js";
+export { argsWithHarnessModel } from "./internal/model.js";
 // PTY supervision surface.
 export { start, run } from "./internal/run.js";
 export { Session, ClassifierFunc, classifyExit, EventChannel, } from "./internal/session.js";
