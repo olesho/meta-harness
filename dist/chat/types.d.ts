@@ -26,6 +26,16 @@ export interface Turn {
     /** Wait duration (ms) parsed from the harness error message; 0 when none. */
     retryAfter: number;
 }
+/**
+ * Canonical `Turn.reason` recorded when a turn produced no assistant output
+ * because the harness CLI is logged out / its login has expired (claude-code
+ * "Not logged in · Please run /login"; codex "401 Unauthorized" / "Not logged
+ * in"). The stable `auth_required:` prefix is a machine token consumers match to
+ * tell "renew the harness login" apart from a genuine task failure — instead of
+ * re-scraping the rendered screen themselves. Set only at a turn's terminal
+ * point when no clean reply was recoverable (see Conversation).
+ */
+export declare const ReasonAuthRequired = "auth_required: harness login expired or re-authentication required \u2014 renew the harness login";
 /** EventType discriminates the variants of a ConversationEvent. */
 export type EventType = "turn" | "input_request" | "input_resolved";
 export declare const EventTurn: EventType;

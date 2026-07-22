@@ -140,6 +140,25 @@ export class CodexAdapter extends GenericAdapter implements Adapter {
     const req = DetectInput(snap.text);
     if (req) {
       if (req.id !== this.lastInputID) {
+        // A different interstitial replaced the one we were tracking without an
+        // intervening dialog-free frame (e.g. the update notice giving way to a
+        // model-migration or notice screen). Resolve the previous one first so
+        // every InputRequested is balanced by an InputResolved and the chat
+        // layer's currentInput is not silently overwritten — which would drop
+        // the prior request's identity/kind (a client subscribed from the start
+        // would otherwise see the replacement's kind on the eventual resolve).
+        if (this.lastInputID !== "") {
+          const prev = this.lastInput ?? {
+            id: this.lastInputID,
+            kind: "",
+            prompt: "",
+          };
+          out.push({
+            kind: InputResolved,
+            reason: "codex: input resolved",
+            input: prev,
+          });
+        }
         this.lastInputID = req.id;
         this.lastInput = req;
         out.push({
@@ -286,6 +305,18 @@ const updateAnchor = "Update available!";
 const migrationAnchor = "Choose how you'd like Codex to proceed";
 const continueAnchor = "Press enter to continue";
 
+// signinWallRE identifies Codex's logged-out onboarding / sign-in screens. They
+// render "Press enter to continue" too, but they are an AUTH WALL — a first-run
+// sign-in wizard, not a dismissable interstitial. The chat layer's auth-required
+// path (onboardingWall / authRequired in ready.ts) already holds them as
+// not-ready and short-circuits Send. If DetectInput also classified them as a
+// codex_notice, the adapter would surface a spurious input_request AND a bare
+// Enter (KindNotice auto-dismiss) could pick the highlighted "Sign in with
+// ChatGPT" row and kick off a real sign-in. So DetectInput excludes them.
+// Anchors mirror codexOnboardingRE in ready.ts (kept in sync via
+// test/corpus/auth).
+const signinWallRE = /sign in with chatgpt|finish signing in via your browser/i;
+
 // approvalAnchors are the full-sentence questions codex renders at the top of a
 // genuine command / apply-patch approval dialog. Captured live from codex-cli
 // 0.144.4 (test/corpus/codex/approval-command, approval-patch). Full sentences,
@@ -335,6 +366,10 @@ export function DetectInput(text: string): InputRequest | null {
   //      this detection exists to kill.
   const approval = detectApproval(text);
   if (approval) return approval;
+  // The logged-out sign-in wall renders "Press enter to continue" but is an auth
+  // wall handled by the auth-required path — never a dismissable interstitial
+  // (see signinWallRE).
+  if (signinWallRE.test(text)) return null;
   if (text.includes(updateAnchor)) {
     const opts = parseMenuOptions(text);
     const req: InputRequest = {
@@ -447,14 +482,16 @@ export function AutoDismissKeys(
     case KindNotice:
       // A KindNotice is classified only when the screen shows the "Press enter
       // to continue" anchor and is neither an update notice nor a model
-      // migration (both are matched earlier in DetectInput and carry their own
-      // safe dismissal). Enter is the continuation codex itself advertises, so a
-      // bare CR clears the notice regardless of how many numbered body lines
-      // parseMenuOptions happened to extract — a multi-option notice with no
-      // safe-token menu row is exactly the case that previously surfaced and
-      // blocked the codex plan-critic on its first send. Genuine
-      // command-approval prompts are a different kind and are never classified as
-      // KindNotice, so they still surface and are not auto-answered.
+      // migration (both matched earlier in DetectInput with their own safe
+      // dismissal). The one real Codex "Press enter to continue" screen that IS
+      // an actionable menu — the logged-out sign-in wall — is excluded upstream
+      // in DetectInput (signinWallRE) and never reaches here, so what remains is
+      // an informational notice (e.g. the "What's new" / changelog screen). Enter
+      // is the continuation codex advertises, so a bare CR clears it regardless
+      // of how many numbered body lines parseMenuOptions extracted — the
+      // multi-option notice that previously surfaced and blocked the codex
+      // plan-critic on its first send. Genuine command-approval prompts are a
+      // different kind and are never classified as KindNotice.
       return [enc.encode("\r"), true];
     case KindModelMigration:
       return [enc.encode("\r"), true];

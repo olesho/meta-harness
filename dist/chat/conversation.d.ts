@@ -39,8 +39,24 @@ export interface Options {
     eventBuffer?: number;
     /** Pre-configures how blocking interactive prompts are resolved. */
     inputPolicy?: InputPolicy;
-    /** Turns off the built-in auto-dismissal of Codex startup interstitials. */
+    /**
+     * Turns off the built-in auto-dismissal of Codex's choice-free startup
+     * interstitials (model migration, menu-less "Press enter to continue"
+     * notices). The "Update available!" menu is NOT governed by this flag — it
+     * surfaces by default and is controlled by autoSkipCodexUpdateNotice.
+     */
     disableCodexAutoDismiss?: boolean;
+    /**
+     * Re-enables the built-in auto-Skip of Codex's "Update available!" menu. The
+     * zero value SURFACES that menu on events() (as a codex_update_notice
+     * input_request) so a client can choose Update / Skip; set true to have the
+     * chat layer transparently select "Skip" (never "Update now") without
+     * surfacing it — the safe default for headless/no-client callers (the
+     * one-shot run CLI, oneshot loop) that would otherwise wedge on the pending
+     * menu. Ignored when disableCodexAutoDismiss is set. An inputPolicy entry for
+     * codex_update_notice still takes precedence (it is consulted first).
+     */
+    autoSkipCodexUpdateNotice?: boolean;
     /** In-process resolver consulted when InputPolicy did not auto-answer. */
     onInputRequest?: (req: InputRequest) => [InputAnswer, boolean];
     /** Test-only idle-completion window override (ms). Zero = package default. */
@@ -273,6 +289,7 @@ export declare class Conversation {
     isClosed(): boolean;
     /** Transmit a user message; record the user turn and a pending assistant turn. */
     send(ctx: Context, text: string): Promise<string>;
+    private emitAuthRequiredTurn;
     /** The underlying wrapper session, for callers reaching past the chat API. */
     wrapper(): WrapperSession | undefined;
     /** Ask the harness to exit gracefully via its adapter-defined quit sequence. */
@@ -417,6 +434,8 @@ export declare class Conversation {
      * their only reply-capture mechanism.
      */
     private assistantText;
+    private cleanAssistantText;
+    private authRelabel;
     private adapterPromptNotAccepted;
     /**
      * The transcript-backed swallow override applies only to adapters that CAN
