@@ -34,19 +34,19 @@ suppresses injection. See §5.
 ## 2. Probe results
 
 **Instrument: `codex doctor --json`, not `/status`.** `/status` is a TUI interaction and cannot be
-automated into a test. `doctor --json` reports the *effective resolved* values under
+automated into a test. `doctor --json` reports the _effective resolved_ values under
 `checks["sandbox.helpers"].details` (`"approval policy"`, `"filesystem sandbox"`,
 `"network sandbox"`) and exits non-interactively. Exit codes prove nothing here: codex accepts
 unknown `-c` keys, and `--strict-config` does not catch them.
 
 **Environment: codex-cli 0.144.5, claude-code 2.1.217, macOS. Every row executed 2026-07-22.**
 
-| probe                                                                        | approval policy | filesystem sandbox |
-| ---------------------------------------------------------------------------- | --------------- | ------------------ |
-| baseline                                                                     | `OnRequest`     | restricted         |
-| `-c sandbox_mode="read-only" -c approval_policy="untrusted"`                 | `UnlessTrusted` | restricted         |
-| `-s danger-full-access -a never`                                             | `Never`         | unrestricted       |
-| `-s danger-full-access -a never -c sandbox_mode="read-only" -c approval_policy="untrusted"` | `Never` | unrestricted |
+| probe                                                                                       | approval policy | filesystem sandbox |
+| ------------------------------------------------------------------------------------------- | --------------- | ------------------ |
+| baseline                                                                                    | `OnRequest`     | restricted         |
+| `-c sandbox_mode="read-only" -c approval_policy="untrusted"`                                | `UnlessTrusted` | restricted         |
+| `-s danger-full-access -a never`                                                            | `Never`         | unrestricted       |
+| `-s danger-full-access -a never -c sandbox_mode="read-only" -c approval_policy="untrusted"` | `Never`         | unrestricted       |
 
 1. **Key names are correct.** `sandbox_mode` / `approval_policy` both take effect. The `-c` form is
    not broken — it is simply weaker.
@@ -55,7 +55,7 @@ unknown `-c` keys, and `--strict-config` does not catch them.
    `-c sandbox_mode="read-only" -c sandbox_mode="danger-full-access"` resolves to unrestricted,
    silently; `-s read-only -s danger-full-access` exits **2** with
    `error: the argument '--sandbox <SANDBOX_MODE>' cannot be used multiple times`.
-4. **Subcommand position is not a differentiator.** `codex -s … -a … doctor --json` *applies* the
+4. **Subcommand position is not a differentiator.** `codex -s … -a … doctor --json` _applies_ the
    values ahead of a subcommand — stronger evidence than MH-100's exit-0 `--help` probe.
    `argsWithHarnessPermissionMode`'s comment already records this as "SETTLED, do not re-derive"
    (probed twice on 2026-07-22, including `codex -s workspace-write -a on-request resume --help`),
@@ -74,7 +74,7 @@ turns findings 2 and 3 into a safety argument:
 
 - **Under `-c`,** any caller argv the guard fails to recognise wins **silently** — by last-wins
   (`-c` vs `-c`, finding 3) or by flag precedence (`-s` vs `-c`, finding 2). A guard miss produces
-  a guest running *above* the requested rung, with no error, no exit code, and nothing in the
+  a guest running _above_ the requested rung, with no error, no exit code, and nothing in the
   transcript.
 - **Under `-s`/`-a`,** the same guard miss either **hard-fails at exit 2** (a repeated `-s`) or
   **our injected flag beats the caller's `-c`** (finding 2, in our favour).
@@ -93,8 +93,8 @@ load-bearing.
 `$CODEX_HOME/<name>.config.toml` on top of the base user config"). The question was whether
 injecting a rung on top of a caller-supplied profile is ambiguous.
 
-The obvious instruments both fail: **`codex doctor` rejects `-p`** (*"--profile only applies to
-runtime commands and `codex mcp`…"*, exit 1), and **`codex sandbox` ignores both `-p` and `-s`**
+The obvious instruments both fail: **`codex doctor` rejects `-p`** (_"--profile only applies to
+runtime commands and `codex mcp`…"_, exit 1), and **`codex sandbox` ignores both `-p` and `-s`**
 (it honours only `-c`, so every combination blocks a write identically — a false negative, not a
 result). **`codex debug prompt-input` is the instrument**: it is on `-p`'s allowed-command list and
 renders the model-visible permissions block, which states the resolved `sandbox_mode` verbatim.
@@ -102,23 +102,23 @@ renders the model-visible permissions block, which states the resolved `sandbox_
 With `CODEX_HOME` pointed at a throwaway directory containing `wide.config.toml`
 (`sandbox_mode = "danger-full-access"`, `approval_policy = "never"`), on codex-cli 0.144.5:
 
-| argv                                       | resolved `sandbox_mode` | resolved approval |
-| ------------------------------------------ | ----------------------- | ----------------- |
-| `-p wide`                                  | `danger-full-access`    | `never`           |
-| `-s read-only -p wide`                     | `read-only`             | `never`           |
-| `-p wide -s read-only`                     | `read-only`             | `never`           |
-| `-c sandbox_mode="read-only" -p wide`      | `read-only`             | `never`           |
-| `-p wide -c sandbox_mode="read-only"`      | `read-only`             | `never`           |
-| `-s read-only -a untrusted -p wide`        | `read-only`             | not `never`       |
+| argv                                  | resolved `sandbox_mode` | resolved approval |
+| ------------------------------------- | ----------------------- | ----------------- |
+| `-p wide`                             | `danger-full-access`    | `never`           |
+| `-s read-only -p wide`                | `read-only`             | `never`           |
+| `-p wide -s read-only`                | `read-only`             | `never`           |
+| `-c sandbox_mode="read-only" -p wide` | `read-only`             | `never`           |
+| `-p wide -c sandbox_mode="read-only"` | `read-only`             | `never`           |
+| `-s read-only -a untrusted -p wide`   | `read-only`             | not `never`       |
 
 **Result: a flag or `-c` override beats the profile on the axis it sets, in either order — but the
 profile still supplies every axis you leave unset.**
 
 So `-s read-only -p wide` resolves to `read-only` plus the profile's `never`. That posture is
 **not a rung**: `(read-only, never)` appears nowhere in the forward map, and naming it `manual`
-(the ceiling for `read-only`) would *under-report the approval axis* — the one direction a safety
+(the ceiling for `read-only`) would _under-report the approval axis_ — the one direction a safety
 field must never fail in. The `-p` rule is therefore unconditional on `-p`'s presence, and does
-**not** get scoped to "`-p` present and no `-s`". The one exception is a *ceiling*, not a floor: if
+**not** get scoped to "`-p` present and no `-s`". The one exception is a _ceiling_, not a floor: if
 the sandbox axis resolves to `danger-full-access` (by flag or by `-c`), the posture is unrestricted
 whatever the profile adds, so the proof-of-unrestricted check reports `bypass` first.
 
@@ -127,7 +127,7 @@ whatever the profile adds, so the proof-of-unrestricted check reports `bypass` f
 > **Reject when argv proves the launch would be unrestricted; suppress-and-report-`""` when argv
 > makes the launch posture unknowable.**
 
-`--dangerously-bypass-approvals-and-sandbox` in argv is **proof**: the launch *is* unrestricted, so
+`--dangerously-bypass-approvals-and-sandbox` in argv is **proof**: the launch _is_ unrestricted, so
 pairing it with a restrictive rung is a contradiction, and validation says so. `-p wide` proves
 **nothing** — the posture lives in a TOML file the wrapper does not read, so there is no
 proposition to contradict. Suppressing injection and reporting `""` is the honest answer, and
@@ -135,16 +135,16 @@ proposition to contradict. Suppressing injection and reporting `""` is the hones
 non-bypass answer) is exactly the semantics required. The two treatments are not inconsistent —
 they are the two halves of one rule.
 
-*(An earlier revision also argued that rejecting `-p` "would break every caller with a legitimately
+_(An earlier revision also argued that rejecting `-p` "would break every caller with a legitimately
 restrictive profile". That argument is **dropped**: the guard only engages when a `PermissionMode`
 is also set, and that combination is brand new, so there are no such callers to break. The
-unknowability argument is the whole of it.)*
+unknowability argument is the whole of it.)_
 
 **Residual, honestly scoped.** The approval readout in the table above is definitive only for
 `never` — the prompt block prints "Approval policy is currently …" only in that case, so the
 approval-axis rows are inferred from the line's absence. The sandbox axis, which is the one that
 decides filesystem reach, is directly reported. Resolving the profile at launch time (via
-`codex debug prompt-input`) would let the guard *decide* rather than *report*, but that is a
+`codex debug prompt-input`) would let the guard _decide_ rather than _report_, but that is a
 subprocess call on the launch path and is not proposed. If a later codex release exposes approval
 in `doctor --json` under a `-p`-accepting command, tighten it.
 
@@ -152,17 +152,17 @@ in `doctor --json` under a `-p`-accepting command, tighten it.
 
 We **emit** only `-s`/`-a`. We **guard** considerably more:
 
-| harness | guarded (suppresses injection)                                                                                                                                                 | emitted                                      |
-| ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------- |
-| codex   | `-s`, `--sandbox`, `-a`, `--ask-for-approval`, `-p`, `--profile`, `--dangerously-bypass-approvals-and-sandbox`, **and** the config keys `sandbox_mode` / `approval_policy` (in all four `-c` spellings) | `-s <sandbox> [-a <policy>]`                 |
-| claude  | `--permission-mode`, `--dangerously-skip-permissions`, `--allow-dangerously-skip-permissions` — and **never `-p`**                                                              | `--permission-mode <value>`                  |
+| harness | guarded (suppresses injection)                                                                                                                                                                          | emitted                      |
+| ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------- |
+| codex   | `-s`, `--sandbox`, `-a`, `--ask-for-approval`, `-p`, `--profile`, `--dangerously-bypass-approvals-and-sandbox`, **and** the config keys `sandbox_mode` / `approval_policy` (in all four `-c` spellings) | `-s <sandbox> [-a <policy>]` |
+| claude  | `--permission-mode`, `--dangerously-skip-permissions`, `--allow-dangerously-skip-permissions` — and **never `-p`**                                                                                      | `--permission-mode <value>`  |
 
 Two things a future reader must not misread:
 
 - **The `-c` keys stay in the codex guard even though we never emit `-c`.** They are there because
-  §2 finding 3 says a caller's `-c` is *silently* last-wins against another `-c` and *loses* to our
+  §2 finding 3 says a caller's `-c` is _silently_ last-wins against another `-c` and _loses_ to our
   `-s` — so the danger is not that our injection is overridden, it is that a caller who wrote
-  `-c sandbox_mode="danger-full-access"` gets a rung *reported* that the launch does not deliver.
+  `-c sandbox_mode="danger-full-access"` gets a rung _reported_ that the launch does not deliver.
   **Dropping the `-c` keys from the guard re-opens exactly the fail-open the probes describe.**
   This is not dead code and not an oversight; do not tidy it away for symmetry with the emit side.
 - **`-p` is guarded on codex and must never be guarded on claude.** On claude, `-p` is `--print` —
@@ -173,7 +173,7 @@ Two things a future reader must not misread:
 ## 6. The standing three-site rule
 
 > **Anything that suppresses injection must also (i) be in the injection guard, (ii) be readable by
-> `EffectiveLaunchRung` — resolving to a rung when argv *proves* one, and to `""` when it does not
+> `EffectiveLaunchRung` — resolving to a rung when argv _proves_ one, and to `""` when it does not
 > — and (iii) have corpus rows.**
 
 Skipping (ii) is what converts a guard into a fail-open: injection stops, the knob arm still
@@ -181,21 +181,21 @@ answers from the requested `mode`, and the wire reports a rung the launch never 
 HARNESS-WRAPPER-101 that value goes out on `StructuredTurnResult.permission_mode`, so this is a
 **wire-contract** defect an orchestrator can read, not an internal inconsistency. Every guard entry
 in §5 is a three-site change; adding a new one without site (ii) is worse than not adding it,
-because it converts a *loud* wrong launch into a *quiet* wrong report.
+because it converts a _loud_ wrong launch into a _quiet_ wrong report.
 
 ## 7. Rung ordering and vocabulary: the canonical rung is `ask`
 
 **The canonical rung identifier is `ask`, not `acceptEdits`.** `PermissionRungs()` returns
 `{plan, manual, ask, auto, bypass}`, in that order.
 
-**`ask` sits *above* `manual`**, because `ask` auto-accepts edits while `manual` prompts for them.
+**`ask` sits _above_ `manual`**, because `ask` auto-accepts edits while `manual` prompts for them.
 The name reads backwards — that is the readability concern MH-99 raised when it proposed renaming
 the rung to `acceptEdits` — but the rename is the expensive answer, because `ask` is already frozen
 on a merged wire contract:
 
 - `pkg/wrapper/permission_rungs_test.go:9` and `:22` assert that exact ordered slice;
 - `crossrepo/meta-harness/HARNESS-WRAPPER-101-structured-result-permission-mode.md` freezes
-  `StructuredTurnResult.permission_mode`'s value space as *canonical rungs only* —
+  `StructuredTurnResult.permission_mode`'s value space as _canonical rungs only_ —
   `plan | manual | ask | auto | bypass` — with "a native spelling is **never** emitted;
   `acceptEdits` is reported as `ask`";
 - `pkg/turnproto/protocol.go:105-107` repeats it;
@@ -206,7 +206,7 @@ crossrepo note, to change a name **no user ever sees** — callers write `accept
 axis either way, because that is what argv gets.
 
 **`acceptEdits` therefore remains two things:** (i) claude's native `--permission-mode` value, which
-*both* implementations emit for the `ask` rung, and (ii) an accepted *input* spelling that
+_both_ implementations emit for the `ask` rung, and (ii) an accepted _input_ spelling that
 normalises to `ask`. **No Go rename, no alias machinery, no `canonicalRung()` shim, no wire churn.**
 MH-99's readability concern is answered by this paragraph — documenting the ordering next to the
 rung list — rather than by a rename.
@@ -223,21 +223,21 @@ claude-code 2.1.217**. Three statements settle what that means for this repo:
    because the bump must land together with the corpus captures and the `discover()` expectations
    that ride on those pins. 132 states the floor and points at 102; it does not duplicate the bump.
 2. **harness-wrapper is already at 0.144.5 / 2.1.217, and its cross-repo checker is expected red
-   until 102 lands.** HARNESS-WRAPPER-109 bumped `pkg/versions/versions.json` *and* hand-edited the
+   until 102 lands.** HARNESS-WRAPPER-109 bumped `pkg/versions/versions.json` _and_ hand-edited the
    vendored snapshot `pkg/versions/testdata/meta-harness-versions.json` to match, so the hermetic
    parity test passes while `scripts/sync-versions.sh --check` — a dev-machine tool, never run by
    `make test` — reports drift against this repo. HW-109's README calls this "expected red on a dev
    machine until the paired meta-harness bump lands." **Recorded here so nobody "fixes" it by
    reverting the Go pins.**
 3. **Below the floor, the extra guard entries are inert, not wrong.** The guard is
-   **presence-based**: it suppresses injection only for a flag or key the *caller* actually wrote.
+   **presence-based**: it suppresses injection only for a flag or key the _caller_ actually wrote.
    A caller cannot usefully write a flag the installed binary rejects — the harness itself rejects
    the argv. So guarding `--allow-dangerously-skip-permissions` or `-p` against an older binary
-   costs nothing, while *not* guarding a flag the installed binary does accept is a fail-open. The
+   costs nothing, while _not_ guarding a flag the installed binary does accept is a fail-open. The
    guard is written for the newest observed version by design, and this asymmetry is the reason.
 
 **The live `codex doctor --json` gate lives on the Go side.** A `CONFORMANCE=1`-gated verification
-added *here* would sit in the same file as `test/conformance.test.ts`'s version-drift assertion,
+added _here_ would sit in the same file as `test/conformance.test.ts`'s version-drift assertion,
 which is pinned to 0.142.5 / 2.1.201, and would fail for an unrelated reason. harness-wrapper's
 pins already match the probed versions, so the gate goes there.
 
@@ -247,7 +247,7 @@ pins already match the probed versions, so the gate goes there.
 `{harness, rung, caller_args}` row.**
 
 This is deliberately stricter than the bar `crossrepo/meta-harness/HARNESS-WRAPPER-78-sandbox-defaults-argv.md`
-records for `--sandbox-defaults`, where argv parity is *"up to position, not byte-equality"* (Go
+records for `--sandbox-defaults`, where argv parity is _"up to position, not byte-equality"_ (Go
 appends the claude token after the caller's args; meta-harness prepends it, and claude parses those
 flags position-independently). **Those HW-78 divergences stay open and are out of scope here** —
 this note neither closes them nor loosens itself to match them.
@@ -263,8 +263,8 @@ Permission-mode argv gets the stricter bar for two reasons:
   resolves differently depending on where it sits relative to the caller's own tokens. For a
   containment knob, a "cosmetic" position difference is not cosmetic.
 
-**Error *text* parity is explicitly not claimed.** The two implementations return their own
-`ErrInvalidConfig` message wording; only the accept/reject *outcome*, the emitted argv, and the
+**Error _text_ parity is explicitly not claimed.** The two implementations return their own
+`ErrInvalidConfig` message wording; only the accept/reject _outcome_, the emitted argv, and the
 `effective_rung` are held to parity.
 
 ---
@@ -274,7 +274,7 @@ Permission-mode argv gets the stricter bar for two reasons:
 META-HARNESS-100 is `blocked` and unimplemented; the following are **description amendments, not
 rework**, and **MH-100 must not be implemented before they land**.
 
-*In META-HARNESS-100:* (1) mapping-table codex column → `-s <sandbox> [-a <policy>]` for all five
+_In META-HARNESS-100:_ (1) mapping-table codex column → `-s <sandbox> [-a <policy>]` for all five
 rungs; (2) the "Why `-c` and not `-s`/`-a` on codex (A2)" section → a pointer to §2 above, keeping
 the `-c` keys documented as the caller-passable equivalent spelling that suppresses injection;
 (3) mapping-table rung column `acceptEdits` → `ask`, with the "Two renames from the earlier draft"
@@ -285,7 +285,7 @@ spelling as if it were canonical; (5) the "Native spellings" codex bullet invert
 single-axis arm added to item 1's `argsWithHarnessPermissionMode` spec; (6) item 2's codex guard
 list gains `-p`, `--profile`.
 
-*In META-HARNESS-99:* (7) mapping-table rung column `acceptEdits` → `ask`, with the "Changes from
+_In META-HARNESS-99:_ (7) mapping-table rung column `acceptEdits` → `ask`, with the "Changes from
 the first draft" bullet inverted for the reason in §7. MH-99's plan-critic "row J" recommended the
 same rename but lives in a **comment** — a historical record, not rewritten; the supersession is
 noted in the description instead.
