@@ -7,3 +7,10 @@ node_modules/
 .harness/lock
 .harness/txn/
 .harness/session-*
+
+# This is a pnpm repo (pnpm-lock.yaml). The orche release gate's portable
+# custom-gate path runs a plain `npm install` before ORCHE_RELEASE_GATE_CMD,
+# which synthesizes a package-lock.json here; left untracked it trips the
+# gate's own treeClean promotion guard ("gate green but working tree is not
+# clean"), so dev could never be promoted to main. Never commit it.
+package-lock.json
