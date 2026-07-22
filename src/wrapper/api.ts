@@ -55,6 +55,11 @@ export {
   isSupportedEffort,
 } from "./internal/effort.ts";
 export { argsWithHarnessModel } from "./internal/model.ts";
+export {
+  effectiveLaunchRung,
+  morePermissive,
+  permissionRungs,
+} from "./internal/permissionrungs.ts";
 
 // PTY supervision surface.
 export { start, run, type RunContext } from "./internal/run.ts";

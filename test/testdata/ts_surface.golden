@@ -37,10 +37,13 @@ wrapper/index.ts
   argsWithHarnessModel: function
   classifyExit: function
   classifyOutput: function
+  effectiveLaunchRung: function
   errorClassString: function
   harnessSupportsEffort: function
   isBinaryNotFound: function
   isSupportedEffort: function
+  morePermissive: function
+  permissionRungs: function
   run: function
   start: function
   trace: object{Discard,newLogAdapter,newWriterEmitter}
