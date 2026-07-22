@@ -12,15 +12,16 @@ interactive.
 
 The client-surfaced `kind` values, and which harness produces each:
 
-| `kind`            | Prompt                                                                                                 | Surfaced by |
-| ----------------- | ------------------------------------------------------------------------------------------------------ | ----------- |
-| `trust_prompt`    | Folder-trust / "bypass permissions" startup dialog.                                                    | Claude Code |
-| `menu_select`     | A numbered menu.                                                                                       | any         |
-| `confirm`         | A y/n confirmation.                                                                                    | any         |
-| `text_input`      | A free-text prompt (no `options`).                                                                     | any         |
-| `question`        | A mid-turn [clarifying question](#clarifying-questions-question--question_review) (`AskUserQuestion`). | Claude Code |
-| `question_review` | The Submit/Cancel confirmation ending a multi-question / multi-select dialog.                          | Claude Code |
-| `approval_prompt` | A mid-turn [command / apply-patch approval](#approval-prompts-approval_prompt).                        | Codex       |
+| `kind`               | Prompt                                                                                                     | Surfaced by |
+| -------------------- | ---------------------------------------------------------------------------------------------------------- | ----------- |
+| `trust_prompt`       | Folder-trust / "bypass permissions" startup dialog.                                                        | Claude Code |
+| `menu_select`        | A numbered menu.                                                                                           | any         |
+| `confirm`            | A y/n confirmation.                                                                                        | any         |
+| `text_input`         | A free-text prompt (no `options`).                                                                         | any         |
+| `question`           | A mid-turn [clarifying question](#clarifying-questions-question--question_review) (`AskUserQuestion`).     | Claude Code |
+| `question_review`    | The Submit/Cancel confirmation ending a multi-question / multi-select dialog.                              | Claude Code |
+| `approval_prompt`    | A mid-turn [command / apply-patch approval](#approval-prompts-approval_prompt).                            | Codex       |
+| `permissions_prompt` | The `/permissions` ["Update Model Permissions"](#the-permissions-dialog-permissions_prompt) preset picker. | Codex       |
 
 Codex's startup interstitials ("Update available!", model migration, "Press enter to
 continue") are auto-dismissed on the ladder's first rung and never surface as kinds.
@@ -259,6 +260,33 @@ dialog whose body happens to quote an interstitial phrase can never be auto-appr
 the dismiss keystrokes. Note the [one-shot loop](one-shot-turns.md) ships **no** policy
 for `approval_prompt` — an unanswered approval waits out the deadline (see the
 [one-shot caveat](../modules/oneshot.md#environment-helpers)).
+
+---
+
+## The permissions dialog (`permissions_prompt`)
+
+Codex's `/permissions` command opens an "Update Model Permissions" picker — a numbered
+menu of permission presets ("Ask for approval", "Approve for me", "Full Access", …),
+one of which is marked `(current)` in its label. It is a **blocking modal**: while it is
+up, the composer is gone, so a prompt sent in that window would be typed into the menu.
+The codex adapter surfaces it as kind `"permissions_prompt"` (the `prompt` is the header
+`"Update Model Permissions"`, `options` are the preset rows), and `readyForInput` holds
+sends until it clears.
+
+Two things differ from `approval_prompt`:
+
+- **It is never auto-dismissed.** Enter commits the highlighted preset to
+  `~/.codex/config.toml` — globally, for every later session — so there is no safe
+  keystroke. Detection runs _before_ the interstitial anchors precisely so the
+  auto-dismiss ladder can never bare-Enter it.
+- **Its options carry no `proceed`/`deny` aliases** (a preset is neither), so a policy
+  keyed on aliases cannot answer it and the dialog is surfaced to the client. Answer it
+  by explicit `optionID` (`"1"`, `"2"`, …), or back out of it yourself — the dialog has
+  no "go back" option row, only the ESC key.
+
+Note the highlighted row is the menu **cursor**, which moves with the arrow keys; the
+`(current)` suffix in a label marks the preset already in effect. They usually coincide
+when the dialog opens.
 
 ---
 

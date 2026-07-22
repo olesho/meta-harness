@@ -31,21 +31,21 @@ returns the lossy `Turn[]` view directly, not `Event[]` like the other two reade
 
 ### Capability detail (chat adapters)
 
-| Capability                                          |                    Claude Code                    |        Codex         |   pi    | OpenCode | generic |
-| --------------------------------------------------- | :-----------------------------------------------: | :------------------: | :-----: | :------: | :-----: |
-| Turn-complete from screen                           |                     ✓ marker                      |     ✓ (legacy)⁵      |    —    |    —     |    —    |
-| `BusyDetector`                                      |                         ✓                         |          —           |    ✓    |    —     |    —    |
-| `MessageExtractor`                                  |                         ✓                         |          —           |    —    |    —     |    —    |
-| `Quitter`                                           |                         ✓                         |          —           |    ✓    |    —     |    —    |
-| session id: from screen (`SessionIDExtractor`)      |                         —                         |          ✓           |    —    |    —     |    —    |
-| session id: from raw line (`RawSessionIDExtractor`) |                         ✓                         |          ✓           |    —    |    —     |    —    |
-| session id: prime (`SessionIDPrimer`)               |                         —                         |          ✓           |    —    |    —     |    —    |
-| `SessionInitializer` (mint id at launch)            |                         —                         |          —           |    ✓    |    —     |    —    |
-| `SessionResumer` (resume args)                      |                         ✓                         |          ✓           |    ✓    |    —     |    —    |
-| `SessionForkResumer`                                |                      no-fork                      |      ✓ (false)⁶      | no-fork |    —     |    —    |
-| `TranscriptReader`                                  |                         ✓                         |          ✓           |    ✓    |    —     |    —    |
-| Startup interstitial auto-dismiss                   |                         —                         |          ✓⁷          |    —    |    —     |    —    |
-| Input requests detected                             | ✓ `trust_prompt` · `question` · `question_review` | ✓ `approval_prompt`⁸ |    —    |    —     |    —    |
+| Capability                                          |                    Claude Code                    |                    Codex                    |   pi    | OpenCode | generic |
+| --------------------------------------------------- | :-----------------------------------------------: | :-----------------------------------------: | :-----: | :------: | :-----: |
+| Turn-complete from screen                           |                     ✓ marker                      |                 ✓ (legacy)⁵                 |    —    |    —     |    —    |
+| `BusyDetector`                                      |                         ✓                         |                      —                      |    ✓    |    —     |    —    |
+| `MessageExtractor`                                  |                         ✓                         |                      —                      |    —    |    —     |    —    |
+| `Quitter`                                           |                         ✓                         |                      —                      |    ✓    |    —     |    —    |
+| session id: from screen (`SessionIDExtractor`)      |                         —                         |                      ✓                      |    —    |    —     |    —    |
+| session id: from raw line (`RawSessionIDExtractor`) |                         ✓                         |                      ✓                      |    —    |    —     |    —    |
+| session id: prime (`SessionIDPrimer`)               |                         —                         |                      ✓                      |    —    |    —     |    —    |
+| `SessionInitializer` (mint id at launch)            |                         —                         |                      —                      |    ✓    |    —     |    —    |
+| `SessionResumer` (resume args)                      |                         ✓                         |                      ✓                      |    ✓    |    —     |    —    |
+| `SessionForkResumer`                                |                      no-fork                      |                 ✓ (false)⁶                  | no-fork |    —     |    —    |
+| `TranscriptReader`                                  |                         ✓                         |                      ✓                      |    ✓    |    —     |    —    |
+| Startup interstitial auto-dismiss                   |                         —                         |                     ✓⁷                      |    —    |    —     |    —    |
+| Input requests detected                             | ✓ `trust_prompt` · `question` · `question_review` | ✓ `approval_prompt` · `permissions_prompt`⁸ |    —    |    —     |    —    |
 
 ⁵ Codex ≤ 0.141 emitted a "Token usage:" footer chat could scrape; 0.142+ has no screen
 signal, so completion falls back to [status-driven mapping](#the-generic-fallback).
@@ -54,8 +54,11 @@ codex-cli 0.142.5, resume continues the _same_ id. ⁷ Codex's "Update available
 model-migration, and "Press enter to continue" interstitials are auto-dismissed at
 startup unless [`disableCodexAutoDismiss`](modules/chat.md#options) is set.
 ⁸ Codex's command / apply-patch approval dialogs surface as `approval_prompt`
-[input requests](guides/handling-input.md#approval-prompts-approval_prompt); its startup
-interstitials (footnote ⁷) are auto-dismissed rather than surfaced.
+[input requests](guides/handling-input.md#approval-prompts-approval_prompt), and its
+`/permissions` "Update Model Permissions" picker as
+[`permissions_prompt`](guides/handling-input.md#the-permissions-dialog-permissions_prompt);
+neither is ever auto-dismissed. Its startup interstitials (footnote ⁷) are auto-dismissed
+rather than surfaced.
 
 ---
 
@@ -120,6 +123,13 @@ Name `codex`, binary `codex`.
   phrase is never auto-dismissed (auto-approved) by mistake. The [one-shot
   loop](modules/oneshot.md) ships no policy for these — see its caveat. See
   [Guides › Handling input](guides/handling-input.md#approval-prompts-approval_prompt).
+- **The `/permissions` dialog.** The "Update Model Permissions" preset picker is
+  detected as a `permissions_prompt` input request and, like an approval, is checked
+  _before_ the interstitial anchors. It is **never** auto-dismissed: Enter commits the
+  highlighted preset to `~/.codex/config.toml` globally. Its preset rows carry no
+  `proceed`/`deny` aliases, so an alias-keyed policy cannot answer it either — it always
+  reaches the client. See [Guides ›
+  Handling input](guides/handling-input.md#the-permissions-dialog-permissions_prompt).
 - **Wrapper patterns.** API-error phrase hints ("at capacity" → 503, "high demand" →
   500, "usage limit"/"out of credits" → 429, "stream disconnected" → 0) plus
   cost/retry/prompt. No session-limit banner matcher.
