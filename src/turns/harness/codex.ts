@@ -333,6 +333,16 @@ export const KindNotice = "codex_notice";
 // string is pinned by the chat contract fixture (test/chat/codex_dismiss.test.ts)
 // and by orche's default handler contract — do not rename.
 export const KindApproval = "approval_prompt";
+// KindPermissions marks codex's /permissions "Update Model Permissions" picker.
+// Like KindApproval this exact string is part of the client contract — pinned by
+// test/chat/codex_dismiss.test.ts — do not rename.
+export const KindPermissions = "permissions_prompt";
+
+// permissionsAnchor is the /permissions dialog header (codex 0.144.x). Anchoring
+// on the HEADER, not the footer: the footer ("Press enter to confirm or esc to
+// go back") is assembled upstream from the template fragments " to confirm or " /
+// " to go back" with key names injected, so it is not matchable as a literal.
+const permissionsAnchor = "Update Model Permissions";
 
 // menuRE matches a Codex numbered menu row. Group 1 captures the "›" highlight
 // marker on the currently-selected row (undefined when absent); group 2 the
@@ -370,6 +380,15 @@ export function DetectInput(text: string): InputRequest | null {
   // wall handled by the auth-required path — never a dismissable interstitial
   // (see signinWallRE).
   if (signinWallRE.test(text)) return null;
+  // The /permissions picker is checked BEFORE updateAnchor / migration /
+  // continue for the same reason KindApproval is (safety, not style): those
+  // three branches auto-dismiss with a bare "\r" (see AutoDismissKeys), and
+  // Enter on this dialog silently COMMITS the highlighted preset — which codex
+  // persists globally to ~/.codex/config.toml. A permissions screen whose body
+  // happens to quote an interstitial anchor must therefore classify as
+  // permissions_prompt (never auto-dismissable), not as a notice.
+  const permissions = detectPermissions(text);
+  if (permissions) return permissions;
   if (text.includes(updateAnchor)) {
     const opts = parseMenuOptions(text);
     const req: InputRequest = {
@@ -460,6 +479,46 @@ function detectApproval(text: string): InputRequest | null {
   return req;
 }
 
+/**
+ * detectPermissions recognizes codex's /permissions "Update Model Permissions"
+ * dialog and returns the structured request, or null.
+ *
+ * Built on the detectApproval template, and strict for the same reason: once
+ * this surfaces, onWrapperStatus suppresses TurnComplete and ready.ts blocks
+ * sends, so a false positive deadlocks the turn. Beyond the header anchor it
+ * requires a real menu — at least two parsed rows and a live "›" highlight —
+ * and, as in detectApproval, parses rows from the text AFTER the anchor: codex
+ * renders scrollback above the dialog, so a past-prompt echo rendered as
+ * "› 1. …" can never sit inside that tail and lend a spurious highlight.
+ *
+ * Deliberately NOT gated on specific preset labels or on a row count of exactly
+ * three: the rendered set varies by build and config (0.144.5 also ships
+ * "Read Only" / "Default" / "Custom permissions" alongside "Ask for approval" /
+ * "Approve for me" / "Full Access").
+ *
+ * The active preset's label carries a "(current)" suffix (cleanLabel splits at
+ * the dialog's double-space column gutter, so it rides along in the label). That
+ * is NOT the same thing as `highlighted`: the highlight is the cursor and moves
+ * with the arrow keys, while "(current)" marks the preset already in effect.
+ */
+function detectPermissions(text: string): InputRequest | null {
+  const i = text.indexOf(permissionsAnchor);
+  if (i < 0) return null;
+  const opts = parseMenuOptions(text.slice(i + permissionsAnchor.length));
+  // A live menu, not a quoted header: presets always come as a choice of ≥2.
+  if (opts.length < 2) return null;
+  // A live "›" selector on one of the parsed rows.
+  if (!opts.some((o) => o.highlighted)) return null;
+  const req: InputRequest = {
+    id: "",
+    kind: KindPermissions,
+    prompt: permissionsAnchor,
+    options: opts,
+  };
+  req.id = inputID(req);
+  return req;
+}
+
 /** Reports whether the idle composer prompt is on screen (gate behind DetectInput). */
 export function PromptReady(text: string): boolean {
   return promptRE.test(text);
@@ -495,6 +554,12 @@ export function AutoDismissKeys(
       return [enc.encode("\r"), true];
     case KindModelMigration:
       return [enc.encode("\r"), true];
+    case KindPermissions:
+      // Never auto-dismissable: Enter commits the highlighted preset to
+      // ~/.codex/config.toml (global, and there is no "go back" option row).
+      // The `default` branch would already return this — the explicit case is a
+      // refactor guard so a future default change cannot make it dismissable.
+      return [null, false];
     default:
       return [null, false];
   }
