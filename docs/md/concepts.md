@@ -264,7 +264,8 @@ different for a new one.
 The client-surfaced `kind` vocabulary is `trust_prompt` (folder-trust / bypass dialog),
 `menu_select` (a numbered menu), `confirm` (a y/n confirmation), `text_input` (a
 free-text prompt), `question` / `question_review` (Claude Code's clarifying-question
-dialog, below), and `approval_prompt` (Codex's command / apply-patch approval dialog).
+dialog, below), `approval_prompt` (Codex's command / apply-patch approval dialog), and
+`permissions_prompt` (Codex's `/permissions` model-permissions picker).
 Codex's startup interstitials are auto-dismissed rather than surfaced, so they never
 reach a client as vocabulary.
 
@@ -282,6 +283,13 @@ silent hang, not a completed turn. See
 numbered menu whose options carry `proceed`/`deny` aliases, so a policy or client can
 approve or reject the action. See
 [Guides › Handling input](guides/handling-input.md#approval-prompts-approval_prompt).
+
+`"permissions_prompt"` carries Codex's `/permissions` **"Update Model Permissions"**
+picker: a numbered menu of permission presets, one marked `(current)`. Its rows carry no
+`proceed`/`deny` aliases (a preset is neither), and it is never auto-dismissed — Enter
+commits the highlighted preset to `~/.codex/config.toml` globally — so it always reaches
+the client, answerable only by explicit `optionID`. See
+[Guides › Handling input](guides/handling-input.md#the-permissions-dialog-permissions_prompt).
 
 ### Disposition & InputPolicy
 

@@ -113,4 +113,52 @@ describe("codex auto-dismiss", () => {
       expect(c.inputSurfaced).toBe(true);
     }
   });
+
+  test("never touches the /permissions dialog in any mode", () => {
+    // Enter (or any preset row) COMMITS a permission preset to
+    // ~/.codex/config.toml, globally — this request must only ever be answered
+    // by a human. The literal kind string is the client contract.
+    const permissions = (): TurnsInputRequest => ({
+      id: "perm-1",
+      kind: "permissions_prompt",
+      prompt: "Update Model Permissions",
+      options: [
+        {
+          id: "1",
+          alias: "",
+          label: "Ask for approval (current)",
+          keys: enc.encode("1\r"),
+          highlighted: true,
+        },
+        {
+          id: "2",
+          alias: "",
+          label: "Approve for me",
+          keys: enc.encode("2\r"),
+        },
+        { id: "3", alias: "", label: "Full Access", keys: enc.encode("3\r") },
+      ],
+    });
+    expect(permissions().kind).toBe(codex.KindPermissions);
+    for (const disable of [false, true]) {
+      for (const autoSkip of [false, true]) {
+        const rec = new KeyRecorder();
+        const c = newTestConv(
+          {
+            harness: "codex",
+            disableCodexAutoDismiss: disable,
+            autoSkipCodexUpdateNotice: autoSkip,
+          },
+          rec,
+        );
+        c.handleInputRequested(permissions());
+        expect(
+          rec.data.length,
+          `keys written with disable=${disable} autoSkip=${autoSkip}`,
+        ).toBe(0);
+        expect(c.inputSurfaced).toBe(true);
+        expect(c.currentInput?.kind).toBe(codex.KindPermissions);
+      }
+    }
+  });
 });

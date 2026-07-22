@@ -7,8 +7,19 @@ import {
   authRequired,
   usageLimitMessage,
 } from "../../src/chat/ready.ts";
+import { newScreen } from "../../src/screen/index.ts";
+import { corpusBytes } from "../turns/corpus.ts";
 
 const dec = new TextDecoder();
+
+/** Replays a codex corpus recording through the screen emulator to its text. */
+async function codexCorpusScreen(scenario: string): Promise<string> {
+  const bytes = corpusBytes("codex", scenario);
+  expect(bytes, `corpus recording codex/${scenario} is missing`).not.toBeNull();
+  const scr = newScreen(120, 40);
+  await scr.write(bytes!);
+  return scr.snapshot().text;
+}
 
 describe("submitKeyForHarness", () => {
   const csi13u = "\x1b[13u";
@@ -243,6 +254,56 @@ describe("readyForInput(codex)", () => {
   test("plain prose asking a yes/no question stays ready", () => {
     const prose = [
       "• All done. Would you like to run the tests?",
+      "",
+      "› ",
+    ].join("\n");
+    expect(readyForInput("codex", prose)).toBe(true);
+  });
+
+  // ── The /permissions dialog (META-HARNESS-104) ─────────────────────────────
+  //
+  // Same class as the approval dialogs: a "›"-highlighted menu row satisfies the
+  // codex composer regex, so before the fix readyForInput answered TRUE and a
+  // prompt sent while it was up got typed into the dialog's menu.
+
+  // The live 0.144.5 dialog (test/corpus/codex/permissions-dialog), trimmed to
+  // the rows the predicate keys on. The footer is NOT an anchor (it is assembled
+  // upstream from template fragments); the header is.
+  const permissionsDialog = [
+    "  Update Model Permissions",
+    "",
+    "› 1. Ask for approval (current)  Codex can read and edit files in the current workspace, and run",
+    "                                 commands. Approval is required to access the internet.",
+    "  2. Approve for me              Only ask for actions detected as potentially unsafe.",
+    "  3. Full Access                 Codex can edit files outside this workspace and access the",
+    "                                 internet without asking for approval.",
+    "",
+    "  Press enter to confirm or esc to go back",
+  ].join("\n");
+
+  test("permissions dialog not ready", () => {
+    expect(readyForInput("codex", permissionsDialog)).toBe(false);
+  });
+
+  test("corpus: permissions dialog not ready", async () => {
+    expect(
+      readyForInput("codex", await codexCorpusScreen("permissions-dialog")),
+    ).toBe(false);
+  });
+
+  test("ready again once the permissions dialog is dismissed", () => {
+    expect(readyForInput("codex", readyComposer)).toBe(true);
+  });
+
+  // The false-positive-hang guard, mirroring the approval one: the header is a
+  // short UI string an assistant reply can easily quote. A bare includes() would
+  // pin this screen not-ready forever — sends blocked, turn never completed.
+  test("idle reply quoting the permissions header without a highlighted row stays ready", () => {
+    const prose = [
+      '• Run /permissions to open the "Update Model Permissions" dialog. It lists:',
+      "    1. Ask for approval",
+      "    2. Approve for me",
+      "    3. Full Access",
       "",
       "› ",
     ].join("\n");

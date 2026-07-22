@@ -1,0 +1,8 @@
+{
+  "harness": "codex",
+  "binary_version": "0.144.5",
+  "recorded_at": "2026-07-22T16:17:00Z",
+  "cols": 120,
+  "rows": 40,
+  "notes": "Live codex-cli 0.144.5 /permissions model-permissions dialog. Anchor: the header 'Update Model Permissions' — the footer ('Press enter to confirm or esc to go back') is assembled upstream from template fragments with key names injected, so it is NOT a usable anchor. Menu: '› 1. Ask for approval (current)' (highlighted with the '›' marker; the '(current)' suffix marks the preset in effect, which is NOT the same as the highlight), '2. Approve for me', '3. Full Access'; each row carries a wrapped description in a second column separated by a double-space gutter, which cleanLabel trims off. Recorded from a ready composer after skipping the update notice; the dialog was backed out with ESC — Enter was never pressed, because it commits the highlighted preset to ~/.codex/config.toml."
+}

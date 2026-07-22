@@ -439,6 +439,181 @@ describe("codex approval prompts", () => {
   });
 });
 
+// ── The /permissions dialog (META-HARNESS-104) ───────────────────────────────
+
+// A hand-written permissions screen in the live corpus shape (header anchor,
+// "›"-highlighted numbered rows with a double-space column gutter before each
+// description, footer). Used for the gate/ordering pins that vary one element at
+// a time; the corpus recording pins the real thing.
+function permissionsScreen(
+  opts: { body?: string; menu?: string[] } = {},
+): string {
+  return [
+    "  Update Model Permissions",
+    "",
+    ...(opts.body ? ["  " + opts.body, ""] : []),
+    ...(opts.menu ?? [
+      "› 1. Ask for approval (current)  Codex can read and edit files in the current workspace, and run",
+      "                                 commands. Approval is required to access the internet.",
+      "  2. Approve for me              Only ask for actions detected as potentially unsafe.",
+      "  3. Full Access                 Codex can edit files outside this workspace.",
+    ]),
+    "",
+    "  Press enter to confirm or esc to go back",
+  ].join("\n");
+}
+
+describe("codex permissions dialog", () => {
+  test("corpus: /permissions model-permissions dialog", async () => {
+    const req = codex.DetectInput(await corpusScreen("permissions-dialog"));
+    expect(req).not.toBeNull();
+    expect(req!.kind).toBe(codex.KindPermissions);
+    expect(req!.kind).toBe("permissions_prompt"); // pinned by the client contract
+    // The HEADER is the anchor: the footer ("Press enter to confirm or esc to go
+    // back") is assembled upstream from template fragments and is not matchable.
+    expect(req!.prompt).toBe("Update Model Permissions");
+    expect(req!.id).not.toBe("");
+
+    const opts = req!.options!;
+    expect(opts.map((o) => o.id)).toEqual(["1", "2", "3"]);
+    expect(opts.map((o) => dec.decode(o.keys))).toEqual(["1\r", "2\r", "3\r"]);
+    // Only the live selector row carries the "›" highlight.
+    expect(opts.map((o) => o.highlighted === true)).toEqual([
+      true,
+      false,
+      false,
+    ]);
+    // cleanLabel splits at the dialog's double-space column gutter, so the
+    // preset labels survive without their wrapped descriptions — and the active
+    // preset's "(current)" suffix rides along. "(current)" is NOT the same thing
+    // as `highlighted`: the highlight is the cursor and moves with the arrow
+    // keys, "(current)" marks the preset already in effect.
+    expect(opts[0].label).toBe("Ask for approval (current)");
+    expect(opts[0].label.endsWith("(current)")).toBe(true);
+    expect(opts[1].label).toBe("Approve for me");
+    expect(opts[2].label).toBe("Full Access");
+  });
+
+  test("corpus: id is stable across a redraw", async () => {
+    const a = codex.DetectInput(await corpusScreen("permissions-dialog"))!;
+    const b = codex.DetectInput(await corpusScreen("permissions-dialog"))!;
+    expect(a.id).toBe(b.id);
+    // Distinct from the approval dialogs (drives onScreen's request diffing).
+    const approval = codex.DetectInput(await corpusScreen("approval-command"))!;
+    expect(a.id).not.toBe(approval.id);
+  });
+
+  test("is never auto-dismissed", async () => {
+    // Enter on this dialog COMMITS the highlighted preset to ~/.codex/config.toml
+    // (global). The chat-level half is pinned by test/chat/codex_dismiss.test.ts.
+    const req = codex.DetectInput(await corpusScreen("permissions-dialog"));
+    const [keys, ok] = codex.AutoDismissKeys(req);
+    expect(ok).toBe(false);
+    expect(keys).toBeNull();
+  });
+
+  test("synthetic permissions screen matches the corpus shape", () => {
+    const req = codex.DetectInput(permissionsScreen());
+    expect(req).not.toBeNull();
+    expect(req!.kind).toBe(codex.KindPermissions);
+    expect(req!.options!.map((o) => o.label)).toEqual([
+      "Ask for approval (current)",
+      "Approve for me",
+      "Full Access",
+    ]);
+  });
+
+  // ── Ordering pins: checked before every auto-dismissable interstitial ──────
+
+  test("permissions body quoting 'Press enter to continue' stays KindPermissions", () => {
+    const req = codex.DetectInput(
+      permissionsScreen({ body: "Press enter to continue" }),
+    );
+    expect(req).not.toBeNull();
+    expect(req!.kind).toBe(codex.KindPermissions);
+    expect(codex.AutoDismissKeys(req)[1]).toBe(false);
+  });
+
+  test("permissions body quoting 'Update available!' stays KindPermissions", () => {
+    // The updateAnchor branch return-nulls the whole function when its skip gate
+    // fails, which would swallow this dialog back into the blind spot. The live
+    // corpus screen exercises this for real: codex renders a persistent
+    // "✨ Update available!" banner box above the session.
+    const req = codex.DetectInput(
+      permissionsScreen({ body: "Update available! 1.0 -> 2.0" }),
+    );
+    expect(req).not.toBeNull();
+    expect(req!.kind).toBe(codex.KindPermissions);
+    expect(codex.AutoDismissKeys(req)[1]).toBe(false);
+  });
+
+  test("permissions body quoting the migration anchor stays KindPermissions", () => {
+    const req = codex.DetectInput(
+      permissionsScreen({ body: "Choose how you'd like Codex to proceed" }),
+    );
+    expect(req).not.toBeNull();
+    expect(req!.kind).toBe(codex.KindPermissions);
+  });
+
+  // ── The gate ──────────────────────────────────────────────────────────────
+
+  test("requires a '›' highlight on a parsed menu row", () => {
+    expect(
+      codex.DetectInput(
+        permissionsScreen({
+          menu: ["  1. Ask for approval", "  2. Approve for me"],
+        }),
+      ),
+    ).toBeNull();
+  });
+
+  test("requires a menu (a quoted header alone is not a dialog)", () => {
+    expect(
+      codex.DetectInput(
+        "• The /permissions command opens Update Model Permissions.\n\n› ",
+      ),
+    ).toBeNull();
+    // A single row is not a preset choice either.
+    expect(
+      codex.DetectInput(
+        permissionsScreen({ menu: ["› 1. Ask for approval (current)"] }),
+      ),
+    ).toBeNull();
+  });
+
+  test("requires the anchor", () => {
+    expect(
+      codex.DetectInput(
+        permissionsScreen().replace("Update Model Permissions", "Permissions"),
+      ),
+    ).toBeNull();
+  });
+
+  test("rows are parsed from the anchor tail, so a scrollback echo cannot spoof it", () => {
+    // codex renders past prompts as "› <text>" rows above the dialog, so a
+    // prompt beginning with a digit echoes as "› N. …". Prose quoting the header
+    // with no menu BELOW it must not borrow that echo's highlight.
+    const spoof = [
+      "› 4. Explain the permissions presets",
+      "",
+      '• Running /permissions opens "Update Model Permissions".',
+      "",
+      "› ",
+    ].join("\n");
+    expect(codex.DetectInput(spoof)).toBeNull();
+  });
+
+  test("does not perturb the pre-existing interstitials", () => {
+    // Regression: the new branch sits between signinWallRE and updateAnchor.
+    expect(codex.DetectInput(updateNoticeScreen)!.kind).toBe(
+      codex.KindUpdateNotice,
+    );
+    expect(codex.DetectInput(migrationScreen)!.kind).toBe(
+      codex.KindModelMigration,
+    );
+  });
+});
+
 describe("codex approval option aliases", () => {
   // aliasForLabel is module-private; drive it through DetectInput's parsed rows.
   function aliasesFor(menu: string[]): string[] {

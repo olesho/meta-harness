@@ -116,6 +116,7 @@ export declare const KindUpdateNotice = "codex_update_notice";
 export declare const KindModelMigration = "codex_model_migration";
 export declare const KindNotice = "codex_notice";
 export declare const KindApproval = "approval_prompt";
+export declare const KindPermissions = "permissions_prompt";
 /**
  * DetectInput recognizes a blocking startup interstitial in the rendered screen
  * text and returns the structured request, or null when none is present.

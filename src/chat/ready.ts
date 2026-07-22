@@ -43,6 +43,16 @@ const codexApprovalAnchors = [
   "Would you like to make the following edits?",
 ];
 
+// The /permissions "Update Model Permissions" dialog (codex 0.144.x). A
+// header-only anchor on purpose: the dialog's footer ("Press enter to confirm or
+// esc to go back") is assembled upstream from template fragments with key names
+// injected, so it is not matchable as a literal. The header is the stable string.
+const codexPermissionsAnchor = "Update Model Permissions";
+
+// codexDialogAnchors is the union consumed by codexBlockingDialog: the two
+// prose-like approval sentences plus the one non-prose permissions header.
+const codexDialogAnchors = [...codexApprovalAnchors, codexPermissionsAnchor];
+
 // promptRE matches the idle composer prompt indicator on its own line — the "›"
 // Codex prints at the start of the input box once it is ready for input.
 const codexPromptRE = /^[^\S\r\n]*›/m;
@@ -59,7 +69,8 @@ function codexBlockingInterstitial(text: string): boolean {
   );
 }
 
-// codexBlockingDialog gates a genuine approval dialog (command / apply-patch).
+// codexBlockingDialog gates a genuine modal menu dialog: a command /
+// apply-patch approval, or the /permissions "Update Model Permissions" picker.
 //
 // It diverges STRUCTURALLY from the bare-includes() codexBlockingInterstitial on
 // purpose: the interstitial anchors ("Update available!", …) are not prose-like,
@@ -70,13 +81,19 @@ function codexBlockingInterstitial(text: string): boolean {
 // never complete the turn (a silent hang). So this predicate additionally
 // requires a "›"-highlighted numbered menu row, which ordinary prose lacks.
 //
+// codexDialogAnchors now also holds one NON-prose UI header (the permissions
+// anchor), which a bare includes() would arguably be safe for — the highlight
+// conjunct is kept for it anyway: it costs nothing, keeps a single code path,
+// and preserves the invariant above uniformly (an assistant reply that merely
+// quotes the header must not pin the turn not-ready).
+//
 // The turns adapter (src/turns/harness/codex.ts) uses a strict per-row highlight
 // flag; ready.ts cannot reach its parsed options, so the screen-wide regex here
 // is acceptable — a scrollback-echo false positive additionally needs the anchor
 // text on the same idle screen, and its blast radius is one conservative
 // not-ready beat, not the detection deadlock the per-row flag guards against.
 function codexBlockingDialog(text: string): boolean {
-  if (!codexApprovalAnchors.some((a) => text.includes(a))) return false;
+  if (!codexDialogAnchors.some((a) => text.includes(a))) return false;
   return codexMenuHighlightRE.test(text);
 }
 
@@ -138,9 +155,9 @@ export function readyForInput(harness: string, text: string): boolean {
       // A blocking startup interstitial renders its own "›" highlight and looks
       // ready — treat it as not-ready so Send waits for the auto-dismiss.
       if (codexBlockingInterstitial(text)) return false;
-      // A genuine approval dialog (anchor + highlighted menu row) is likewise
-      // not-ready while it is up, even though its highlighted menu row satisfies
-      // codexPromptReady.
+      // A genuine modal dialog — approval, or the /permissions model-permissions
+      // picker (anchor + highlighted menu row) — is likewise not-ready while it
+      // is up, even though its highlighted menu row satisfies codexPromptReady.
       if (codexBlockingDialog(text)) return false;
       return codexPromptReady(text);
     case "pi":
