@@ -65,6 +65,20 @@ const rows = Number(flag("--rows", "40"));
 const settle = Number(flag("--settle", "900"));
 const readyTimeoutMs = Number(flag("--ready-timeout", "60000"));
 const candidatesArg = flag("--candidates", "\\x1b[Z,\\x1b[9;2u");
+// --status: after the ready dump and after every press, run the harness's
+// `/status` command (the SessionIDPrimer keystrokes: "/status" + CSI 13 u) and
+// dump the resulting box. That is how Codex's collaboration mode is read back
+// from an authoritative surface rather than from the composer's terse marker.
+const withStatus = argv.includes("--status");
+// --press-before-ready: write one press BEFORE waiting for readiness, to probe
+// whether a press landing in the boot window is swallowed. --boot-press-delay
+// places it inside that window (e.g. after the composer paints but while MCP
+// servers are still booting) rather than at t=0 before the TUI paints at all.
+const pressBeforeReady = argv.includes("--press-before-ready");
+const bootPressDelayMs = Number(flag("--boot-press-delay", "0"));
+// --boot-keys overrides the boot-window press encoding (defaults to the first
+// candidate, which is empty when --candidates is deliberately empty).
+const bootKeys = flag("--boot-keys", "").replaceAll("\\x1b", "\x1b");
 const dashDash = argv.indexOf("--");
 const extraArgs = dashDash >= 0 ? argv.slice(dashDash + 1) : [];
 
@@ -102,11 +116,17 @@ const pty = await PtyProcess.spawn({
 });
 
 let exited = false;
+// recording gates the bytes.raw tee. It is cleared before SIGTERM so the
+// recording ENDS BEFORE TEARDOWN, matching the discipline of the existing
+// permission-mode fixtures: on exit the harness emits the alt-screen restore
+// (ESC[?1049l) and pops the kitty keyboard protocol, and a stream ending with
+// those replays to a BLANK screen — useless as a fixture.
+let recording = true;
 pty.onExit(() => {
   exited = true;
 });
 pty.onData((d) => {
-  appendFileSync(bytesPath, d);
+  if (recording) appendFileSync(bytesPath, d);
   void screen.write(d);
 });
 
@@ -125,6 +145,49 @@ function dump(name: string): string {
   return text;
 }
 
+const log: Record<string, unknown>[] = [];
+
+/**
+ * Run `/status` and dump the resulting box.
+ *
+ * Deliberately NOT the single "/status\x1b[13u" burst primeSessionIDKeys sends:
+ * typing a slash command opens an autocomplete popup, and an Enter arriving in
+ * the same burst is consumed by the popup instead of submitting — the text then
+ * sits in the composer and swallows every subsequent keystroke, including the
+ * Shift+Tab presses this probe is measuring. So: type, let the popup settle,
+ * submit separately, then clear the composer (ESC, then Ctrl-U kill-line) so
+ * the next press lands on an empty composer.
+ */
+async function statusDump(name: string): Promise<string> {
+  writeKeys("/status", "status-type");
+  await sleep(settle);
+  writeKeys("\x1b[13u", "status-enter");
+  await sleep(settle * 2);
+  const text = dump(name);
+  writeKeys("\x1b", "esc");
+  await sleep(200);
+  writeKeys("\x15", "kill-line");
+  await sleep(300);
+  return text;
+}
+
+// Phase -1 — optional boot-window press, BEFORE readiness.
+if (pressBeforeReady) {
+  const keys = bootKeys || candidates[0] || "\x1b[Z";
+  if (bootPressDelayMs > 0) await sleep(bootPressDelayMs);
+  const atMs = Date.now() - startedAt;
+  dump("screen-boot-before-press.txt");
+  writeKeys(keys, "boot-press");
+  await sleep(settle);
+  dump("screen-boot-after-press.txt");
+  log.push({
+    phase: "boot-press",
+    keys: printable(enc.encode(keys)),
+    at_ms: atMs,
+  });
+  console.log(`boot-press ${printable(enc.encode(keys))} at ${atMs}ms`);
+}
+
 // Phase 0 — wait for the production readiness predicate (same as record-pty).
 const readyDeadline = startedAt + readyTimeoutMs;
 let ready = false;
@@ -138,8 +201,7 @@ while (Date.now() < readyDeadline && !exited) {
 console.log(`ready=${ready} exited=${exited} at ${Date.now() - startedAt}ms`);
 await sleep(settle);
 let prev = dump("screen-00-ready.txt");
-
-const log: Record<string, unknown>[] = [];
+if (withStatus) prev = await statusDump("screen-00-ready-status.txt");
 
 // Phase 1 — which candidate encoding does the harness actually react to?
 let working = "";
@@ -160,10 +222,12 @@ if (working) {
   for (let i = 0; i < presses; i++) {
     writeKeys(working, `press-${i + 1}`);
     await sleep(settle);
-    const text = dump(`screen-press-${String(i + 1).padStart(2, "0")}.txt`);
+    const n = String(i + 1).padStart(2, "0");
+    let text = dump(`screen-press-${n}.txt`);
     const changed = text !== prev;
     log.push({ phase: "press", n: i + 1, changed });
     console.log(`press ${i + 1} changed=${changed}`);
+    if (withStatus) text = await statusDump(`screen-press-${n}-status.txt`);
     prev = text;
   }
 } else {
@@ -190,6 +254,7 @@ writeFileSync(
   ) + "\n",
 );
 dump("screen-final.txt");
+recording = false; // everything past here is teardown — see the flag's comment.
 pty.kill("SIGTERM");
 await sleep(400);
 pty.kill("SIGKILL");
