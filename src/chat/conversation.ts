@@ -1113,6 +1113,14 @@ export class Conversation {
    * keystroke. (The zero-write guarantee is scoped to CYCLE keystrokes — the
    * probe is a write, and has to be.)
    *
+   * KNOWN AND CONTAINED, not fixed: a Shift+Tab landing inside codex's
+   * MCP-server boot window is SWALLOWED even though the `›` composer is painted
+   * and readyForInput() returns true (measured — test/corpus/codex/
+   * permission-mode-cycle-boot-window). The per-press `/status` confirm turns
+   * that into ErrPermissionModeStalled ("the permission axis did not change
+   * after press 1"), never a silent wrong mode. Holding the first press until
+   * that window closes is follow-up work, not this method's.
+   *
    * A successful codex call returns 102's reading UNCHANGED IN SHAPE:
    * `collaboration === target`, with `observed` still reporting the LAUNCH
    * permissions rung. Per META-HARNESS-99 codex's canonical `plan` rung is
