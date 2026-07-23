@@ -46,9 +46,38 @@ export class CodexReader {
     locateLatestSession(workingDir) {
         return locateLatestSession(this.resolveRoot(), workingDir);
     }
+    /**
+     * resolveRoot — explicit sessionsRoot → $CODEX_HOME/sessions → ~/.codex/sessions.
+     *
+     * The CODEX_HOME rung exists because codex's session log moves with an
+     * ISOLATED CODEX_HOME (the containment mechanism behind the "Approve for me"
+     * permission preset): without it a run under an isolated home silently reads
+     * the user's global root and reports an empty transcript with null usage.
+     *
+     * It is what makes src/cli/structured-runner.ts's module-level readTranscript
+     * / readUsage correct — they construct `new CodexReader()` with NO root. That
+     * is COMPLETE for the one-shot CLI path by construction (re-verified against
+     * the current code): the runner's only env source is
+     * `cleanEnv(buildGuestEnv(process.env, …))`, and neither step can introduce a
+     * key — buildGuestEnv forwards the host env verbatim (it only ever overwrites
+     * IS_SANDBOX) and cleanEnv merely drops CLAUDECODE / CLAUDE_CODE_*. So any
+     * CODEX_HOME that reaches the child is by definition also in the runner's own
+     * environment, where this fallback sees it.
+     *
+     * DOCUMENTED LIMIT: an isolated home supplied only through `Options.env` —
+     * i.e. never exported into the host process — is invisible here, because
+     * readTranscript / readUsage take no root parameter. Such a run reads the
+     * default root and returns an empty transcript. Widening those exported
+     * signatures is deliberately out of scope; callers that isolate via
+     * Options.env should construct CodexReader with an explicit sessionsRoot (the
+     * route CodexAdapter takes).
+     */
     resolveRoot() {
         if (this.sessionsRoot !== "")
             return this.sessionsRoot;
+        const home = process.env.CODEX_HOME;
+        if (home !== undefined && home !== "")
+            return path.join(home, "sessions");
         return path.join(homedir(), ".codex", "sessions");
     }
     // locate scans the sessions root for a file whose name ends with the session

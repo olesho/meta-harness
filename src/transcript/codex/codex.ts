@@ -64,10 +64,13 @@ export class CodexReader {
    *
    * It is what makes src/cli/structured-runner.ts's module-level readTranscript
    * / readUsage correct — they construct `new CodexReader()` with NO root. That
-   * is COMPLETE for the one-shot CLI path by construction: buildGuestEnv
-   * (structured-runner.ts) derives the guest env from the runner's own
-   * process.env verbatim, so any CODEX_HOME that reaches the child is by
-   * definition also in the runner's environment, where this fallback sees it.
+   * is COMPLETE for the one-shot CLI path by construction (re-verified against
+   * the current code): the runner's only env source is
+   * `cleanEnv(buildGuestEnv(process.env, …))`, and neither step can introduce a
+   * key — buildGuestEnv forwards the host env verbatim (it only ever overwrites
+   * IS_SANDBOX) and cleanEnv merely drops CLAUDECODE / CLAUDE_CODE_*. So any
+   * CODEX_HOME that reaches the child is by definition also in the runner's own
+   * environment, where this fallback sees it.
    *
    * DOCUMENTED LIMIT: an isolated home supplied only through `Options.env` —
    * i.e. never exported into the host process — is invisible here, because
