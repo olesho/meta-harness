@@ -7,7 +7,8 @@
 // against genuine chat behavior without spawning a PTY-backed harness.
 
 import { afterEach, describe, expect, test } from "vitest";
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { createServer, type Server as HTTPServer } from "node:http";
@@ -836,6 +837,291 @@ describe("/v1/turns (one-shot RunTurn over a real pty + fake harness)", () => {
     );
     expect(hist.status).toBe(200);
     expect(Array.isArray(hist.json.turns)).toBe(true);
+
+    const del = await req(base, "DELETE", `/v1/conversations/${open.json.id}`);
+    expect(del.status).toBe(204);
+  }, 30_000);
+});
+
+// ── permission_mode / effort on both request bodies (META-HARNESS-101) ───────
+//
+// The request wire has NO corpus comparator (test/corpus/wire/ carries response
+// surfaces only), so every guarantee here is hand-written or it does not exist.
+// Three layers, each catching something the others cannot:
+//
+//   1. the opener SPY — the only proof of the omitted / "" / value distinction,
+//      since `permissionMode: body.permission_mode` always SETS the key;
+//   2. the argv dump over a real pty — the only proof the value survives the two
+//      hand-enumerated, non-spread literals downstream (runTurn's Open call and
+//      openWithSession's wrapper cfg). A rename there compiles, passes the spy,
+//      and drops the flag on the floor;
+//   3. the 400 guards — no pty, no opener, deterministic.
+//
+// Every /v1/conversations body uses "claude-code", never "claude": resolveAdapter
+// has no "claude" case, so the bare spelling is an ErrUnknownHarness 400 on the
+// open route (pre-existing, unrelated to this feature). /v1/turns takes "claude"
+// because turnHarnessName maps it.
+describe("permission_mode (POST /v1/conversations + POST /v1/turns)", () => {
+  /** A server whose opener records the Options literal it was handed. */
+  function spyStart(): Promise<
+    Live & { seen: () => Record<string, unknown>[] }
+  > {
+    const calls: Record<string, unknown>[] = [];
+    return start((opts: unknown) => {
+      calls.push(opts as Record<string, unknown>);
+      return Promise.resolve(new FakeConversation());
+    }).then((live) => ({ ...live, seen: () => calls }));
+  }
+
+  function argvPath(): string {
+    return join(mkdtempSync(join(tmpdir(), "gw-argv-")), "argv.json");
+  }
+
+  /**
+   * Read the argv dump, waiting for it to appear. The fake harness writes it as
+   * its FIRST act, but that is still a freshly spawned node process: POST
+   * /v1/conversations answers 201 as soon as Open returns, which can beat the
+   * child to its own first line. Poll rather than sleep so the fast path stays
+   * fast and a genuine "never launched" failure still fails, on the timeout.
+   */
+  async function readArgv(path: string): Promise<string[]> {
+    const deadline = Date.now() + 10_000;
+    for (;;) {
+      try {
+        return JSON.parse(readFileSync(path, "utf8")) as string[];
+      } catch (err) {
+        if (Date.now() >= deadline) throw err;
+        await new Promise((r) => setTimeout(r, 25));
+      }
+    }
+  }
+
+  /**
+   * Assert `flag` appears exactly `count` times and each occurrence is followed
+   * by `value`. Adjacency matters: run.ts prepends effort/model/permission args
+   * in front of the adapter's own `--session-id <uuid>` prefix, so several
+   * tokens coexist and a bare `toContain` pair would pass on a mis-paired argv.
+   */
+  function expectFlag(
+    argv: string[],
+    flag: string,
+    value: string,
+    count = 1,
+  ): void {
+    const at = argv.flatMap((a, i) => (a === flag ? [i] : []));
+    expect(at.length).toBe(count);
+    for (const i of at) expect(argv[i + 1]).toBe(value);
+  }
+
+  // ── The spy: omitted vs "" vs a real rung ──────────────────────────────────
+
+  test("opener sees permissionMode undefined / '' / 'plan' verbatim", async () => {
+    const { base, seen } = await spyStart();
+    const bodies = [
+      {},
+      { permission_mode: "" },
+      { permission_mode: "plan" },
+    ] as const;
+    for (const extra of bodies) {
+      const r = await req(base, "POST", "/v1/conversations", {
+        harness: "claude-code",
+        binary_path: "/b",
+        ...extra,
+      });
+      expect(r.status).toBe(201);
+    }
+    const calls = seen();
+    expect(calls.length).toBe(3);
+    // Assert the VALUE, not key-absence: the handler always sets the key.
+    expect(calls[0].permissionMode).toBeUndefined();
+    expect(calls[1].permissionMode).toBe("");
+    expect(calls[2].permissionMode).toBe("plan");
+  });
+
+  test("codex + plan is ACCEPTED on the open route (201, not 400)", async () => {
+    // On /v1/conversations this rung is fully usable: the conversation is
+    // registered, so an approval_prompt raised by approval_policy=untrusted
+    // surfaces on SSE and a client answers it via .../input. (The same body on
+    // /v1/turns is deliberately NOT asserted here — see the RunTurnRequestBody
+    // doc comment: unattended, it can legitimately end 408/504.)
+    const { base, seen } = await spyStart();
+    const r = await req(base, "POST", "/v1/conversations", {
+      harness: "codex",
+      binary_path: "/b",
+      permission_mode: "plan",
+    });
+    expect(r.status).toBe(201);
+    expect(seen()[0].permissionMode).toBe("plan");
+  });
+
+  // ── The 400 guards (no pty, no opener) ─────────────────────────────────────
+
+  test("/v1/turns rejects an unsupported value and an unsupported harness", async () => {
+    const { base } = await start();
+    // `prompt` is mandatory in these bodies or the pre-existing "prompt is
+    // required" guard fires first and the test asserts nothing.
+    const bad = await req(base, "POST", "/v1/turns", {
+      harness: "claude",
+      binary_path: "/b",
+      prompt: "p",
+      permission_mode: "ultra",
+    });
+    expect(bad.status).toBe(400);
+    expect(bad.json.code).toBe("invalid_options");
+    expect(bad.json.error).toMatch(/permission_mode ultra/);
+
+    const wrongHarness = await req(base, "POST", "/v1/turns", {
+      harness: "opencode",
+      binary_path: "/b",
+      prompt: "p",
+      permission_mode: "plan",
+    });
+    expect(wrongHarness.status).toBe(400);
+    expect(wrongHarness.json.code).toBe("invalid_options");
+    expect(wrongHarness.json.error).toMatch(/permission_mode/);
+    expect(wrongHarness.json.error).toMatch(/opencode/);
+  });
+
+  test("/v1/conversations rejects both, BEFORE calling the opener", async () => {
+    const { base, seen } = await spyStart();
+    const bad = await req(base, "POST", "/v1/conversations", {
+      harness: "claude-code",
+      binary_path: "/b",
+      permission_mode: "ultra",
+    });
+    expect(bad.status).toBe(400);
+    expect(bad.json.code).toBe("invalid_options");
+    expect(bad.json.error).toMatch(/permission_mode ultra/);
+
+    const wrongHarness = await req(base, "POST", "/v1/conversations", {
+      harness: "opencode",
+      binary_path: "/b",
+      permission_mode: "plan",
+    });
+    expect(wrongHarness.status).toBe(400);
+    expect(wrongHarness.json.error).toMatch(/permission_mode/);
+    expect(wrongHarness.json.error).toMatch(/opencode/);
+    // The guard runs BEFORE the spawn — that is what makes it a 400 and not a
+    // 500 out of validateConfig.
+    expect(seen().length).toBe(0);
+  });
+
+  test("permission_mode '' skips the guard entirely (no 400)", async () => {
+    const { base } = await start();
+    // "opencode" supports no rung at all, so an empty value would 400 if the
+    // guard treated "" as a value rather than as unset.
+    const r = await req(base, "POST", "/v1/turns", {
+      harness: "opencode",
+      binary_path: "/b",
+      prompt: "p",
+      permission_mode: "",
+    });
+    expect(r.status).not.toBe(400);
+  });
+
+  // ── The adjacent effort guard: previously an opaque 500 ────────────────────
+
+  test("a bad effort is now 400 invalid_options on both routes", async () => {
+    const { base, seen } = await spyStart();
+    const open = await req(base, "POST", "/v1/conversations", {
+      harness: "claude-code",
+      binary_path: "/b",
+      effort: "ultra",
+    });
+    expect(open.status).toBe(400);
+    expect(open.json.code).toBe("invalid_options");
+    expect(open.json.error).toMatch(/effort ultra/);
+    expect(seen().length).toBe(0);
+
+    const turn = await req(base, "POST", "/v1/turns", {
+      harness: "claude",
+      binary_path: "/b",
+      prompt: "p",
+      effort: "ultra",
+    });
+    expect(turn.status).toBe(400);
+    expect(turn.json.code).toBe("invalid_options");
+    expect(turn.json.error).toMatch(/effort ultra/);
+  });
+
+  test("an EMPTY harness still gets the honest presence error, not an effort one", async () => {
+    // Pins openConv's single shared `if (h)` skip. Without it this would 400
+    // with "effort is not supported for harness " — right status, wrong field,
+    // trailing empty name — instead of Open's own ErrInvalidOptions.
+    const { base } = await start();
+    const r = await req(base, "POST", "/v1/conversations", { effort: "high" });
+    expect(r.status).toBe(400);
+    expect(r.json.code).toBe("invalid_options");
+    expect(r.json.error).toMatch(/Harness and BinaryPath are required/);
+    expect(r.json.error).not.toMatch(/effort/);
+  });
+
+  // ── End-to-end argv: the only proof the value reaches the harness ──────────
+
+  test("/v1/turns: permission_mode 'plan' reaches the launch argv", async () => {
+    const script = New("claude-code")
+      .Idle()
+      .AwaitSubmit()
+      .Working(30, "Working")
+      .Reply(40, "ok", "Baked", "1s")
+      .StayAliveUntilStopped()
+      .Build();
+    const argvOut = argvPath();
+    const { base } = await start();
+    const r = await req(base, "POST", "/v1/turns", {
+      harness: "claude",
+      binary_path: fakeHarnessBin,
+      env: fakeLaunchEnv(script, argvOut),
+      prompt: "pin the rung",
+      permission_mode: "plan",
+    });
+    expect(r.status).toBe(200);
+    const argv = await readArgv(argvOut);
+    expectFlag(argv, "--permission-mode", "plan");
+  }, 30_000);
+
+  test("/v1/turns: an explicit --permission-mode in args WINS", async () => {
+    // The wrapper's all-or-nothing precedence rule, pinned at the wire level:
+    // the request is ACCEPTED (not 400) and the wire field injects nothing.
+    const script = New("claude-code")
+      .Idle()
+      .AwaitSubmit()
+      .Working(30, "Working")
+      .Reply(40, "ok", "Baked", "1s")
+      .StayAliveUntilStopped()
+      .Build();
+    const argvOut = argvPath();
+    const { base } = await start();
+    const r = await req(base, "POST", "/v1/turns", {
+      harness: "claude",
+      binary_path: fakeHarnessBin,
+      env: fakeLaunchEnv(script, argvOut),
+      prompt: "explicit args win",
+      args: ["--permission-mode", "acceptEdits"],
+      permission_mode: "plan",
+    });
+    expect(r.status).toBe(200);
+    const argv = await readArgv(argvOut);
+    expectFlag(argv, "--permission-mode", "acceptEdits");
+  }, 30_000);
+
+  test("/v1/conversations: permission_mode reaches the argv on the DEFAULT opener", async () => {
+    // Covers the openWithSession half of the forwarding chain independently of
+    // the spy, which observes Options one hop EARLIER than the cfg literal that
+    // actually launches the wrapper.
+    const script = New("claude-code").Idle().StayAliveUntilStopped().Build();
+    const argvOut = argvPath();
+    const { base } = await start();
+    const open = await req(base, "POST", "/v1/conversations", {
+      harness: "claude-code",
+      binary_path: fakeHarnessBin,
+      env: fakeLaunchEnv(script, argvOut),
+      working_dir: process.cwd(),
+      permission_mode: "plan",
+    });
+    expect(open.status).toBe(201);
+    const argv = await readArgv(argvOut);
+    expectFlag(argv, "--permission-mode", "plan");
 
     const del = await req(base, "DELETE", `/v1/conversations/${open.json.id}`);
     expect(del.status).toBe(204);
