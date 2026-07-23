@@ -58,13 +58,21 @@
 // The checks read `<binary> --help` INSIDE the test bodies, never at module
 // scope: with CONFORMANCE unset this file must spawn no --help subprocess.
 //
+// CHECK 4 (also META-HARNESS-131) closes the other end of that same wire: it
+// LAUNCHES codex with the permission flags checks 1-2 merely found in `--help`,
+// and asserts the live `/status` box reads the posture back through the SHIPPED
+// parser. `--help` can keep a flag long after the row reporting it is renamed,
+// and vice versa. It is launch-and-scrape only — no prompt is sent and the
+// `/permissions` dialog is never driven (selecting a preset there writes
+// ~/.codex/config.toml globally).
+//
 // Every half and every check is cleanly SKIPPED (not failed) when CONFORMANCE is
 // unset or the binary is absent.
 
 import { describe, expect, test } from "vitest";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { copyFileSync, existsSync, mkdtempSync, rmSync } from "node:fs";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { Context } from "../src/internal/async/index.ts";
@@ -75,8 +83,11 @@ import {
   TurnStateComplete,
   TurnStateErrored,
   newMemStore,
+  normalizePermissionRung,
+  parsePermissionMode,
   resolveAdapter,
   type Conversation,
+  type PermissionRung,
   type Turn,
 } from "../src/chat/index.ts";
 import { AutoAcceptTrust } from "../src/oneshot/index.ts";
@@ -116,6 +127,11 @@ import {
   PermissionModePlan,
 } from "../src/wrapper/internal/permissionrungs.ts";
 import { isSupportedPermissionMode } from "../src/wrapper/internal/permission.ts";
+import {
+  StatusBinaryNotFound,
+  StatusFailed,
+  StatusInterrupted,
+} from "../src/wrapper/internal/status.ts";
 
 // ── Gate ────────────────────────────────────────────────────────────────────
 
@@ -635,4 +651,373 @@ describe("conformance: permission-flag surface (CONFORMANCE=1)", () => {
       HELP_TIMEOUT + 10_000,
     );
   }
+});
+
+// ── Check 4: codex `/status` row assertions ───────────────────────────────────
+//
+// Checks 1-2 above prove the codex permission FLAGS still exist on `--help`.
+// This check proves the other end of the same wire: that a session actually
+// LAUNCHED with those flags still RENDERS the posture back, in the rows the
+// shipped parser reads. A `--help` entry can survive a rename of the row that
+// reports it, and vice versa — only a live launch closes the loop.
+//
+// MECHANICS — launch and scrape. Nothing is sent. Conversation.primeSessionID
+// already writes CodexAdapter.primeSessionIDKeys() (literally `/status` plus the
+// CSI 13u submit) BEFORE Open returns, gated on cols >= CODEX_STATUS_MIN_COLS
+// (60; the suite's default 120 clears it). So this check is a screenSnapshot()
+// read off the freshly-opened conversation — writing a SECOND `/status` would
+// need control-token acquisition and duplicate that machinery for nothing.
+//
+// NEVER DRIVE `/permissions`. Selecting a preset in that dialog writes
+// ~/.codex/config.toml GLOBALLY — running the test suite would mutate the
+// developer's own approval settings as a side effect (see
+// test/corpus/codex/permissions-dialog/meta.json, which records that Enter was
+// never pressed for exactly this reason). Reading `/status` is safe; selecting
+// is not. This check reads only.
+//
+// COVERAGE THIS CHECK DOES *NOT* GIVE YOU. The live launch exercises exactly ONE
+// cell of the (sandbox, approval) → rung forward map in
+// src/wrapper/internal/permissionrungs.ts (~:248-272): the
+// `workspace-write` × `on-request` pair. The other cells — every `read-only`
+// spelling, `-a never`, `--dangerously-bypass-…` — have NO live coverage here
+// and rest on the recorded corpus (test/corpus/codex/status-*) plus checks 1-2,
+// which only prove the VALUES still appear in `--help`. A codex release that
+// kept every flag but re-spelled `Custom (workspace, never)` would sail past
+// this file. Widening the matrix means one launch per rung, ~15-30 s each,
+// serial (fileParallelism: false) — a deliberate budget call, not an oversight.
+
+/**
+ * primeOutcomeOf reads Conversation's PRIVATE `primeOutcome` field.
+ *
+ * conversation.ts (~:458-476) documents it as "NOT a public accessor … tests
+ * read it via a structural escape"; this is that escape, the same shape used by
+ * test/chat/codex_prime_sessionid.test.ts and codex_locate_sessionid.test.ts.
+ * Reading it is load-bearing here, not diagnostic — see WROTE_STATUS below.
+ */
+function primeOutcomeOf(c: Conversation): string | undefined {
+  return (c as unknown as { primeOutcome?: string }).primeOutcome;
+}
+
+/**
+ * The primeSessionID outcomes that mean "`/status` WAS written to the composer".
+ *
+ * primeSessionID records five. Guarding on `!== "too_narrow"` is WRONG and
+ * produces fabricated drift reports: `not_written` fires (conversation.ts
+ * ~:1423) when awaitPromptReadyUntil deadlines before the composer is ready,
+ * which is exactly what a fresh CODEX_HOME produces when codex paints its
+ * first-run / migration screen (codexMigrationAnchor / codexUpdateAnchor,
+ * src/chat/ready.ts ~:36-38, both pinned not-ready). Under a naive guard a
+ * healthy binary that merely showed a migration notice would be reported as
+ * "the Collaboration mode: row is gone".
+ *
+ * So: these three ⇒ proceed. `too_narrow` / `not_written` / undefined ⇒ the
+ * PRECONDITION was not met, which is a SKIP, never a failure.
+ */
+const WROTE_STATUS = new Set([
+  "captured",
+  "written_uncaptured",
+  "persist_failed",
+]);
+
+/**
+ * The codex startup-banner literal, copied — not imported.
+ *
+ * statusBoxHeaderRE (src/turns/harness/codex.ts:67) is module-private and stays
+ * that way: exporting a regex purely so a test can reach it widens the adapter's
+ * surface for no production caller. extractSessionID (~:204) gates on this same
+ * literal, and src/chat/permission.ts spells it out as `codexStatusHeader` for
+ * the same reason.
+ */
+const CODEX_BANNER = ">_ OpenAI Codex (v";
+
+/**
+ * How long to poll for the fully-painted `/status` box after Open returns.
+ *
+ * Open's own prime is bounded at primeBoundGap (800 ms, conversation.ts ~:311),
+ * and the box paints TOP-DOWN — `Collaboration mode:` is the sixth of eight
+ * rows. The META-HARNESS-155 probe recorded the consequence: the prime-time
+ * cached reading came back `collaboration: "unknown"` on all three launches it
+ * drove, purely because the row had not landed yet, while a replay of the
+ * completed frame parses `default`. Reading ONCE the instant Open returns would
+ * therefore assert against a half-painted box. Poll the live screen instead.
+ */
+const STATUS_PAINT_BOUND = 30_000;
+const STATUS_POLL_INTERVAL = 250;
+
+/**
+ * rowText finds a rendered `/status` row for a label, for the FAILURE REPORT
+ * ONLY — never for an assertion. The assertions route through
+ * parsePermissionMode so the test cannot stay green while the shipped parser
+ * rots; this is just "show me what was actually on screen".
+ */
+function rowText(text: string, label: string): string {
+  for (const line of text.split("\n")) {
+    if (line.includes("│") && line.includes(label)) return line.trim();
+  }
+  return `row absent (no line containing "${label}")`;
+}
+
+describe("conformance: codex /status rows (CONFORMANCE=1)", () => {
+  const info = infos.codex;
+  const skip = !CONFORMANCE || !info.installed;
+
+  // Derived from the replay authority, never retyped — same discipline as
+  // checks 1-2. These are the flags the launch below actually passes.
+  const LAUNCH_ARGS = [
+    CodexSandboxFlags[0],
+    CodexSandboxWorkspaceWrite,
+    CodexApprovalFlags[0],
+    CodexApprovalOnRequest,
+  ];
+
+  test.skipIf(skip)(
+    `codex: live /status renders Collaboration mode: and Permissions: for \`${LAUNCH_ARGS.join(" ")}\``,
+    async (t) => {
+      const version = info.detectedVersion || "?";
+
+      // Both axes of the launch must normalize to the SAME rung, or the
+      // expectation below is ill-formed. workspace-write and on-request are both
+      // `acceptEdits`; asserting their agreement here means a future edit to
+      // either arm of normalizePermissionRung fails loudly instead of silently
+      // re-pointing what this check expects.
+      const expectedRung: PermissionRung | undefined = normalizePermissionRung(
+        CodexSandboxWorkspaceWrite,
+        "codex",
+      );
+      const byApproval = normalizePermissionRung(
+        CodexApprovalOnRequest,
+        "codex",
+      );
+      expect(
+        expectedRung,
+        `codex: normalizePermissionRung disagrees across the launch axes — ` +
+          `${CodexSandboxWorkspaceWrite} → ${expectedRung ?? "undefined"}, ` +
+          `${CodexApprovalOnRequest} → ${byApproval ?? "undefined"} (src/chat/permission.ts). ` +
+          `This check's expectation is derived from them, so it cannot be formed while they ` +
+          `disagree.`,
+      ).toBe(byApproval);
+      expect(
+        expectedRung,
+        `codex: normalizePermissionRung no longer maps the launch spelling ` +
+          `${CodexSandboxWorkspaceWrite} to any ladder rung (src/chat/permission.ts) — the ` +
+          `codex arm of the normalizer has lost the entry this check derives from.`,
+      ).not.toBeUndefined();
+
+      // Isolate CODEX_HOME. Options.env flows through cleanHarnessEnv verbatim
+      // (minus claude nesting markers) and envToRecord (src/wrapper/internal/
+      // run.ts ~:28-40) is LAST-WINS, so appending the override is enough.
+      //
+      // ONLY auth.json is copied in from the real ~/.codex — auth lives there
+      // and a bare fresh dir lands on the sign-in wall. config.toml is
+      // deliberately NOT copied, so the /status reading reflects the LAUNCH
+      // FLAGS rather than the developer's own approval settings, and nothing
+      // this suite runs can write the developer's config. (test/corpus/codex/*/
+      // meta.json already records "clean CODEX_HOME" recordings — established
+      // practice.) HOME isolation is NOT viable: a fresh HOME lands the CLI on
+      // the onboarding wall, where no conformance fact is observable.
+      const codexHome = mkdtempSync(join(tmpdir(), "conformance-codex-home-"));
+      const realAuth = join(homedir(), ".codex", "auth.json");
+      if (existsSync(realAuth)) {
+        copyFileSync(realAuth, join(codexHome, "auth.json"));
+      }
+      const env = [
+        ...Object.entries(process.env).map(([k, v]) => `${k}=${v ?? ""}`),
+        `CODEX_HOME=${codexHome}`,
+      ];
+
+      const dir = mkdtempSync(join(tmpdir(), "conformance-codex-status-"));
+      const { ctx, cancel } = Context.withDeadline(
+        Context.background(),
+        CTX_DEADLINE,
+      );
+
+      // Fail-fast observer. The sampled wrapper Snapshot (src/wrapper/internal/
+      // session.ts ~:52-57) carries status + reason, so a terminal status aborts
+      // the poll immediately instead of burning the full deadline — that is what
+      // turns "no row after 240 s" into "codex exited: unexpected argument".
+      let fatal = "";
+      const TERMINAL: string[] = [
+        StatusFailed,
+        StatusBinaryNotFound,
+        StatusInterrupted,
+      ];
+
+      let conv: Conversation | undefined;
+      let captured: string | undefined;
+      let prime: string | undefined;
+      try {
+        conv = await Open(ctx, {
+          harness: "codex",
+          binaryPath: info.path,
+          workingDir: dir,
+          env,
+          args: LAUNCH_ARGS,
+          store: newMemStore(),
+          inputPolicy: AutoAcceptTrust,
+          activityInterval: 250,
+          onActivity: (snap) => {
+            if (fatal === "" && TERMINAL.includes(snap.status)) {
+              fatal = `${snap.status}${snap.reason ? `: ${snap.reason}` : ""}`;
+            }
+          },
+        });
+
+        prime = primeOutcomeOf(conv);
+
+        // Poll the LIVE screen until the box is fully painted (or the binary
+        // dies, or the bound elapses). screenSnapshot() must be read BEFORE
+        // close(): the Screen object outlives the session, but the wrapper
+        // snapshot does not — close() takes the final sample itself
+        // (conversation.ts ~:604-607).
+        const until = Date.now() + STATUS_PAINT_BOUND;
+        for (;;) {
+          const frame = conv.screenSnapshot().text;
+          captured = frame;
+          const reading = parsePermissionMode(frame, "codex");
+          const painted =
+            frame.includes(CODEX_BANNER) &&
+            reading !== null &&
+            reading.collaboration !== "unknown" &&
+            (reading.raw ?? "") !== "";
+          if (painted || fatal !== "" || Date.now() >= until) break;
+          await new Promise((r) => setTimeout(r, STATUS_POLL_INTERVAL));
+        }
+      } finally {
+        cancel();
+        if (conv) {
+          const { ctx: closeCtx } = Context.withDeadline(
+            Context.background(),
+            3000,
+          );
+          await conv.close(closeCtx).catch(() => undefined);
+        }
+        rmSync(dir, { recursive: true, force: true });
+        rmSync(codexHome, { recursive: true, force: true });
+      }
+
+      // `captured` is always assigned by the poll loop: the only path that skips
+      // it is Open itself throwing, and that throw propagates past here.
+      const text = captured;
+
+      // The screen scrape every failure below quotes. Naming the launch flags,
+      // the prime outcome and where to re-record is an ACCEPTANCE CRITERION of
+      // this check: a bare `expected 'default' to be 'unknown'` tells the next
+      // reader nothing about which of the half-dozen preconditions moved.
+      const report =
+        `codex ${version} LIVE /status DRIFT.\n` +
+        `  launch flags:   ${LAUNCH_ARGS.join(" ")}\n` +
+        `  prime outcome:  ${prime ?? "(none — primeSessionID never recorded one)"}\n` +
+        `  session status: ${fatal === "" ? "healthy" : fatal}\n` +
+        `  Collaboration:  ${rowText(text, "Collaboration mode:")}\n` +
+        `  Permissions:    ${rowText(text, "Permissions:")}\n` +
+        `  box header:     ${text.includes(CODEX_BANNER) ? "present" : "ABSENT"}\n` +
+        `  Re-record the box with test/corpus/tools/record-pty.ts into ` +
+        `test/corpus/codex/status-box/ and re-derive the row regexes in ` +
+        `src/chat/permission.ts against src/turns/harness/codex.ts.\n` +
+        `  --- screen ---\n${text}\n  --- end screen ---`;
+
+      // A dead session is never a row-drift finding — say what actually killed
+      // it. The PTY captured codex's own stderr, so a rejected flag reports
+      // `error: unexpected argument …` right here.
+      expect(
+        fatal,
+        `codex ${version}: session died before the box painted.\n${report}`,
+      ).toBe("");
+
+      // Resolve the header/prime ambiguity EXPLICITLY. `captured` does not imply
+      // the box is on screen: extractSessionID tries resumeRE (codex.ts ~:49)
+      // FIRST (~:202), and captureFromScreen is called check-before-wait
+      // (conversation.ts ~:1439) — so a `codex resume <uuid>` string anywhere on
+      // screen yields `captured` with no box rendered.
+      //
+      //   header absent + prime in the wrote set → FAIL (the box regressed —
+      //     `/status` was typed and submitted and nothing came back),
+      //   header absent + prime not in the wrote set → SKIP (the composer was
+      //     never ready, so `/status` was never written; a precondition, not
+      //     drift).
+      //
+      // When the header IS present the box is on screen and the assertions run
+      // regardless of the prime outcome — the box itself is the precondition
+      // this check needs, and the prime outcome is only how we tell "absent
+      // because it regressed" from "absent because we never asked".
+      if (!text.includes(CODEX_BANNER)) {
+        if (!WROTE_STATUS.has(prime ?? "")) {
+          t.skip(
+            `codex ${version}: /status was never written (primeSessionID outcome ` +
+              `${prime ?? "none"}) — the composer was not ready, so there is no box to ` +
+              `assert against. Precondition, not drift.`,
+          );
+          return;
+        }
+        expect(
+          text.includes(CODEX_BANNER),
+          `codex ${version}: \`/status\` WAS written (prime outcome ${prime ?? "none"}) but ` +
+            `the box header \`${CODEX_BANNER}\` never appeared within ` +
+            `${String(STATUS_PAINT_BOUND)} ms. The status box has regressed or been ` +
+            `renamed.\n${report}`,
+        ).toBe(true);
+      }
+
+      const reading = parsePermissionMode(text, "codex");
+      if (reading === null) {
+        // Thrown, not expect()ed, so the narrowing survives into the assertions
+        // below — parsePermissionMode returning null means the codex arm of
+        // src/chat/permission.ts is gone, which is drift in its own right.
+        throw new Error(
+          `codex ${version}: parsePermissionMode returned null for harness "codex" — the ` +
+            `codex arm of src/chat/permission.ts has been removed.\n${report}`,
+        );
+      }
+
+      // ── A. `Collaboration mode:` — the hard anchor ─────────────────────────
+      //
+      // Corroborated in the 0.144.5 binary's string table, and the row
+      // META-HARNESS-102's collaboration reading depends on. The launch below
+      // never runs `/plan`, so the value is `Default`.
+      //
+      // Asserted through the SHIPPED parser's `collaboration` field, not against
+      // a whole line: the box renders at newScreen(120, 40) and its width tracks
+      // the longest value (the cwd-dependent `Directory:` row), so a whole-line
+      // literal would make this a width flake rather than a drift check.
+      expect(
+        reading.collaboration,
+        `codex ${version}: the \`Collaboration mode:\` row did not parse as \`Default\` for a ` +
+          `launch that never ran \`/plan\`. Expected collaboration "default", got ` +
+          `"${reading.collaboration ?? "undefined"}".\n${report}`,
+      ).toBe("default");
+
+      // ── B. `Permissions:` — present, and it tracks the launch flags ────────
+      //
+      // The META-HARNESS-155 pre-flight probe (2026-07-23, codex-cli 0.144.5)
+      // FOUND this row, refuting the epic's premise that it might be absent — so
+      // it is asserted, not merely observed. The probe also showed the row DOES
+      // track launch posture (`-s read-only -a never` renders `Read Only
+      // (never)`), while the pair used here happens to equal codex's own default
+      // presentation, `Workspace (Ask for approval)`.
+      //
+      // The value goes through parsePermissionMode rather than being
+      // string-matched. That is the whole point: a test carrying its own copy of
+      // the row's shape would stay green while the SHIPPED parser rotted, which
+      // is precisely the failure this ticket exists to prevent.
+      expect(
+        reading.observed,
+        `codex ${version}: the \`Permissions:\` row no longer reads back the launched rung. ` +
+          `Expected observed "${expectedRung ?? "undefined"}" (derived from normalizePermissionRung ` +
+          `${CodexSandboxWorkspaceWrite}/${CodexApprovalOnRequest}), got "${reading.observed}" ` +
+          `from raw "${reading.raw ?? ""}". Either codex re-spelled the value — add the new ` +
+          `spelling to codexPermissionRungs in src/chat/permission.ts and re-record ` +
+          `test/corpus/codex/status-* — or the (sandbox, approval) → rung forward map in ` +
+          `${SYMBOLS} (~:248-272) no longer matches what codex actually applies, which is a ` +
+          `SILENT MIS-REPORT of the launch posture.\n${report}`,
+      ).toBe(expectedRung);
+
+      // The reading must come from the box, not from a prime-outcome fallback.
+      expect(
+        reading.source,
+        `codex ${version}: expected the reading's source to be "status" (a live box parse), ` +
+          `got "${reading.source}".\n${report}`,
+      ).toBe("status");
+    },
+    TEST_TIMEOUT,
+  );
 });
