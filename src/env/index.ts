@@ -40,6 +40,7 @@ export { ContainerWorkspace, detectContainerRuntime } from "./container.ts";
 // result-schema type from src/turnproto (the ONE source of truth); turnproto is
 // dependency-light and never reaches into src/cli, so this barrel stays clean.
 export {
+  PermissionModeSandboxConflictError,
   runStructuredTurn,
   TurnProtocolError,
   TranscriptRetrievalUnsupportedError,

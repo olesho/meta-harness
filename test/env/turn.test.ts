@@ -8,6 +8,7 @@ import { readFileSync } from "node:fs";
 
 import { Context } from "../../src/async/index.ts";
 import {
+  PermissionModeSandboxConflictError,
   runStructuredTurn,
   TurnProtocolError,
   TranscriptRetrievalUnsupportedError,
@@ -26,6 +27,7 @@ class TurnFakeWorkspace implements Workspace {
   execOpts?: ExecOpts;
   uploadedPrompt?: string;
   uploadGuestPath?: string;
+  uploadCount = 0;
   downloads: [string, string][] = [];
   constructor(private readonly result: ExecResult) {}
 
@@ -35,6 +37,7 @@ class TurnFakeWorkspace implements Workspace {
     return this.result;
   }
   async upload(_ctx: Ctx, hostPath: string, guestPath: string): Promise<void> {
+    this.uploadCount++;
     this.uploadedPrompt = readFileSync(hostPath, "utf8"); // still exists mid-turn
     this.uploadGuestPath = guestPath;
   }
@@ -134,6 +137,90 @@ describe("runStructuredTurn — happy path & transport", () => {
     const ws = new TurnFakeWorkspace({ code: 0, stdout: okLine(), stderr: "" });
     await runStructuredTurn(ctx, ws, cfg());
     expect(ws.execArgv).not.toContain("--sandbox-defaults");
+  });
+
+  test("permissionMode lands as an adjacent --permission-mode pair before <name>", async () => {
+    const ws = new TurnFakeWorkspace({ code: 0, stdout: okLine(), stderr: "" });
+    await runStructuredTurn(ctx, ws, cfg({ permissionMode: "plan" }));
+    expect(ws.execArgv).toEqual([
+      "meta-harness-structured-run",
+      "--prompt-file",
+      "/inner/tmp/meta-harness-prompt.txt",
+      "--permission-mode",
+      "plan",
+      "claude",
+    ]);
+    // ...and it is a RUNNER flag: it sits before the harness name, not after `--`.
+    const i = ws.execArgv.indexOf("--permission-mode");
+    expect(ws.execArgv[i + 1]).toBe("plan");
+    expect(i).toBeLessThan(ws.execArgv.indexOf("claude"));
+  });
+
+  test("permissionMode unset injects nothing", async () => {
+    const ws = new TurnFakeWorkspace({ code: 0, stdout: okLine(), stderr: "" });
+    await runStructuredTurn(ctx, ws, cfg({ permissionMode: undefined }));
+    expect(ws.execArgv).not.toContain("--permission-mode");
+  });
+
+  test('permissionMode "" means unset — no empty flag pair on the argv', async () => {
+    const ws = new TurnFakeWorkspace({ code: 0, stdout: okLine(), stderr: "" });
+    await runStructuredTurn(ctx, ws, cfg({ permissionMode: "" }));
+    expect(ws.execArgv).not.toContain("--permission-mode");
+    expect(ws.execArgv).not.toContain("");
+  });
+
+  test("sandboxDefaults + permissionMode is REJECTED host-side, before any upload", async () => {
+    const ws = new TurnFakeWorkspace({ code: 0, stdout: okLine(), stderr: "" });
+    await expect(
+      runStructuredTurn(
+        ctx,
+        ws,
+        cfg({ sandboxDefaults: true, permissionMode: "plan" }),
+      ),
+    ).rejects.toBeInstanceOf(PermissionModeSandboxConflictError);
+    // Byte-identical to structured-runner's guest-side rejection message.
+    await expect(
+      runStructuredTurn(
+        ctx,
+        ws,
+        cfg({ sandboxDefaults: true, permissionMode: "plan" }),
+      ),
+    ).rejects.toThrow(
+      "flags --sandbox-defaults and --permission-mode are mutually exclusive",
+    );
+    // The whole point of the host-side check: no prompt upload / guest round-trip.
+    expect(ws.uploadCount).toBe(0);
+    expect(ws.execArgv).toEqual([]);
+  });
+
+  test("sandboxDefaults + empty permissionMode is NOT a conflict", async () => {
+    const ws = new TurnFakeWorkspace({ code: 0, stdout: okLine(), stderr: "" });
+    await runStructuredTurn(
+      ctx,
+      ws,
+      cfg({ sandboxDefaults: true, permissionMode: "" }),
+    );
+    expect(ws.uploadCount).toBe(1);
+    expect(ws.execArgv).toContain("--sandbox-defaults");
+    expect(ws.execArgv).not.toContain("--permission-mode");
+  });
+
+  test("sandboxDefaults alone still behaves exactly as before", async () => {
+    const ws = new TurnFakeWorkspace({ code: 0, stdout: okLine(), stderr: "" });
+    const res = await runStructuredTurn(
+      ctx,
+      ws,
+      cfg({ sandboxDefaults: true }),
+    );
+    expect(res.status).toBe("completed");
+    expect(ws.uploadCount).toBe(1);
+    expect(ws.execArgv).toEqual([
+      "meta-harness-structured-run",
+      "--prompt-file",
+      "/inner/tmp/meta-harness-prompt.txt",
+      "--sandbox-defaults",
+      "claude",
+    ]);
   });
 
   test("passes env and cwd through exec opts (cwd defaults to repo)", async () => {
