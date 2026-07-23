@@ -18,7 +18,12 @@
 // `hasTrustDialogAccepted`. Half 2 passes AutoAcceptTrust precisely so that
 // dialog is answered — i.e. persisted. That accretion is inherent, not a bug:
 // HOME isolation is not viable because a fresh HOME lands both CLIs on the
-// onboarding wall, where no conformance fact is observable.
+// onboarding wall, where no conformance fact is observable. codex accretes the
+// same way into ~/.codex/config.toml: half 2 launches it against the real
+// CODEX_HOME, so each run appends a `[projects."<tmp dir>"] trust_level` entry.
+// CHECK 4 below is the exception — it isolates CODEX_HOME precisely so the
+// posture it reads comes from its launch flags and not from the developer's
+// config, and so it writes nothing there at all.
 //
 // It has two independent halves, one per conformance fact:
 //
