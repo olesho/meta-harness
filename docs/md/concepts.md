@@ -327,10 +327,13 @@ approve or reject the action. See
 [Guides › Handling input](guides/handling-input.md#approval-prompts-approval_prompt).
 
 `"permissions_prompt"` carries Codex's `/permissions` **"Update Model Permissions"**
-picker: a numbered menu of permission presets, one marked `(current)`. Its rows carry no
-`proceed`/`deny` aliases (a preset is neither), and it is never auto-dismissed — Enter
-commits the highlighted preset to `~/.codex/config.toml` globally — so it always reaches
-the client, answerable only by explicit `optionID`. See
+picker: a numbered menu of permission presets, one marked `(current)`. Its rows carry
+stable preset-slug aliases (`ask-for-approval` / `approve-for-me` / `full-access`), never
+`proceed`/`deny`, so no alias-keyed policy — including a bare `InputPolicy.default` — can
+auto-answer it; it is never auto-dismissed either, since Enter commits the highlighted
+preset to `~/.codex/config.toml` globally. It always reaches the client, answerable by
+`optionID`, which itself accepts a preset slug or the row's exact label — the slug is what
+still resolves once a label grows the `(current)` suffix. See
 [Guides › Handling input](guides/handling-input.md#the-permissions-dialog-permissions_prompt).
 This is the **mid-turn** dialog, not the launch-time
 [permission mode](#permission-mode) knob the wrapper translates into argv — see

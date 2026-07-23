@@ -142,9 +142,15 @@ Name `codex`, binary `codex`.
 - **The `/permissions` dialog.** The "Update Model Permissions" preset picker is
   detected as a `permissions_prompt` input request and, like an approval, is checked
   _before_ the interstitial anchors. It is **never** auto-dismissed: Enter commits the
-  highlighted preset to `~/.codex/config.toml` globally. Its preset rows carry no
-  `proceed`/`deny` aliases, so an alias-keyed policy cannot answer it either — it always
-  reaches the client. See [Guides ›
+  highlighted preset to `~/.codex/config.toml` globally. Its rows carry stable
+  preset-slug aliases (`ask-for-approval` / `approve-for-me` / `full-access`), never
+  `proceed`/`deny`, so an alias-keyed policy still cannot auto-answer it — it always
+  reaches the client. The slugs double as `optionID`s, so a row stays addressable even
+  once its label grows the `(current)` suffix. `Conversation.setCodexPermissionPreset(ctx,
+preset)` drives this dialog programmatically; it is opt-in via
+  `Options.allowCodexPermissionsWrite`, which must name the isolated `CODEX_HOME` the
+  conversation launched under — the write is otherwise global, so the method refuses
+  unless that containment is proven. See [Guides ›
   Handling input](guides/handling-input.md#the-permissions-dialog-permissions_prompt).
 - **Wrapper patterns.** API-error phrase hints ("at capacity" → 503, "high demand" →
   500, "usage limit"/"out of credits" → 429, "stream disconnected" → 0) plus

@@ -291,14 +291,87 @@ Two things differ from `approval_prompt`:
   `~/.codex/config.toml` — globally, for every later session — so there is no safe
   keystroke. Detection runs _before_ the interstitial anchors precisely so the
   auto-dismiss ladder can never bare-Enter it.
-- **Its options carry no `proceed`/`deny` aliases** (a preset is neither), so a policy
-  keyed on aliases cannot answer it and the dialog is surfaced to the client. Answer it
-  by explicit `optionID` (`"1"`, `"2"`, …), or back out of it yourself — the dialog has
-  no "go back" option row, only the ESC key.
+- **Its rows carry stable preset-slug aliases, never `proceed`/`deny`.** Each row's
+  `alias` is a slug derived from its label — lowercased, a trailing `(current)` suffix
+  stripped, spaces hyphenated (e.g. `"Approve for me"` → `approve-for-me`) — addressable
+  the same way regardless of build or config. The slug rule is guaranteed, by a test that
+  checks every row of every `/permissions` fixture, to never produce `proceed` or `deny`,
+  so no alias-keyed policy can auto-answer this dialog. That includes a bare
+  `InputPolicy.default`: `resolvePolicy` does fall back to it for `permissions_prompt`
+  when no `byKind` entry is set, but `default` is a bare `DispositionKind` with no
+  `optionID`, so the `DispositionAnswer` branch resolves nothing and the
+  `DispositionDeny` branch finds no `deny` alias to act on — either way the dialog is
+  surfaced to the client.
+
+Answer it by `optionID` — which, besides the row's digit (`"1"`, `"2"`, …), also accepts
+one of the preset slugs above or the row's exact label, since option lookup matches on
+id, alias, or label. The slug is what makes a row addressable **even while its label
+carries the `(current)` suffix**: label matching is exact, so `optionID: "Approve for me"`
+stops resolving the instant that preset becomes current and its label grows the suffix,
+while `optionID: "approve-for-me"` resolves identically either way. That is what makes a
+second run — or a machine whose global config already carries an earlier write —
+addressable at all. Otherwise back out of the dialog yourself — it has no "go back"
+option row, only the ESC key.
 
 Note the highlighted row is the menu **cursor**, which moves with the arrow keys; the
 `(current)` suffix in a label marks the preset already in effect. They usually coincide
 when the dialog opens.
+
+### Driving it programmatically: `setCodexPermissionPreset`
+
+`Conversation.setCodexPermissionPreset(ctx, preset)` drives this dialog on the caller's
+behalf and returns a freshly verified `PermissionModeReading`, confirmed through codex's
+own `/status` reader — never by re-parsing the dialog. `preset` is one of the
+`CodexPermissionPreset` slugs: `"ask-for-approval"`, `"approve-for-me"`, `"full-access"` —
+the same three rows the alias rule above guarantees are addressable whenever the dialog
+exists at all.
+
+It is opt-in **and** containment-gated, through one option:
+[`Options.allowCodexPermissionsWrite`](../modules/chat.md#options), a string naming the
+**isolated `CODEX_HOME`** the conversation was launched under.
+
+- **Why it's opt-in.** Selecting a preset through this dialog writes
+  `approvals_reviewer = "auto_review"` into codex's `config.toml` — and that file is
+  **global**: every later session sharing the same `CODEX_HOME`, in any directory, starts
+  in that mode, and nothing in the dialog says so. Absent or empty
+  `allowCodexPermissionsWrite` ⇒ `ErrCodexPermissionsDisabled`, thrown before a single
+  byte is written.
+- **Why it's also containment-gated.** The option must name the _exact_ isolated home the
+  conversation is bound to — a boolean opt-in would not be enough. An ambient/inherited
+  `CODEX_HOME` a caller happens to export can never satisfy the gate merely by matching:
+  `cleanHarnessEnv` (`src/chat/env.ts`) forwards `process.env` verbatim, so a bare
+  `CODEX_HOME !== ~/.codex` check would pass for a fleet/agent process's own real,
+  persistent home while the global write still landed somewhere durable. A mismatch, or
+  an adapter never bound to a launch env, throws `ErrCodexHomeNotIsolated`.
+- **Seeding requirement.** The isolated home must be pre-seeded with a `0600` copy of
+  `~/.codex/auth.json`, or codex sits on the first-run sign-in wall and the call times out
+  rather than ever reaching the dialog.
+
+Other refusals: `ErrPermissionsUnsupported` (the harness isn't codex, the resolved adapter
+has no permissions capability, or a caller-supplied `Options.adapter` is also in play —
+that seam binds last-writer-wins across conversations, which is not a foundation this gate
+can rest on), `ErrCodexPermissionsRaced` (a caller-supplied `onInputRequest` already
+answered the dialog before the driver's own poll could), and `ErrPermissionPresetUnavailable`
+— raised for **both** "this build renders no row matching the requested preset" (the
+`guardian_approval` feature flag is off, so the dialog shows `Read Only` / `Default` /
+`Custom permissions` instead) **and** "the dialog never opened at all" — so the
+feature-flag-off case is distinguishable from caller error and never leaks out as
+`ErrUnknownOption`.
+
+**The containment bar scopes to this one entry point.** It governs
+`setCodexPermissionPreset` specifically — the surfaced `answer()` path stays open by
+design, with no opt-in and no `CODEX_HOME` check, because that is the human answering
+their own dialog after reading the rows codex printed on their own screen. A client that
+receives `permissions_prompt` on `events()` and calls
+`answer(ctx, id, { optionID: "approve-for-me" })` commits the preset exactly as it always
+has. The bar exists for the _programmatic, unattended_ entry point — the one that can
+commit a global config write without anyone having seen the dialog.
+
+**Known limit.** An isolated home supplied only through `Options.env` (never exported into
+the host process's own environment) is invisible to `src/cli/structured-runner.ts`'s
+module-level `readTranscript` / `readUsage`, which take no root parameter — a run driven
+that way reads back with an empty transcript and null usage. That's a documented
+consequence of the signatures being out of scope here, not a bug.
 
 ---
 
