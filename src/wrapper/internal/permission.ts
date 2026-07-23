@@ -8,6 +8,32 @@
 // versions.json still pins 2.1.201 / 0.142.5; bumping that pin is its own
 // change. The argv shapes below need >= 2.1.217 / >= 0.144.5.)
 //
+// End-to-end re-confirmation (META-HARNESS-153, claude-code 2.1.218 /
+// codex-cli 0.144.5) — every row below was launched for real and read back:
+//
+//	claude --permission-mode plan               footer "⏸ plan mode on"
+//	claude --permission-mode bypassPermissions  blocking "WARNING: Claude Code
+//	                                            running in Bypass Permissions
+//	                                            mode" screen, then footer
+//	                                            "⏵⏵ bypass permissions on"
+//	codex -s read-only      -a untrusted        /status "Read Only (untrusted)"
+//	codex -s workspace-write -a untrusted       /status "Custom (workspace, untrusted)"
+//	codex -s workspace-write -a never           /status "Custom (workspace, never)"
+//
+// Two observations worth freezing, because both were expected otherwise:
+//
+//  1. codex `plan` lands in codex's NAMED "Read Only" preset, not the
+//     `Custom (…)` bucket that `manual` and `auto` land in. Nothing depends on
+//     the label — we pin the axes by flag — but do not "fix" a report that
+//     reads "Read Only (untrusted)" into "Custom (read-only, untrusted)".
+//  2. /status always PRINTS a `Collaboration mode:` row; under every rung above
+//     it reads `Default`. "Collaboration axis unset" therefore means "not set
+//     to Plan", NOT "the row is absent". The claude bypass screen in particular
+//     is load-bearing: it is the premise of the default `trust_prompt` policy
+//     launchInputPolicy installs in src/chat/conversation.ts, and it does still
+//     paint on a fresh HOME (probed with an otherwise-authenticated HOME that
+//     carried no prior trust/bypass acceptance).
+//
 // The canonical rung is `ask`, NOT `acceptEdits`: the wire contract freezes
 // {plan, manual, ask, auto, bypass}. `acceptEdits` is (i) claude's NATIVE argv
 // value, which the `ask` rung emits, and (ii) an accepted INPUT spelling.
