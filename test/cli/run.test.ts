@@ -63,6 +63,43 @@ describe("parseArgs", () => {
     expect(p.name).toBe("claude");
   });
 
+  test("--permission-mode separated form", () => {
+    const p = parseArgs([
+      "--permission-mode",
+      "bypass",
+      "--effort",
+      "high",
+      "claude",
+      "--",
+      "-a",
+    ]);
+    expect(p.permissionMode).toBe("bypass");
+    expect(p.effort).toBe("high");
+    expect(p.name).toBe("claude");
+    expect(p.harnessArgs).toEqual(["-a"]);
+    expect(p.error).toBeUndefined();
+  });
+
+  test("--permission-mode=value form", () => {
+    const p = parseArgs(["--permission-mode=plan", "codex"]);
+    expect(p.permissionMode).toBe("plan");
+    expect(p.name).toBe("codex");
+    expect(p.error).toBeUndefined();
+  });
+
+  test("--permission-mode with no operand errors", () => {
+    const p = parseArgs(["--permission-mode"]);
+    expect(p.error).toBe("flag --permission-mode requires a value");
+  });
+
+  test("--permission-mode after <name> is forwarded as a harness arg", () => {
+    const p = parseArgs(["claude", "--", "--permission-mode", "auto"]);
+    expect(p.permissionMode).toBeUndefined();
+    expect(p.name).toBe("claude");
+    expect(p.harnessArgs).toEqual(["--permission-mode", "auto"]);
+    expect(p.error).toBeUndefined();
+  });
+
   test("--help", () => {
     expect(parseArgs(["--help"]).help).toBe(true);
     expect(parseArgs(["-h"]).help).toBe(true);
