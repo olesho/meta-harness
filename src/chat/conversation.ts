@@ -378,9 +378,16 @@ function permissionUnreachable(detail: string): Error {
   );
 }
 
-/** ErrPermissionModeStalled carrying the concrete evidence. */
-function permissionStalled(detail: string): Error {
-  return wrap("chat: setPermissionMode: " + detail, ErrPermissionModeStalled);
+/**
+ * ErrPermissionModeStalled carrying the concrete evidence.
+ *
+ * `who` names the METHOD in the message. It defaults to setPermissionMode
+ * because that is where every stall used to originate; refreshPermissionMode
+ * (and the codex `/status` probe it shares with setPermissionMode) passes its
+ * own name so a caller reading the message is not sent to the wrong method.
+ */
+function permissionStalled(detail: string, who = "setPermissionMode"): Error {
+  return wrap(`chat: ${who}: ` + detail, ErrPermissionModeStalled);
 }
 // authGateStabilizeGap — how long the screen must stay on a logged-out /
 // onboarding banner (matching authRequired but never reaching readyForInput)
@@ -403,6 +410,24 @@ type PrimeOutcome =
   | "not_written"
   | "written_uncaptured"
   | "persist_failed";
+
+/**
+ * How ONE codex `/status` probe ended — probeCodexStatus's return, deliberately
+ * spelled in primeOutcome's vocabulary rather than paralleling it:
+ *
+ *   "done"                the caller's success predicate went true in time.
+ *   "too_narrow"          the CONFIGURED width is below CODEX_STATUS_MIN_COLS,
+ *                         so the box would wrap and the row scrapes fail closed.
+ *                         NOTHING was written.
+ *   "not_written"         the composer never reached a ready prompt inside the
+ *                         bound. NOTHING was written.
+ *   "written_uncaptured"  the burst went out (once, or twice with the halfway
+ *                         resend) and the predicate never went true.
+ *   "unsupported"         the adapter has no primeSessionIDKeys capability, so
+ *                         there is no `/status` writer at all.
+ */
+type CodexProbeOutcome =
+  "done" | "too_narrow" | "not_written" | "written_uncaptured" | "unsupported";
 // submitEchoGap — the wall-clock bound on the wait between writing a message's
 // text and writing its submit key, while the composer echoes the text. (ms)
 const submitEchoGap = 1500;
@@ -1063,9 +1088,36 @@ export class Conversation {
    *
    * A rung target on codex, or `"default"` on claude, is
    * ErrPermissionModeUnreachable naming the axis and pointing at the launch
-   * flags. (`"default"` is not a ladder rung: the rule is "Default when
-   * permissionMode is unset: inject nothing", and claude's actual default is
-   * `manual`.)
+   * flags (`-s` / `-a` on codex). (`"default"` is not a ladder rung: the rule is
+   * "Default when permissionMode is unset: inject nothing", and claude's actual
+   * default is `manual`.) On codex `"plan"` is ALWAYS the collaboration mode,
+   * never the ladder rung of the same name.
+   *
+   * ## codex: the `/status` confirmation, and what a success does NOT claim
+   *
+   * The mechanism is Shift+Tab and ONLY Shift+Tab — the same
+   * adapterPermissionCycleKeys() the claude ring uses. The collaboration axis is
+   * a 2-cycle (Default ⇄ Plan), so one press toggles; lap detection covers a
+   * 2-long ring unchanged. This IS the epic's post-launch collaboration step, so
+   * nothing else may grow a competing `/plan` writer.
+   *
+   * There is NO footer fast path: 102 reads `collaboration` from the positive
+   * `│ Collaboration mode: … │` row of the `/status` box only, and the
+   * ` Plan mode (shift+tab to cycle)` composer marker never feeds that field.
+   * So this method runs the internal `/status` probe ONCE BEFORE the first press
+   * (to establish `start`) and ONCE AFTER each settled press (to confirm). The
+   * prime-time cached reading is NEVER trusted for a write decision.
+   *
+   * Bounded cost, asserted by test: a no-op writes exactly ONE `/status` burst
+   * and ZERO cycle keystrokes; a toggle writes exactly TWO bursts and ONE cycle
+   * keystroke. (The zero-write guarantee is scoped to CYCLE keystrokes — the
+   * probe is a write, and has to be.)
+   *
+   * A successful codex call returns 102's reading UNCHANGED IN SHAPE:
+   * `collaboration === target`, with `observed` still reporting the LAUNCH
+   * permissions rung. Per META-HARNESS-99 codex's canonical `plan` rung is
+   * `-s read-only -a untrusted` PLUS the collaboration flip; this method supplies
+   * only the second half and does not claim the rung.
    *
    * ## Honest-return guarantees
    *
@@ -1116,18 +1168,6 @@ export class Conversation {
     // that is merely unreachable from here.
     const seq = this.adapterPermissionCycleKeys();
     if (!seq || seq.length === 0) throw ErrPermissionModeUnsupported;
-
-    if (harness === "codex") {
-      // The codex collaboration branch is wired by the FOLLOW-ON subtask (the
-      // `/status` confirmation path + refreshPermissionMode). Confirming a codex
-      // press needs a fresh `/status` probe — Snapshot is viewport-only and
-      // permissionMode() serves the box cached at prime — and writing `/status`
-      // is exactly what that subtask owns. Until it lands, refuse rather than
-      // press blind: every helper below (permissionAxisValue, the legality
-      // table, the settle loop) is already harness-generic, so it slots in
-      // without a rewrite.
-      throw ErrPermissionModeUnsupported;
-    }
 
     if (!permissionTargetLegal(harness, target)) {
       throw permissionUnreachable(
@@ -1194,7 +1234,23 @@ export class Conversation {
       // e.g. `--permission-mode dontAsk` (valid, flag-only, NOT on the ring)
       // reads `unknown` + a non-empty `raw`, so `start` is not a comparable
       // value and lap detection could never close — refuse, ZERO keystrokes.
-      const entry = await this.settlePermissionAxis(dctx, harness, null, null);
+      //
+      // On codex the entry value comes from an internal `/status` probe, NOT
+      // from the prime-time cache: that cache is unbounded-stale (and
+      // `not_primed` outright on a resumed session), and there is no footer fast
+      // path — 102 reads `collaboration` from the positive
+      // `│ Collaboration mode: … │` row only, and footer-ABSENCE is
+      // corroboration, never a conclusion. Trusting the cache here is exactly
+      // the silent-wrong-mode window this method exists to close: a session
+      // already in Default would be pressed into Plan and back.
+      const entry =
+        harness === "codex"
+          ? await this.confirmCodexCollaboration(
+              dctx,
+              "setPermissionMode",
+              null,
+            )
+          : await this.settlePermissionAxis(dctx, harness, null, null);
       if (!entry) {
         throw permissionStalled(
           `could not read the permission axis before pressing anything ` +
@@ -1225,14 +1281,22 @@ export class Conversation {
               `axis`,
           );
         }
-        const settled = await this.settlePermissionAxis(
-          dctx,
-          harness,
-          before,
-          () => {
-            this.writeKeys(seq);
-          },
-        );
+        const press1 = (): void => {
+          this.writeKeys(seq);
+        };
+        // codex confirms with a FRESH `/status` probe after the press (the box
+        // already on screen is the PREVIOUS probe's, and nothing repaints the
+        // collaboration row on its own); claude re-reads its continuously
+        // repainted footer. Both refuse a value equal to `before`.
+        const settled =
+          harness === "codex"
+            ? await this.confirmCodexCollaboration(
+                dctx,
+                "setPermissionMode",
+                before,
+                press1,
+              )
+            : await this.settlePermissionAxis(dctx, harness, before, press1);
         // Re-checked after EVERY settle too, so a dialog that landed on the
         // final frame is reported as a pending prompt rather than as a stall.
         this.throwIfPermissionInputPending();
@@ -1527,6 +1591,146 @@ export class Conversation {
     } finally {
       gap?.cancel();
       unsubscribe();
+    }
+  }
+
+  /**
+   * Codex-only re-probe: writes `/status`, re-parses the box, and REFRESHES
+   * 102's cached codex reading. Requires the control token. On claude it is a
+   * no-op alias for permissionMode().
+   *
+   * This is the CONFIRMATION half of the mid-session switch. On codex the
+   * collaboration axis is readable ONLY from the `/status` box; permissionMode()
+   * is pure and must never write the PTY; and the prime-time cache is
+   * UNBOUNDED-stale (`source: "not_primed"` outright on every resumed/reopened
+   * session). Without an explicit refresh there is no way to close the loop.
+   *
+   * ## Locking — the same `held()`-NOT-`acquire()` precondition as
+   * setPermissionMode
+   *
+   * The gateway mints the control token BY HOLDING the non-reentrant
+   * ControlQueue, so acquiring here would park an HTTP caller behind its own
+   * token. The shared probe (probeCodexStatus) therefore does NOT touch the
+   * queue either — primeSessionID acquires around it, this method does not. See
+   * setPermissionMode's locking section; the gates are identical (closed ->
+   * held() -> currentTurn === null -> currentInput === null -> readyForInput,
+   * the last one inside the probe).
+   *
+   * ## The write-back is the point
+   *
+   * The refreshed reading is stored into the SAME private field the primer
+   * writes, with the new `generation`/`observedAt`. 102's `permissionMode()` on
+   * codex serves that cache and `GET /v1/conversations/:id/permission-mode` is a
+   * pure read of it — so without the write-back a refresh would return a fresh
+   * value while the very next GET still returned the prime-time one (or
+   * `not_primed`), and the two routes would disagree.
+   *
+   * On claude this is a PLAIN ALIAS for permissionMode() — for EVERY rung,
+   * `manual` included: 102's claude path is a strict live per-call footer parse
+   * that caches nothing, so there is nothing to re-probe. It still takes the
+   * gates, so a caller cannot use it as an ungated read (permissionMode() is
+   * that).
+   *
+   * Throws ErrPermissionModeStalled when the box never rendered a legible
+   * `Collaboration mode:` row inside the probe bound; the cached reading is left
+   * exactly as it was.
+   */
+  async refreshPermissionMode(ctx: Context): Promise<PermissionModeReading> {
+    if (this.closedFlag) throw ErrClosed;
+    if (!this.queue.held()) throw ErrNoControl;
+    if (this.currentTurn !== null) throw ErrTurnInFlight;
+    this.throwIfPermissionInputPending();
+    if (this.opts.harness !== "codex") return this.permissionMode();
+
+    const { ctx: dctx, cancel } = Context.withCancel(ctx);
+    try {
+      const r = await this.confirmCodexCollaboration(
+        dctx,
+        "refreshPermissionMode",
+        null,
+      );
+      if (!r) {
+        throw permissionStalled(
+          `the codex /status box never rendered a legible ` +
+            `\`Collaboration mode:\` row inside the probe bound ` +
+            `(source ${this.permissionMode().source}); the cached reading is ` +
+            `unchanged`,
+          "refreshPermissionMode",
+        );
+      }
+      return r;
+    } finally {
+      cancel();
+    }
+  }
+
+  /**
+   * One codex `/status` probe, turned into the settlePermissionAxis-shaped
+   * contract the setPermissionMode loop consumes: a reading, or null when the
+   * box never carried a usable value inside the bound.
+   *
+   * `write` (the cycle keystroke) runs FIRST, before the probe, exactly as
+   * settlePermissionAxis runs it inside its own subscription — the probe's write
+   * is the `/status` burst that follows.
+   *
+   * `before` is the axis value to beat. Non-null means "reject a box still
+   * reporting `before`", which is what makes the confirm honest: the box already
+   * on screen is the PREVIOUS probe's, so a probe that accepted it would read
+   * the pre-press value and call the press dead. `before === null` is the ENTRY
+   * probe and accepts the first positive `Collaboration mode:` row.
+   *
+   * null vs throw, deliberately split:
+   *   - `written_uncaptured` (the burst went out, no usable box) -> null, so the
+   *     CALLER writes its own prose ("did not change after press N" / "could not
+   *     read the axis before pressing anything"), identical to the claude path.
+   *   - `too_narrow` / `not_written` -> Stalled here: nothing was written at
+   *     all, and neither is a "the press did not take" story.
+   * ErrClosed / ErrInputPending pass straight through; a ctx bound becomes null
+   * so the caller reports it as its own deadline (it re-checks ctx before
+   * spending another press).
+   */
+  private async confirmCodexCollaboration(
+    ctx: Context,
+    who: string,
+    before: string | null,
+    write: (() => void) | null = null,
+  ): Promise<PermissionModeReading | null> {
+    if (write) write();
+    let outcome: CodexProbeOutcome;
+    try {
+      outcome = await this.probeCodexStatus(ctx, this.primeBoundDur(), () =>
+        this.refreshModeFromScreen(before),
+      );
+    } catch (err: unknown) {
+      if (isSentinel(err, ErrClosed) || isSentinel(err, ErrInputPending))
+        throw err;
+      if (ctx.isDone()) return null;
+      throw err;
+    }
+    switch (outcome) {
+      case "done":
+        // permissionMode() re-reads the field the probe just wrote, so the
+        // returned reading carries `requested`/`requestedRaw` like any other.
+        return this.permissionMode();
+      case "written_uncaptured":
+        return null;
+      case "too_narrow":
+        throw permissionStalled(
+          `the configured width (${String(this.opts.cols ?? 0)} cols) is below ` +
+            `CODEX_STATUS_MIN_COLS (${String(codex.CODEX_STATUS_MIN_COLS)}), so ` +
+            `the /status box would wrap and its rows fail closed; nothing was ` +
+            `written`,
+          who,
+        );
+      case "not_written":
+        throw permissionStalled(
+          `the composer never reached a ready prompt, so the /status probe was ` +
+            `never written`,
+          who,
+        );
+      default:
+        // No primeSessionIDKeys capability: there is no /status writer at all.
+        throw ErrPermissionModeUnsupported;
     }
   }
 
@@ -2212,6 +2416,165 @@ export class Conversation {
   }
 
   /**
+   * The REFRESH counterpart of captureModeFromScreen: re-parses the `/status`
+   * box off the CURRENT frame and REPLACES the cached reading (rather than
+   * latching the first observation), stamping it with this frame's generation
+   * and the current time. Returns true once a usable box was read.
+   *
+   * Two deliberate differences from the primer's capture:
+   *
+   *  - The predicate is the positive `│ Collaboration mode: … │` row, not the
+   *    `Permissions:` row: the collaboration axis is what a refresh exists to
+   *    re-read, and absence is never a signal (a missing row is "unknown", so it
+   *    is rejected and the poll continues).
+   *  - `before` filters out a STALE box. On the confirm probe the box already on
+   *    screen is the previous probe's, painted before the cycle keystroke; a
+   *    probe that accepted it would read the pre-press value and declare the
+   *    press dead. Non-null `before` therefore rejects an equal value; null (the
+   *    entry probe / an explicit refresh) accepts the first positive row.
+   *
+   * It writes the SAME private field the primer writes, which is what keeps
+   * refreshPermissionMode and the pure GET route from disagreeing.
+   */
+  private refreshModeFromScreen(before: string | null): boolean {
+    const snap = this.screenSnapshot();
+    const r = parsePermissionMode(snap.text, this.opts.harness);
+    const collab = r?.collaboration;
+    if (!r || collab === undefined || collab === "unknown") return false;
+    if (before !== null && collab === before) return false;
+    this.primeModeReading = {
+      ...r,
+      generation: snap.generation,
+      observedAt: new Date(),
+    };
+    return true;
+  }
+
+  /**
+   * Whether the CONFIGURED width is too narrow for the `/status` box to render
+   * unwrapped — the write gate both `/status` writers share.
+   *
+   * `this.opts.cols` is the configured width, NOT a live measurement: that is
+   * precisely what `source: "too_narrow"` means. Below the documented minimum
+   * the box wraps, the row-anchored scrapes fail closed, and writing would only
+   * spend a burst to learn nothing.
+   */
+  private codexStatusTooNarrow(): boolean {
+    const cols = this.opts.cols && this.opts.cols > 0 ? this.opts.cols : 120;
+    return cols < codex.CODEX_STATUS_MIN_COLS;
+  }
+
+  /**
+   * The ONE `/status` writer in this class: writes the adapter's
+   * primeSessionIDKeys burst, then polls `done()` under a SINGLE screen
+   * subscription taken BEFORE the write, re-sending ONCE at the halfway mark if
+   * something is still missing and the composer is ready.
+   *
+   * Shared verbatim by primeSessionID (startup id + box capture) and
+   * confirmCodexCollaboration (the post-Open re-probe behind
+   * refreshPermissionMode / setPermissionMode). The `/status` write is flaky
+   * enough that the primer already re-sent once at the halfway mark; the refresh
+   * has the same failure mode and takes the same treatment, so the write, the
+   * subscription, the resend latch and the deadline live here ONCE.
+   *
+   * TWO CARVE-OUTS, both load-bearing:
+   *
+   *  1. THE QUEUE ACQUISITION STAYS OUTSIDE. primeSessionID acquires the
+   *     ControlQueue around this call; refreshPermissionMode/setPermissionMode
+   *     must NOT — they take `queue.held()` as a PRECONDITION because the
+   *     gateway mints the control token by HOLDING the non-reentrant queue, and
+   *     an acquire() here would re-introduce exactly the self-deadlock
+   *     setPermissionMode's locking docstring exists to prevent.
+   *  2. THE SUCCESS PREDICATE IS A PARAMETER. The callers genuinely differ: the
+   *     primer wants the session id AND the box; the refresh wants the
+   *     `Collaboration mode:` row re-parsed. This helper owns only the write,
+   *     the subscription, the resend latch and the deadline — never what
+   *     "finished" means.
+   *
+   * The burst is written with writeKeys(a.primeSessionIDKeys()) — the proven
+   * mechanism (`/status` + CSI 13u as ONE burst, src/turns/harness/codex.ts).
+   * NOT writeMessageAndSubmit: that splits text from submit and waits on
+   * awaitComposerEcho, an echo wait built against free-text prompt echo and
+   * unproven against a slash command (codex pops a completion menu). The paste
+   * hazard writeMessageAndSubmit exists to dodge (META-HARNESS-21/24) is a
+   * free-text-prompt hazard, not one this already-validated burst has.
+   *
+   * Throws ctx.err() on cancellation and ErrClosed on close; ErrInputPending
+   * propagates from the readiness wait (which is the ONLY place it can arise,
+   * and it is strictly BEFORE the write).
+   */
+  private async probeCodexStatus(
+    ctx: Context,
+    bound: number,
+    done: () => boolean | Promise<boolean>,
+  ): Promise<CodexProbeOutcome> {
+    const a = this.adapter as unknown as {
+      primeSessionIDKeys?: () => Uint8Array;
+    };
+    if (typeof a.primeSessionIDKeys !== "function") return "unsupported";
+    if (this.codexStatusTooNarrow()) return "too_narrow";
+
+    const deadline = sleep(bound);
+    const half = sleep(bound / 2);
+    const never = new Promise<void>(() => {});
+    try {
+      // Wait past interstitials/auto-dismiss for a ready prompt rather than
+      // writing blind into one.
+      if (
+        (await this.awaitPromptReadyUntil(ctx, deadline.promise)) !== "ready"
+      ) {
+        return "not_written";
+      }
+
+      // A writeKeys throw is fatal (writer/PTY dead) and propagates.
+      this.writeKeys(a.primeSessionIDKeys());
+
+      // Check-before-wait (a render landing right after the write, before any
+      // subscription delivery, is otherwise missed), then poll under ONE
+      // subscription until done() or the deadline.
+      const [notify, unsubscribe] = this.screen.subscribe();
+      try {
+        if (await done()) return "done";
+        let resent = false;
+        for (;;) {
+          const which = await Promise.race([
+            ctx.done().then(() => "ctx" as const),
+            this.closedPromise.then(() => "closed" as const),
+            notify
+              .receive()
+              .then((r) => (r.ok ? ("changed" as const) : ("closed" as const))),
+            (resent ? never : half.promise).then(() => "half" as const),
+            deadline.promise.then(() => "deadline" as const),
+          ]);
+          if (which === "ctx") throw ctx.err();
+          if (which === "closed") throw ErrClosed;
+          if (which === "changed") {
+            if (await done()) return "done";
+            continue;
+          }
+          if (which === "half") {
+            // One-shot resend at the halfway mark: only when something is still
+            // missing (the loop has already returned when done() went true) and
+            // the composer prompt is ready. The latch is consumed either way, so
+            // the MAXIMUM is two bursts per probe.
+            resent = true;
+            if (readyForInput(this.opts.harness, this.screen.snapshot().text)) {
+              this.writeKeys(a.primeSessionIDKeys());
+            }
+            continue;
+          }
+          return "written_uncaptured"; // deadline
+        }
+      } finally {
+        unsubscribe();
+      }
+    } finally {
+      deadline.cancel();
+      half.cancel();
+    }
+  }
+
+  /**
    * Why the codex `/status` box was never observed — a TOTAL function of the
    * prime outcome, reusing primeOutcome's vocabulary rather than paralleling it.
    *
@@ -2241,13 +2604,41 @@ export class Conversation {
   /**
    * Primes the harness session id at first idle by writing the adapter's
    * primeSessionIDKeys (Codex: `/status`), which renders the id on screen, then
-   * capturing it — all before Open returns the handle, so no public method can
-   * race the primer (they need the handle; send/answer also need the control
-   * token, which the primer holds). Bounded by an internal deadline so Open can
-   * never hang; a capture miss is non-fatal (the `/quit` hint and the first
-   * TurnComplete re-scrape remain backstops). Only lifecycle/IO failures — ctx
-   * cancellation, ErrClosed, or a writeKeys throw — are fatal and propagate to
-   * openWithSession's cleanup. Records the outcome in primeOutcome for tests.
+   * capturing it — all before Open returns the handle. Bounded by an internal
+   * deadline so Open can never hang; a capture miss is non-fatal (the `/quit`
+   * hint and the first TurnComplete re-scrape remain backstops). Only
+   * lifecycle/IO failures — ctx cancellation, ErrClosed, or a writeKeys throw —
+   * are fatal and propagate to openWithSession's cleanup. Records the outcome in
+   * primeOutcome for tests.
+   *
+   * ## No longer the ONLY `/status` writer
+   *
+   * This used to claim "no public method can race the primer". That is still
+   * true DURING the prime (public methods need the handle Open has not returned
+   * yet, and send/answer additionally need the control token the primer holds),
+   * but refreshPermissionMode is a SECOND, POST-OPEN writer of the same
+   * `/status` burst through the shared probeCodexStatus helper. Its three
+   * hazards, answered rather than left open:
+   *
+   *  - THE NEXT TURN'S REPLY SCRAPE. Codex implements no extractMessage, so
+   *    assistantText() falls back to `snap.text` — the WHOLE screen. A `/status`
+   *    box still visible when the next turn settles can therefore appear inside
+   *    that turn's scraped text. Not new IN KIND (the primer already leaves a box
+   *    on screen before the first turn) but new in FREQUENCY. Containment: the
+   *    `currentTurn === null` gate guarantees a probe never lands inside an
+   *    in-flight turn, and the driver MUST NOT invent a screen-clearing keystroke
+   *    (no ESC, no Ctrl-L) to tidy up — that would be an unvalidated write. The
+   *    behaviour is pinned by a deterministic test.
+   *  - history(). Codex has a readTranscript adapter and historyWithSource
+   *    prefers the harness transcript, so transcript-sourced history is
+   *    unaffected; only the screen-scraped FALLBACK can carry the box.
+   *  - promptNotAccepted's byte-identical heuristic. Signal 1 compares the
+   *    settled screen against `sentScreenText`, captured AT SEND TIME — which is
+   *    necessarily AFTER any probe, since a probe can only run when
+   *    `currentTurn === null`. So a probe can never make the settled screen
+   *    byte-identical to a `sentScreenText` captured before it. Signal 2 (the
+   *    last `›` row still carrying text) is unaffected: `/status` submits and
+   *    leaves the composer empty.
    */
   private async primeSessionID(ctx: Context): Promise<void> {
     const a = this.adapter as unknown as {
@@ -2258,126 +2649,75 @@ export class Conversation {
 
     // The row-anchored /status scrape needs the box to render unwrapped; below
     // the documented minimum width the box wraps and the scrape can't parse it,
-    // so skip the write entirely and let the /quit hint backstop.
-    const cols = this.opts.cols && this.opts.cols > 0 ? this.opts.cols : 120;
-    if (cols < codex.CODEX_STATUS_MIN_COLS) {
+    // so skip the write entirely and let the /quit hint backstop. Checked HERE,
+    // before the acquire, so a too-narrow open never touches the queue.
+    if (this.codexStatusTooNarrow()) {
       this.setPrimeOutcome("too_narrow");
       return;
     }
 
+    // The acquire is the primer's, NOT the shared probe's: refreshPermissionMode
+    // reaches probeCodexStatus already HOLDING the token. See probeCodexStatus.
     const release = await this.queue.acquire(ctx);
-    const bound = this.primeBoundDur();
-    const deadline = sleep(bound);
-    const half = sleep(bound / 2);
-    const never = new Promise<void>(() => {});
-    let wrote = false;
     try {
-      // Step 3: wait past interstitials/auto-dismiss for a ready prompt.
-      const w0 = await this.awaitPromptReadyUntil(ctx, deadline.promise);
-      if (w0 === "deadline") {
-        this.setPrimeOutcome("not_written");
-        return;
-      }
-
-      // Step 4: surface the id. A writeKeys throw is fatal (writer/PTY dead).
-      this.writeKeys(a.primeSessionIDKeys());
-      wrote = true;
-
-      // Step 5: check-before-wait (a render landing right after the write, before
-      // any subscription delivery, is otherwise missed), then poll under one
-      // subscription until BOTH halves are captured or the deadline fires.
-      //
-      // The two halves are DECOUPLED on purpose. extractSessionID tries the
-      // `codex resume <uuid>` hint FIRST (src/turns/harness/codex.ts), and a
-      // frame that yields the id that way carries no /status box at all — so
-      // exiting the instant the id lands would leave the permission box
-      // permanently unobserved. Cost: on an open where the id lands early and
-      // the box never renders, Open blocks the full prime bound (≤ 800 ms by
-      // default). When the box does render, id and box land in the same frame
-      // and the loop exits exactly as it did before.
-      const [notify, unsubscribe] = this.screen.subscribe();
-      try {
-        let gotID = await this.captureFromScreen();
-        if (gotID) this.setPrimeOutcome("captured");
-        let gotBox = this.captureModeFromScreen();
-        if (gotID && gotBox) return;
-        let resent = false;
-        for (;;) {
-          const which = await Promise.race([
-            ctx.done().then(() => "ctx" as const),
-            this.closedPromise.then(() => "closed" as const),
-            notify
-              .receive()
-              .then((r) => (r.ok ? ("changed" as const) : ("closed" as const))),
-            (resent ? never : half.promise).then(() => "half" as const),
-            deadline.promise.then(() => "deadline" as const),
-          ]);
-          if (which === "ctx") throw ctx.err();
-          if (which === "closed") throw ErrClosed;
-          if (which === "changed") {
-            if (!gotID && (await this.captureFromScreen())) {
-              gotID = true;
-              this.setPrimeOutcome("captured");
-            }
-            if (!gotBox) gotBox = this.captureModeFromScreen();
-            if (gotID && gotBox) return;
-            continue;
-          }
-          if (which === "half") {
-            // One-shot resend at the halfway mark: only when something is still
-            // missing (the loop has already returned when both halves landed)
-            // and the composer prompt is ready. Consume the latch either way (at
-            // most one). Now that the loop outlives an early id capture this can
-            // fire on a path it never used to — deliberately: when the id came
-            // from the `codex resume` hint there is NO evidence the first
-            // /status write landed at all, so this IS the retry that gets the
-            // box on screen. The MAXIMUM is unchanged at two writes per open
-            // (the `resent` latch plus the readyForInput gate), exactly today's
-            // worst case of an id that never gets captured.
-            resent = true;
-            if (readyForInput(this.opts.harness, this.screen.snapshot().text)) {
-              this.writeKeys(a.primeSessionIDKeys());
-            }
-            continue;
-          }
-          break; // deadline
+      // The two halves are DECOUPLED on purpose, and NEITHER is short-circuited:
+      // extractSessionID tries the `codex resume <uuid>` hint FIRST, and a frame
+      // that yields the id that way carries no /status box at all — so exiting
+      // the instant the id lands would leave the permission box permanently
+      // unobserved. Cost: on an open where the id lands early and the box never
+      // renders, Open blocks the full prime bound (≤ 800 ms by default).
+      const outcome = await this.probeCodexStatus(
+        ctx,
+        this.primeBoundDur(),
+        async () => {
+          const gotID = await this.captureFromScreen();
+          if (gotID) this.setPrimeOutcome("captured");
+          const gotBox = this.captureModeFromScreen();
+          return gotID && gotBox;
+        },
+      );
+      switch (outcome) {
+        case "done":
+        case "too_narrow": // pre-checked above; unreachable here
+        case "unsupported": // pre-checked above; unreachable here
+          return;
+        case "not_written":
+          this.setPrimeOutcome("not_written");
+          return;
+        default: {
+          // Distinguish a persist failure (box rendered + parsed, but the store
+          // rejected, so the id is still empty) from a plain poll miss. Scrape
+          // ONLY (allowDiskFallback=false): this discriminator must reflect the
+          // screen scrape alone. If the disk fallback ran here, a matching
+          // rollout already on disk would set `parsed = true` even though the box
+          // never rendered — misclassifying `written_uncaptured` as
+          // `persist_failed`, which is NOT in the firing gate set, so the
+          // fallback would then never arm on the next TurnComplete (silently
+          // disabling itself).
+          //
+          // Guarded: reaching the deadline with the id ALREADY captured (the box
+          // never rendered) must not downgrade "captured" — that value keeps the
+          // disk fallback disarmed on the next TurnComplete.
+          const [, parsed] = this.extractSessionID(false);
+          this.setPrimeOutcome(
+            parsed && this.session.harnessSessionID === ""
+              ? "persist_failed"
+              : "written_uncaptured",
+          );
+          return;
         }
-        // Distinguish a persist failure (box rendered + parsed, but the store
-        // rejected, so the id is still empty) from a plain poll miss. Scrape
-        // ONLY (allowDiskFallback=false): this discriminator must reflect the
-        // screen scrape alone. If the disk fallback ran here, a matching rollout
-        // already on disk would set `parsed = true` even though the box never
-        // rendered — misclassifying `written_uncaptured` as `persist_failed`,
-        // which is NOT in the firing gate set, so the fallback would then never
-        // arm on the next TurnComplete (silently disabling itself).
-        //
-        // Guarded: reaching the deadline with the id ALREADY captured (the box
-        // never rendered) must not downgrade "captured" — that value keeps the
-        // disk fallback disarmed on the next TurnComplete.
-        const [, parsed] = this.extractSessionID(false);
-        this.setPrimeOutcome(
-          parsed && this.session.harnessSessionID === ""
-            ? "persist_failed"
-            : "written_uncaptured",
-        );
-      } finally {
-        unsubscribe();
       }
     } catch (err) {
       // Capture misses are non-fatal; lifecycle/IO failures propagate. A
-      // client-facing prompt we can't auto-dismiss is a miss, not a failure.
+      // client-facing prompt we can't auto-dismiss is a miss, not a failure —
+      // and it can ONLY come from the probe's readiness wait, which runs strictly
+      // BEFORE the write, so nothing was written.
       if (err === ErrInputPending) {
-        // Guarded for the same reason as the tail classification: an id captured
-        // early followed by a pending prompt on the way out must stay
-        // "captured", not be downgraded to "written_uncaptured" (which arms the
-        // disk fallback).
-        this.setPrimeOutcome(wrote ? "written_uncaptured" : "not_written");
+        this.setPrimeOutcome("not_written");
         return;
       }
       throw err;
     } finally {
-      deadline.cancel();
-      half.cancel();
       release();
     }
   }
