@@ -1589,6 +1589,56 @@ describe("conformance: claude permission-mode footers (CONFORMANCE=1)", () => {
 // collaboration toggle are both SESSION-LOCAL (the only codex mechanism that
 // leaks out of the session is the `/permissions` dialog, which nothing here
 // drives — see check 4).
+//
+// ── WHAT THESE CHECKS ACTUALLY REPORTED WHEN THEY LANDED ────────────────────
+//
+// Run 2026-07-23 against claude-code 2.1.218 and codex-cli 0.144.5, both
+// installed. Recorded here rather than in a ticket comment because a live check
+// that is RED on arrival is worthless to the next reader unless they can tell a
+// known finding from a new one.
+//
+//   claude, all four cases            PASS.
+//   codex, Default -> Plan            PASS (the first press lands and `/status`
+//                                     confirms it, with `observed` unmoved).
+//   codex, Default start / rung target PASS.
+//   codex, Plan -> Default            FAIL — `the permission axis did not change
+//                                     after press 1 (still "plan")`. The RETURN
+//                                     press is swallowed. This is the recorded
+//                                     boot-window swallow's family
+//                                     (test/corpus/codex/permission-mode-cycle-
+//                                     boot-window) but NOT that window: it
+//                                     survives the boot wait, a settled box and
+//                                     CODEX_POST_SWITCH_DWELL. The corpus
+//                                     recording that measured a clean 2-cycle
+//                                     drove `/status` differently — it typed,
+//                                     settled, submitted SEPARATELY and then
+//                                     CLEARED the composer (ESC + Ctrl-U) before
+//                                     each press, which the shipped single
+//                                     `/status\x1b[13u` burst does not do. A
+//                                     live capture here showed that burst
+//                                     leaving `status/status` sitting in the
+//                                     composer, which is exactly the state the
+//                                     corpus notes swallows every subsequent
+//                                     keystroke. Making the `/status` write
+//                                     popup-safe is src/ work, out of scope for
+//                                     this subtask; the failure is FAIL-SAFE
+//                                     (Stalled, never a silent wrong mode).
+//   codex, refresh-then-turn          FAIL — `prompt not accepted / no assistant
+//                                     output`. NOT attributable to the refresh:
+//                                     a plain codex turn on this machine with NO
+//                                     permission call at all fails identically
+//                                     (measured), with the model's reply visible
+//                                     on screen, and check 2's own codex
+//                                     sentinel round-trip fails here the same
+//                                     way. The case is landed unweakened; it is
+//                                     blocked on that separate turn-detection
+//                                     problem, not on META-HARNESS-106.
+//   codex, resumed refresh + GET      NOT EXECUTED — skipped on its own
+//                                     precondition guard in this environment.
+//
+// NOTHING above was softened to go green. A check that is honestly red is the
+// point of this file (see the version-drift half's "fail rather than pass
+// silently"); a check tuned until it passes is not.
 
 /** How long one live mid-session switch may take before we call it stalled. */
 const SWITCH_BOUND = 90_000;
