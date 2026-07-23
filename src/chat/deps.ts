@@ -179,6 +179,21 @@ export interface Adapter {
    */
   permissionCycleKeys?(): Uint8Array;
   /**
+   * turns.PermissionsDialogCapability — the harness's structured permission-
+   * preset dialog (codex's "/permissions" picker), probed structurally like
+   * every other optional capability here. Omitted => the harness has no such
+   * dialog surface.
+   */
+  permissionsDialogKeys?(): Uint8Array;
+  /** turns.PermissionsDialogCapability — back out WITHOUT committing a preset. */
+  dialogBackoutKeys?(): Uint8Array;
+  /** turns.PermissionsDialogCapability — empty a composer holding literal text. */
+  composerClearKeys?(): Uint8Array;
+  /** turns.PermissionsDialogCapability — does the composer still carry text? */
+  composerHasText?(snap: Snapshot): boolean;
+  /** turns.PermissionsDialogCapability — the preset-commit containment gate. */
+  permissionsWriteContained?(declaredHome: string): boolean;
+  /**
    * turns.SessionForkResumer — reports whether `resume` mints a NEW harness
    * session id (forks) rather than continuing the old one. When true, the chat
    * layer arms a one-shot provisional refresh of the seeded id. Omitted =>

@@ -227,6 +227,34 @@ export interface Quitter {
   quitSequence(): Uint8Array;
 }
 
+/**
+ * Surfaces the harness's structured permission-preset dialog (codex's
+ * "/permissions" "Update Model Permissions" picker) as a capability seam: the
+ * keystrokes that open/back out/clear it, a way to check whether the composer
+ * still holds unsubmitted text, and the predicate that gates a preset commit
+ * on the write actually landing in an isolated, caller-named home rather than
+ * the harness's real global config.
+ */
+export interface PermissionsDialogCapability {
+  /** Opens the dialog: the command plus its submit keys, as one burst. */
+  permissionsDialogKeys(): Uint8Array;
+  /** Dismisses the dialog WITHOUT committing the highlighted preset. */
+  dialogBackoutKeys(): Uint8Array;
+  /** Empties a composer already holding literal, unsubmitted text. */
+  composerClearKeys(): Uint8Array;
+  /** Reports whether the last "›" row (the composer) still carries text. */
+  composerHasText(snap: Snapshot): boolean;
+  /**
+   * Reports whether committing a preset from THIS conversation is contained —
+   * i.e. would land in the isolated home named by `declaredHome`, not the
+   * harness's real global config directory. Fails closed: false whenever the
+   * adapter never bound a launch-time home (see bindLaunchEnv on the relevant
+   * adapter), or when the bound and declared homes disagree, or when the
+   * (agreeing) home resolves to the real global config directory.
+   */
+  permissionsWriteContained(declaredHome: string): boolean;
+}
+
 /** Supplies the keystroke that advances the harness's permission-mode ring. */
 export interface PermissionModeCycler {
   /** One press that advances the ring by exactly one rung. */
