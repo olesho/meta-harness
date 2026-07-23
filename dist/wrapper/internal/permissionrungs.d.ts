@@ -13,12 +13,28 @@ export declare const CodexApprovalUntrusted = "untrusted";
 export declare const CodexApprovalOnRequest = "on-request";
 export declare const CodexApprovalNever = "never";
 /**
+ * Claude Code's --permission-mode flag: the single spelling that carries the
+ * whole claude permission axis.
+ *
+ * Exported for the same reason the flag SETS below are: this module is the
+ * replay authority for these spellings, so it is their natural home and the
+ * one place a live conformance check can derive them from rather than retype
+ * them (test/conformance.test.ts, check 1).
+ */
+export declare const ClaudePermissionModeFlag = "--permission-mode";
+/**
  * Claude Code's blanket permission-bypass flags. Both spellings exist at
  * claude-code 2.1.217; either one in argv leaves the harness unrestricted.
  */
 export declare const ClaudeSkipPermissionsFlags: readonly string[];
 /** codex's blanket approval+sandbox bypass flag. */
 export declare const CodexBypassFlag = "--dangerously-bypass-approvals-and-sandbox";
+/** codex's sandbox-axis flag, short and long spelling. */
+export declare const CodexSandboxFlags: readonly string[];
+/** codex's approval-axis flag, short and long spelling. */
+export declare const CodexApprovalFlags: readonly string[];
+/** codex's profile flag: a profile can set BOTH permission axes out of band. */
+export declare const CodexProfileFlags: readonly string[];
 /**
  * permissionRungs returns the canonical rungs, ordered least to most
  * permissive.
