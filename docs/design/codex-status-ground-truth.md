@@ -6,7 +6,9 @@ re-derived. **This is the text to write back into META-HARNESS-99's ground-truth
 rendering maps to, and the recorded fixtures that hold the mapping in place. The read side only —
 argv encoding is settled separately in `permission-argv-parity.md`.
 **Related:** META-HARNESS-99 (epic, owns the ground-truth table) · META-HARNESS-132
-(`permission-argv-parity.md`, the write side) · `src/chat/permission.ts` (`codexPermissionRungs`) ·
+(`permission-argv-parity.md`, the write side) · META-HARNESS-155
+(`codex-status-preflight-probe.md`, the pre-flight probe that re-confirmed the `Permissions:` row
+and enumerated the **full** row set) · `src/chat/permission.ts` (`codexPermissionRungs`) ·
 `src/turns/harness/codex.ts` (`statusSessionRE`, `statusBoxHeaderRE`, `CODEX_STATUS_MIN_COLS`) ·
 `test/corpus/codex/status-*` (the recordings).
 
@@ -26,6 +28,7 @@ The version is recorded in each fixture's `meta.json` so the subtask that owns
 
 | launch flags                       | `Permissions:` rendering        | rung          | fixture                     |
 | ---------------------------------- | ------------------------------- | ------------- | --------------------------- |
+| _(none — codex's own default)_     | `Workspace (Ask for approval)`  | `acceptEdits` | `status-box`²               |
 | `-s workspace-write -a on-request` | `Workspace (Ask for approval)`  | `acceptEdits` | `status-default`            |
 | `-s workspace-write -a untrusted`  | `Custom (workspace, untrusted)` | `manual`      | `status-manual`             |
 | `-s workspace-write -a never`      | `Custom (workspace, never)`     | `auto`        | `status-auto`               |
@@ -38,11 +41,23 @@ The version is recorded in each fixture's `meta.json` so the subtask that owns
 
 ¹ Permissions axis **only**. See §5.
 
+² Added by META-HARNESS-155 (`codex-status-preflight-probe.md`). A **flagless** launch renders the
+same string as `-s workspace-write -a on-request` because that pair **is** codex's default posture.
+The consequence matters for anyone writing a live check: those two launches are indistinguishable
+from the `Permissions:` row alone, so a `/status` assertion driven only at the default posture
+exercises none of the forward `(sandbox, approval) → rung` map. Use a non-default posture.
+
 "No rung" means `observed: "unknown"` with the value preserved verbatim in `raw` — an off-ladder
 state, not a failure to see.
 
 `Collaboration mode:` renders `Default` on every launch above. `Plan` appears only after a
 post-launch `/plan` (`status-plan`).
+
+**The full row set** — `Model:`, `Directory:`, `Permissions:`, `Agents.md:`, `Account:`,
+`Collaboration mode:`, `Session:`, and a trailing limits row (`Weekly limit:` when limits data is
+loaded, `Limits:` when it is not) — is enumerated with per-row stability notes in
+`codex-status-preflight-probe.md` §2/§6. Only `Permissions:` and `Collaboration mode:` are parsed
+here; `Directory:` and the limits row are **not** stable enough to anchor on.
 
 ## 3. Two corrections to the predicted table
 
