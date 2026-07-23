@@ -55,11 +55,27 @@ optionally API-error / session-limit) fingerprints, then wire the name into the 
 or [`claude.ts`](../../../src/wrapper/internal/harness/claude.ts) (rich, with API-error and
 session-limit matchers) as templates. This is what lets
 [`classifyOutput("newcli", …)`](../modules/wrapper.md#classification) recognize the CLI's
-rate-limit and error prose. If the CLI supports reasoning effort or a model flag, add its
-translation to `src/wrapper/internal/effort.ts` / `model.ts`. If it has a launch-time
-permission axis, add the third translation to `src/wrapper/internal/permission.ts` — the
-five rungs (`plan`, `manual`, `ask`, `auto`, `bypass`, least to most permissive) plus the
-guard flags that suppress injection when the caller pinned the axis themselves. See
+rate-limit and error prose.
+
+There are **three** launch knobs, one translator module each, every module named for what
+it translates: reasoning effort →
+[`src/wrapper/internal/effort.ts`](../../../src/wrapper/internal/effort.ts), model override →
+[`src/wrapper/internal/model.ts`](../../../src/wrapper/internal/model.ts), permission mode →
+[`src/wrapper/internal/permission.ts`](../../../src/wrapper/internal/permission.ts). Add a
+translation to whichever ones the CLI supports.
+
+`permission.ts` is the one whose accepted vocabulary is **per-harness** — the five rungs
+(`plan`, `manual`, `ask`, `auto`, `bypass`, least to most permissive) plus whatever native
+spellings that CLI takes on top. That is why `isSupportedPermissionMode(harness, mode)` takes
+the harness where `isSupportedEffort(effort)` does not; the asymmetry is deliberate, since a
+harness-blind predicate could only be the union of every harness's vocabulary. Register the
+guard flags alongside the mapping: they suppress injection when the caller already pinned the
+axis in `args`.
+
+Each translator is total — a harness with no mapping returns `args` unchanged rather than
+erroring **inside the translator**. That is a guarantee about the translator layer only: one
+layer up, `validateConfig` still rejects a `Config` that sets `permissionMode` for such a
+harness, the same way it rejects `effort`. See
 [`wrapper` › Permission mode](../modules/wrapper.md#permission-mode).
 
 ---
@@ -149,9 +165,12 @@ accidentally re-exports something internal.
 
 - [ ] Runs as `generic`.
 - [ ] `versions.json` entry + discovery probe.
-- [ ] Wrapper pattern set wired into the classifier (+ effort/model if supported).
-- [ ] Permission-mode translation in `src/wrapper/internal/permission.ts` (+ its guard
-      flags), if the CLI has a launch-time permission axis.
+- [ ] Wrapper pattern set wired into the classifier (+ the launch-knob translations the CLI
+      supports, one module each in `src/wrapper/internal/`: `effort.ts`, `model.ts`,
+      `permission.ts`).
+- [ ] Permission-mode translation in `src/wrapper/internal/permission.ts` — the five rungs
+      plus the guard flags — if the CLI has a launch-time permission axis. The translator
+      no-ops for an unmapped harness; `validateConfig` still rejects one.
 - [ ] Turns adapter: required core + the optional capabilities it supports; `New()`
       exported; `resolveAdapter` case added.
 - [ ] Transcript reader (if it has a log).
