@@ -6,8 +6,16 @@
   "rows": 40,
   "hand_recorded": true,
   "recorder": "test/corpus/tools/record-pty.ts --interactive",
-  "launch_flags": ["-s","read-only","-a","untrusted"],
-  "keystrokes": "see stdin.log",
+  "launch_flags": [
+    "-s",
+    "read-only",
+    "-a",
+    "untrusted"
+  ],
+  "keystrokes": [
+    "11.914s keys /status",
+    "13.923s keys \\r"
+  ],
   "permissions_value": "Read Only (untrusted)",
   "collaboration_value": "Default",
   "widest_status_row_cols": 95,

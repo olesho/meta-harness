@@ -6,8 +6,16 @@
   "rows": 40,
   "hand_recorded": true,
   "recorder": "test/corpus/tools/record-pty.ts --interactive",
-  "launch_flags": ["-s","danger-full-access","-a","never"],
-  "keystrokes": "see stdin.log",
+  "launch_flags": [
+    "-s",
+    "danger-full-access",
+    "-a",
+    "never"
+  ],
+  "keystrokes": [
+    "11.893s keys /status",
+    "13.904s keys \\r"
+  ],
   "permissions_value": "Full Access",
   "collaboration_value": "Default",
   "widest_status_row_cols": 95,

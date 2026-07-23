@@ -6,8 +6,16 @@
   "rows": 40,
   "hand_recorded": true,
   "recorder": "test/corpus/tools/record-pty.ts --interactive",
-  "launch_flags": ["-s","workspace-write","-a","on-request"],
-  "keystrokes": "see stdin.log",
+  "launch_flags": [
+    "-s",
+    "workspace-write",
+    "-a",
+    "on-request"
+  ],
+  "keystrokes": [
+    "11.911s keys /status",
+    "13.917s keys \\r"
+  ],
   "permissions_value": "Workspace (Ask for approval)",
   "collaboration_value": "Default",
   "widest_status_row_cols": 95,
