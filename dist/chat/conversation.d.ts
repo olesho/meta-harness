@@ -12,7 +12,7 @@ import { type YieldControl } from "../acquisition/internal/yield.ts";
 import { type StreamVersionPredicate } from "../acquisition/internal/planAcquisition.ts";
 import { HookDrain } from "./hookDrain.ts";
 import type { ParsedEvent, Turn as TranscriptTurn } from "../transcript/event.ts";
-import { type PermissionModeReading, type PermissionModeTarget } from "./permission.ts";
+import { type PermissionModeReading } from "./permission.ts";
 /** Options configures a single Conversation. Mirrors chat.Options. */
 export interface Options {
     /** Per-harness adapter name. Required. */
@@ -78,13 +78,6 @@ export interface Options {
     idleGap?: number;
     /** Test-only marker-confirm window override (ms). Zero = package default. */
     markerGap?: number;
-    /**
-     * Test-only per-press permission-settle window override (ms). Zero = package
-     * default (permissionSettleGap). Shaped exactly like `markerGap`, and read
-     * through permissionSettleDur() the way `markerGap` is read through
-     * markerGapDur().
-     */
-    permissionSettle?: number;
     /** Test-only session-id prime deadline override (ms). Zero = package default. */
     primeBound?: number;
     /** Test-only echo-gated submit deadline override (ms). Zero = package default. */
@@ -374,232 +367,6 @@ export declare class Conversation {
     wrapper(): WrapperSession | undefined;
     /** Ask the harness to exit gracefully via its adapter-defined quit sequence. */
     quit(ctx: Context): Promise<void>;
-    /**
-     * Moves the live session onto `target` by driving the harness's OWN
-     * permission-mode cycle keystroke, and returns permissionMode()'s reading once
-     * the harness's own UI shows the new value on the axis this method drives — or
-     * throws. WRITES. Requires the control token as a PRECONDITION.
-     *
-     * ## Locking: `held()`, NOT `acquire()`
-     *
-     * This copies send()/answer() exactly — `closedFlag` then `queue.held()` — and
-     * MUST NEVER `await this.queue.acquire(ctx)`. The gateway mints the control
-     * token BY HOLDING the ControlQueue (acquireControl -> conv.acquireControl ->
-     * entry.acquireToken(release), src/gateway/server.ts), and ControlQueue is a
-     * non-reentrant FIFO with a single `_held` flag (src/chat/control.ts). An
-     * acquire() here would park an HTTP caller behind its OWN token until the
-     * request deadline — a deadlock, not a style question.
-     *
-     * quit() is deliberately DIFFERENT (it acquires, and has no token gate at all)
-     * because it is the teardown path: it must be callable by an owner that never
-     * took control, and nothing races it afterwards. Do NOT "unify" the two.
-     *
-     * Be honest about what the precondition buys: ControlQueue.held() reports that
-     * SOMEONE holds the token, not that THIS caller does. This method inherits
-     * exactly the precondition send()/answer() already have, including that known
-     * limitation. Over HTTP the real gate is `entry.hasToken(...)` in the gateway.
-     *
-     * Makes NO store mutation.
-     *
-     * ## Gating, in order, before a single keystroke
-     *
-     *  1. not closed                     -> else ErrClosed
-     *  2. `queue.held()`                 -> else ErrNoControl
-     *  3. `currentTurn === null`         -> else ErrTurnInFlight (a press mid-turn
-     *     moves the mode while the footer is repainting and unreadable, so the
-     *     loop could not confirm anything)
-     *  4. `currentInput === null`        -> else ErrInputPending
-     *  5. `readyForInput(...)`           -> else wait under awaitPromptReadyUntil
-     *     rather than writing blind. This one gate also covers a blocking startup
-     *     interstitial, an approval dialog, and codex's `Update Model Permissions`
-     *     dialog, all of which pin readyForInput false.
-     *  6. the target is legal for this harness's axis, and the START value is
-     *     on-axis.
-     *
-     * The static half of (6) — plus the adapter capability probe and the `bypass`
-     * launch-configuration check — is evaluated BEFORE (5): all three are pure
-     * facts about the adapter and the launch, so failing them fast beats burning
-     * the caller's deadline waiting for a composer we are then going to refuse.
-     * Still zero keystrokes either way. The start-value half genuinely needs a
-     * legible screen, so it runs after (5).
-     *
-     * ### Gate 4 diverges from the rest of the layer ON PURPOSE
-     *
-     * It is the STRICT `currentInput !== null`, where the rest of chat uses the
-     * looser inputAwaitingClient() (`currentInput !== null && inputSurfaced`) —
-     * which is also what gate 5's awaitPromptReadyUntil re-checks mid-wait. The
-     * consequence, documented rather than left to be discovered: a NON-auto-
-     * dismissable codex interstitial (`KindPermissions`, whose AutoDismissKeys
-     * returns `[null, false]` BY DESIGN, src/turns/harness/codex.ts) parks
-     * `currentInput` indefinitely, so this method fails PERMANENTLY with
-     * ErrInputPending until a client answers it. That is correct, but to a caller
-     * it looks like a hang — so the raised ErrInputPending names the pending
-     * request's `kind` and points at pendingInput() / answer().
-     *
-     * Precedence, stated the way autoSkipCodexUpdateNotice states its own: THE
-     * INPUT MACHINERY WINS. This method refuses whenever `currentInput !== null`,
-     * INCLUDING a request currently being auto-resolved by an inputPolicy via
-     * tryResolveInput/writeAnswer. It never writes "around" a pending prompt.
-     * Callers that want to answer a prompt use answer(); callers that want to move
-     * the mode use this.
-     *
-     * A dialog can also appear MID-TRAVERSAL: on a bypass-enabled claude session
-     * with a fresh HOME, a ring traversal that lands on `bypass` surfaces the
-     * acceptance screen ("Bypass Permissions mode"), which the turns layer reports
-     * as `kind: "trust_prompt"`. The loop therefore re-checks `currentInput`
-     * before every press and on every frame of every settle, and aborts with
-     * ErrInputPending naming the kind — NOT with a stall while leaving the session
-     * parked in a modal. The caller clears it with answer().
-     *
-     * ## Per-harness axis
-     *
-     *   harness       axis driven                field       legal targets
-     *   claude-code   the Shift+Tab ring         `observed`  any PermissionRung
-     *                 (= the ladder)                         (`bypass` only when
-     *                                                        launch-enabled)
-     *   codex         the collaboration 2-cycle  `collaboration`  "default"|"plan"
-     *   others        none                       —           none -> Unsupported
-     *
-     * A rung target on codex, or `"default"` on claude, is
-     * ErrPermissionModeUnreachable naming the axis and pointing at the launch
-     * flags. (`"default"` is not a ladder rung: the rule is "Default when
-     * permissionMode is unset: inject nothing", and claude's actual default is
-     * `manual`.)
-     *
-     * ## Honest-return guarantees
-     *
-     * `requested` is a LAUNCH fact and is NOT rewritten by a successful switch:
-     * after this call `requested` still reports the rung the session was LAUNCHED
-     * with, so `requested !== observed` is expected drift, not a bug. Callers
-     * comparing the two go through normalizePermissionRung.
-     *
-     * On codex this method moves the COLLABORATION axis only. The permissions axis
-     * is launch-flag territory (`-s` / `-a`), and the only way to move it at
-     * runtime is the opt-in `/permissions` dialog driver — which writes
-     * `~/.codex/config.toml` and so LEAKS OUT OF THE SESSION. Nothing here writes
-     * that file. Claude's Shift+Tab and codex's collaboration toggle are both
-     * session-local.
-     *
-     * ## Termination
-     *
-     * Lap detection is the terminator: `start` is recorded before the first press,
-     * and the axis returning to `start` without ever hitting `target` means the
-     * ring lapped -> ErrPermissionModeUnreachable LISTING the values actually
-     * observed. That is exact whether this session's ring is 4 or 5 long, and it
-     * also catches a hypothetical extra rung on a future build. A flat
-     * permissionCycleMaxPresses backstop and the ctx deadline each raise
-     * ErrPermissionModeStalled. A fixed number of presses is NEVER sent: the ring
-     * length is launch-dependent and no code may depend on it, so the axis is
-     * re-read after EVERY press.
-     *
-     * No-op: `target` already on the axis returns the current reading without
-     * writing a single cycle keystroke, and without touching the queue beyond the
-     * held() precondition. Idempotent by construction — two consecutive calls
-     * press at most once.
-     */
-    setPermissionMode(ctx: Context, target: PermissionModeTarget): Promise<PermissionModeReading>;
-    /**
-     * The ONE axis accessor every comparison in setPermissionMode goes through —
-     * before/after, the no-op check, the target hit, and lap detection.
-     *
-     * 102's reading carries TWO axes that DO NOT COLLAPSE: `observed` is the
-     * PERMISSIONS ladder, `collaboration` is a separate field. Watching the wrong
-     * field is the failure that would make every codex call end in
-     * ErrPermissionModeStalled after the backstop — which is why this is a named
-     * function with its own test rather than an inline field access repeated in
-     * four places.
-     *
-     * Returns "unknown" for a harness with no cycle axis. Those never reach here
-     * (the capability probe raises ErrPermissionModeUnsupported first), but a
-     * silent fallback to `observed` would make a future harness look like it had a
-     * ladder axis it does not have.
-     */
-    private permissionAxisValue;
-    /**
-     * The adapter's permission-mode cycle keystroke, or null.
-     *
-     * A verbatim copy of adapterQuitSequence's shape, and consumed the same way
-     * quit() consumes it for ErrQuitUnsupported. The `permissionCycleKeys?()`
-     * declaration in src/chat/deps.ts is DOCUMENTATION of the optional-capability
-     * set, not compile-time checking — this runtime `typeof … === "function"`
-     * probe plus the turns-layer contract test are the only real guards.
-     */
-    private adapterPermissionCycleKeys;
-    /**
-     * Whether this session's LAUNCH CONFIGURATION enables the `bypass` rung — i.e.
-     * whether `bypass` is on this session's Shift+Tab ring at all.
-     *
-     * META-HARNESS-100 landed the launch-configuration predicate as
-     * effectiveLaunchRung rather than the anticipated
-     * `bypassEnablingFlagPresent(mode, args)` shape. We reuse it verbatim instead
-     * of hand-rolling a flag scanner in the chat layer: it reads BOTH the
-     * structured knob and argv, including the `=`-joined
-     * `--permission-mode=bypassPermissions` form and the
-     * `--dangerously-skip-permissions` family, which is exactly the fact needed.
-     */
-    private bypassEnabledAtLaunch;
-    /**
-     * The STRICT pending-input refusal, carrying the pending request's `kind`.
-     *
-     * Deliberately `currentInput !== null` rather than inputAwaitingClient(): see
-     * setPermissionMode's docstring for why, and for the permanent-failure case it
-     * implies. The message names the kind and the escape hatch because to a caller
-     * a permanent ErrInputPending otherwise looks like a hang.
-     */
-    private throwIfPermissionInputPending;
-    /**
-     * Classifies a reading whose axis value is "unknown", keyed on `source` — NOT
-     * on `observed === "unknown"`, which on a single mid-render frame would kill
-     * the whole call. Returns null when the reading is merely TRANSIENT and the
-     * caller should keep waiting inside the settle bound.
-     *
-     *   source                        meaning                  disposition
-     *   no_footer                     mid-render, or a          keep waiting
-     *                                 blocking dialog is up     (null)
-     *   unparsed_footer               the line IS painted and   Stalled + source
-     *                                 did not parse             + raw
-     *   too_narrow / not_primed /     the codex /status box     Stalled + source
-     *   not_written /                 was never legibly
-     *   written_uncaptured            captured
-     *   "unknown" + NON-EMPTY raw     off-ladder but LEGIBLE    Unreachable,
-     *                                 (dontAsk, codex           quoting raw
-     *                                 `Custom (…)`, `Workspace
-     *                                 (Approve for me)`)
-     *
-     * A blocking dialog reads as `no_footer` here, and would therefore be waited
-     * on — but it also trips the mid-loop `currentInput` check, which raises
-     * ErrInputPending first. That ordering is the point: the caller learns there
-     * is a modal to answer, not that the ring stalled.
-     */
-    private permissionReadingError;
-    /**
-     * Waits for the permission axis to hold a usable value, under a SINGLE screen
-     * subscription taken BEFORE `write` runs — so a render landing between the
-     * write and the subscription is never missed. This is primeSessionID's
-     * check-before-wait + single-subscription pattern.
-     *
-     * `before === null` is the ENTRY read: no write, and the first legible value
-     * is accepted immediately (nothing is moving, so demanding stability would
-     * cost a whole settle gap on every no-op call).
-     *
-     * Otherwise it is the PER-PRESS settle, and the naive "write, re-read, repeat"
-     * is exactly what it exists to prevent: an immediate re-read races the render,
-     * sees the pre-press value, concludes "not there yet", presses again and
-     * OVERSHOOTS the ring — the silent-wrong-mode failure. A new value V is
-     * accepted only when it differs from `before` AND is STABLE, where stability
-     * is defined by the screen GENERATION and the timer is only the bound:
-     *
-     *   - V parses identically at two DISTINCT generations (the sharp, cheap
-     *     predicate — claude repaints continuously, so this resolves in ms), OR
-     *   - V parsed at least once and no further render arrives before
-     *     permissionSettleGap elapses (the quiescent case, where a second
-     *     generation will never come).
-     *
-     * Returns null when the bound elapsed with no stable change; throws on ctx
-     * cancellation, close, a pending input request, or a non-transient reading
-     * failure.
-     */
-    private settlePermissionAxis;
     /** Respond to the interactive prompt currently awaiting an answer. */
     answer(_ctx: Context, requestID: string, ans: InputAnswer): Promise<void>;
     /** Records a pending request and tries policy/handler resolution, else surfaces. */
@@ -672,7 +439,6 @@ export declare class Conversation {
     handleTurnsEvent(ev: TurnEvent): Promise<void>;
     private idleGapDur;
     private markerGapDur;
-    private permissionSettleDur;
     private idleCompletionWatcher;
     private activityIntervalDur;
     /**
