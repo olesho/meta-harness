@@ -25,6 +25,12 @@ import { pathToFileURL } from "node:url";
 import { runOneShotDetailed, cleanEnv, } from "../oneshot/index.js";
 import { Context } from "../async/index.js";
 import { ClaudeCodeReader, CodexReader, toPublicJSON, usageToPublicJSON, } from "../transcript/index.js";
+// Reached DIRECTLY rather than through a barrel: neither module is re-exported
+// from src/wrapper/api.ts, deliberately — a public re-export would move
+// test/testdata/ts_surface.golden, and src/cli/** is outside both barrel guards.
+// Precedent: src/cli/screenbench-record.ts imports ../wrapper/internal/pty.ts.
+import { argvPermissionPin, isSupportedPermissionMode, } from "../wrapper/internal/permission.js";
+import { effectiveLaunchRung } from "../wrapper/internal/permissionrungs.js";
 // Exit codes + DeadlineLine come from the ONE shared protocol module
 // (src/turnproto). Re-exported here so this CLI's tested surface — test/cli/
 // structured-runner.test.ts imports ExitOK from this module — stays UNCHANGED.
@@ -215,6 +221,63 @@ export function readUsage(harness, harnessSessionID, workingDir) {
     const usage = reader.readUsage(harnessSessionID, workingDir);
     return usage ? usageToPublicJSON(usage) : null;
 }
+/**
+ * reportedPermissionRung computes StructuredTurnResult.permission_mode for this
+ * launch: the rung the runner LAUNCHED the harness at, or undefined when
+ * nothing was requested and nothing was injected. Pure — argv arithmetic only,
+ * no I/O — so the whole table is unit-tested directly rather than through a
+ * real-pty turn.
+ *
+ * It CONSUMES metaHarnessArgs' output rather than restating its condition. That
+ * coupling is the point: the runner's own `--sandbox-defaults` injection is
+ * read back as ARGV, so a future change to what metaHarnessArgs emits (a codex
+ * injection, a second claude flag) cannot silently desynchronise the reported
+ * rung from the command line that actually launched.
+ *
+ * The composed argv is exactly what the wrapper sees — chat prepends only the
+ * effort/model prefix, never a permission flag — so effectiveLaunchRung's
+ * replay of the all-or-nothing suppression rule is the same replay the wrapper
+ * performs. In particular argv BEATS the requested mode, which is why
+ * `--permission-mode plan` alongside a bypass flag reports "bypass" and never
+ * "plan": under-reporting permissiveness is the one direction this field must
+ * never fail in.
+ *
+ * effectiveLaunchRung returns "" for BOTH "argv says nothing" and "argv pins
+ * something unnameable"; argvPermissionPin tells those apart, because absence
+ * here means "nothing was requested" and must never be read as "pinned, posture
+ * unknown". A pinned-but-unnameable posture reports "override"; a pin naming a
+ * spelling with no canonical rung (claude's dontAsk) passes through verbatim
+ * rather than being erased.
+ */
+export function reportedPermissionRung(harness, parsed) {
+    const args = [
+        ...metaHarnessArgs(harness, parsed.sandboxDefaults === true),
+        ...parsed.harnessArgs,
+    ];
+    const requested = parsed.permissionMode ?? "";
+    const rung = effectiveLaunchRung(harness, args, requested);
+    if (rung !== "")
+        return rung;
+    const pin = argvPermissionPin(harness, args);
+    // An off-ladder native spelling in argv — the runner knows the rung PRECISELY
+    // even though the ladder cannot name it; a sentinel would erase that.
+    if (pin.kind === "native")
+        return pin.value;
+    if (pin.kind === "opaque")
+        return "override";
+    // Nothing in argv. A requested mode this harness has no canonical rung for
+    // (again dontAsk) was still injected verbatim, so report it verbatim — but
+    // ONLY when the injector would in fact have injected it. isSupportedPermission
+    // Mode is that exact predicate: a harness with no permission axis, or a
+    // spelling this harness does not accept, leaves argv untouched, so reporting
+    // the request would name a rung nothing ever launched at.
+    if (requested !== "" && isSupportedPermissionMode(harness, requested)) {
+        return requested;
+    }
+    // Nothing requested, nothing injected. Key ABSENT — never "" and never
+    // "default".
+    return undefined;
+}
 function exitFor(status) {
     if (status === "completed")
         return ExitOK;
@@ -264,7 +327,11 @@ usage: structured-runner [--prompt-file <path>] [--effort E] [--model M] [--perm
   --                  everything after is forwarded verbatim to the harness
 
 Emits ONE JSON line on stdout: { status, reply, harnessSessionID, transcript_entries,
-usage?, reason?, transcript_error?, working_dir }. Exit: 0 completed · 1 errored · 2 usage · 124 deadline.
+usage?, reason?, transcript_error?, permission_mode?, working_dir }.
+permission_mode is the rung the runner LAUNCHED at (telemetry, not authorization):
+a canonical rung, "override" when argv pins a posture no single token names, or
+absent when nothing was requested and nothing injected.
+Exit: 0 completed · 1 errored · 2 usage · 124 deadline.
 `;
 export async function main(argv) {
     const parsed = parseStructuredArgs(argv);
@@ -309,6 +376,9 @@ export async function main(argv) {
     const workingDir = (process.env.LOOM_WORKTREE_PATH ?? "").trim() || process.cwd();
     const env = cleanEnv(buildGuestEnv(process.env, parsed.sandboxDefaults === true));
     const binaryPath = resolveBinaryPath(harness, process.env);
+    // Hoisted ABOVE the try so BOTH emit sites share one expression: the launch
+    // was attempted at this rung even when it throws before producing an outcome.
+    const permissionMode = reportedPermissionRung(harness, parsed);
     const { ctx, cancel } = Context.withDeadline(Context.background(), resolveTimeoutMs(process.env));
     let outcome;
     try {
@@ -334,6 +404,7 @@ export async function main(argv) {
             harnessSessionID: "",
             transcript_entries: [],
             reason: err instanceof Error ? err.message : String(err),
+            permission_mode: permissionMode,
             working_dir: workingDir,
         });
         return ExitError;
@@ -367,6 +438,7 @@ export async function main(argv) {
         usage: usage ?? undefined,
         reason: reasonOf(outcome),
         transcript_error: transcriptError,
+        permission_mode: permissionMode,
         working_dir: workingDir,
     });
     if (outcome.status === "deadline") {
