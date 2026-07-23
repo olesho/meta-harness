@@ -65,11 +65,18 @@ const SELF = relative(root, fileURLToPath(import.meta.url));
 // fake-harness scaffolding for setCodexPermissionPreset's driver has to type
 // the literal command to give that driver something deterministic to script
 // against. Test-only scaffolding, not a 106 code path.
+//
+// Check 2's own docstring makes the same carve-out for the `/permissions`
+// command explicit ("outside META-HARNESS-103"): src/turns/harness/codex.ts's
+// permissionsDialogKeys (META-HARNESS-125, a 103 subtask) is the capability
+// seam that legitimately types it, gated by permissionsWriteContained — 106
+// never touches it and this absence check is unaffected.
 const EXEMPT = new Set([
   "test/helpers/codex_home.ts",
   "test/helpers/codex_home.test.ts",
   "test/chat/fakeharness.ts",
   "test/chat/fakeharness_permissions.test.ts",
+  "src/turns/harness/codex.ts",
 ]);
 
 function walk(dir: string, out: string[] = []): string[] {

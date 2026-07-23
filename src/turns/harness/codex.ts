@@ -27,11 +27,19 @@
 // is a separate concern.
 
 import { createHash } from "node:crypto";
+import { homedir } from "node:os";
+import { join, resolve } from "node:path";
 import type { TranscriptTurn } from "../../chat/deps.ts";
 import type { Snapshot } from "../../screen/index.ts";
 import { CodexReader, turnsFromEvents } from "../../transcript/index.ts";
 import { GenericAdapter } from "../generic.ts";
-import type { Adapter, Event, InputOption, InputRequest } from "../types.ts";
+import type {
+  Adapter,
+  Event,
+  InputOption,
+  InputRequest,
+  PermissionsDialogCapability,
+} from "../types.ts";
 import { InputRequested, InputResolved, TurnComplete } from "../types.ts";
 import type { Status } from "../wrapper.ts";
 import { StatusWaitingForInput } from "../wrapper.ts";
@@ -98,10 +106,38 @@ const statusBoxHeaderRE = />_ OpenAI Codex \(v/;
  */
 export const CODEX_STATUS_MIN_COLS = 60;
 
+/**
+ * codexHomeFromEnv reads CODEX_HOME out of an env array ("KEY=VALUE" entries),
+ * last-wins (mirroring how a real environment/exec argv layering works).
+ * Returns undefined when the variable is absent, distinguishing "absent" from
+ * "present but empty" the same way piSessionsDirFromEnv's lookup does.
+ */
+function codexHomeFromEnv(env: string[]): string | undefined {
+  for (let i = env.length - 1; i >= 0; i--) {
+    const e = env[i];
+    const eq = e.indexOf("=");
+    if (eq < 0) continue;
+    if (e.slice(0, eq) === "CODEX_HOME") return e.slice(eq + 1);
+  }
+  return undefined;
+}
+
 /** Adapter implements turns.Adapter for Codex CLI. */
-export class CodexAdapter extends GenericAdapter implements Adapter {
+export class CodexAdapter
+  extends GenericAdapter
+  implements Adapter, PermissionsDialogCapability
+{
   /** Overrides ~/.codex/sessions for the transcript reader (readTranscript). */
   sessionsRoot = "";
+
+  /**
+   * The CODEX_HOME this adapter's conversation was launched under, per
+   * bindLaunchEnv: null until Open binds it, "" when bound but the variable is
+   * absent from the effective launch env, else the raw (unresolved) parsed
+   * value. permissionsWriteContained fails closed on either null or "" — see
+   * that method for why an ambient/inherited CODEX_HOME can never satisfy it.
+   */
+  boundCodexHome: string | null = null;
 
   private lastFingerprint = "";
   private lastInputID = "";
@@ -266,6 +302,128 @@ export class CodexAdapter extends GenericAdapter implements Adapter {
   }
 
   /**
+   * Implements PermissionsDialogCapability.permissionsDialogKeys — opens the
+   * `/permissions` "Update Model Permissions" picker: the slash command
+   * followed by the CSI 13 u submit key.
+   *
+   * CAPTURED LIVE against codex-cli 0.144.5 (test/corpus/codex/
+   * probe-backout-keys and probe-commit-keys-permissions, META-HARNESS-122):
+   * every probe session opened the dialog by typing `/permissions` then
+   * writing `\x1b[13u` as a single burst — the same free-text-composer submit
+   * primeSessionIDKeys uses for `/status` above, not the bare-CR encoding that
+   * (per the commit-key matrix probe) menu-ROW selection tolerates.
+   */
+  permissionsDialogKeys(): Uint8Array {
+    return enc.encode("/permissions" + "\x1b[13u");
+  }
+
+  /**
+   * Implements PermissionsDialogCapability.dialogBackoutKeys — dismisses the
+   * `/permissions` dialog WITHOUT committing a preset (esc, not enter).
+   *
+   * CAPTURED LIVE against codex-cli 0.144.5 (test/corpus/codex/
+   * probe-backout-keys, META-HARNESS-122): both a bare ESC and CSI 27 u
+   * dismissed the dialog cleanly with no composer residue; bare ESC (the
+   * simpler encoding, and what a physical Esc key sends) is pinned. NOTE: a
+   * bare ESC is a byte-for-byte PREFIX of CSI 13 u / CSI 27 u — a caller
+   * distinguishing "was this an ESC key" from "was this a CSI-u sequence" must
+   * match the exact one-byte string, not just "starts with 0x1b" (see the
+   * probe's non-overlap note).
+   */
+  dialogBackoutKeys(): Uint8Array {
+    return enc.encode("\x1b");
+  }
+
+  /**
+   * Implements PermissionsDialogCapability.composerClearKeys — empties a
+   * composer already holding literal, unsubmitted text.
+   *
+   * CAPTURED LIVE against codex-cli 0.144.5 (test/corpus/codex/
+   * probe-composer-clear-keys, META-HARNESS-122): Ctrl-U, Ctrl-A+Ctrl-K, and a
+   * backspace run all cleared the composer back to the idle placeholder;
+   * Ctrl-U is pinned as the shortest reliable encoding — one write regardless
+   * of how much text is typed, unlike a backspace run whose length must scale
+   * with it.
+   */
+  composerClearKeys(): Uint8Array {
+    return enc.encode("\x15");
+  }
+
+  /**
+   * Implements PermissionsDialogCapability.composerHasText — reports whether
+   * the composer (the last "›" row on screen) still carries typed text.
+   * Delegates to the same last-"›"-row scan promptNotAccepted uses, extracted
+   * to lastComposerRowText so both methods share one regex and one loop.
+   */
+  composerHasText(snap: Snapshot): boolean {
+    return this.lastComposerRowText(snap);
+  }
+
+  /**
+   * Implements PermissionsDialogCapability.permissionsWriteContained — the
+   * containment predicate gating a `/permissions` preset commit, which codex
+   * persists to `$CODEX_HOME/config.toml` (global if CODEX_HOME is unset).
+   * True only when:
+   *   1. boundCodexHome was actually bound (not null — bindLaunchEnv never ran,
+   *      e.g. a predicate consulted before Open) and not "" (bound, but the
+   *      launch env carried no CODEX_HOME at all);
+   *   2. resolve(boundCodexHome) === resolve(declaredHome) — the caller must
+   *      NAME the same isolated home the conversation actually launched under;
+   *      an ambient/inherited CODEX_HOME that happens to match by coincidence
+   *      still satisfies this, which is why (3) exists; and
+   *   3. that resolved path is not the real `~/.codex` — so even a caller who
+   *      launched with no isolation and then "declares" their own real home
+   *      cannot talk their way past the gate.
+   * resolve() is applied to both sides so `~`, relative, and trailing-slash
+   * spellings of the same directory compare equal.
+   */
+  permissionsWriteContained(declaredHome: string): boolean {
+    if (this.boundCodexHome === null || this.boundCodexHome === "")
+      return false;
+    const bound = resolve(this.boundCodexHome);
+    if (bound !== resolve(declaredHome)) return false;
+    if (bound === resolve(join(homedir(), ".codex"))) return false;
+    return true;
+  }
+
+  /**
+   * Optional capability (mirrors PiAdapter.bindLaunchEnv, src/turns/harness/
+   * pi.ts): chat calls this once at Open (and again on Reopen, since the call
+   * sits inside openWithSession) with the effective child env, so this adapter
+   * learns the CODEX_HOME the harness process actually launched under.
+   *
+   * LAYERING ASYMMETRY vs. pi's use of the same shape: pi's bindLaunchEnv binds
+   * a LOCATOR (where to read pi's session log from) — an inherited env value is
+   * fine there, since at worst a wrong locator just fails to find a transcript.
+   * Here the bound value feeds a SECURITY PREDICATE (permissionsWriteContained)
+   * — a strictly stronger claim. That is why an inherited/ambient CODEX_HOME
+   * can never be enough on its own: the caller must separately DECLARE the same
+   * isolated home to permissionsWriteContained, and the two must agree.
+   *
+   * The `this.sessionsRoot === ""` guard is load-bearing: CodexReader.
+   * resolveRoot() (src/transcript/codex/codex.ts) honours an explicitly-set
+   * sessionsRoot over its own CODEX_HOME rung, and test/chat/
+   * codex_swallow_override.test.ts / test/chat/codex_transcript_history.test.ts
+   * both assign sessionsRoot AFTER Open — this must not clobber that.
+   */
+  bindLaunchEnv(env: string[], _workingDir: string): void {
+    const home = codexHomeFromEnv(env);
+    this.boundCodexHome = home ?? "";
+    if (home !== undefined && this.sessionsRoot === "") {
+      this.sessionsRoot = join(home, "sessions");
+    }
+  }
+
+  private lastComposerRowText(snap: Snapshot): boolean {
+    const lines = snap.text.split("\n");
+    for (let i = lines.length - 1; i >= 0; i--) {
+      const m = composerRowRE.exec(lines[i]);
+      if (m) return m[1].trim() !== "";
+    }
+    return false;
+  }
+
+  /**
    * Implements turns.PermissionModeCycler — one Shift+Tab press advances
    * Codex's collaboration mode by exactly one rung.
    *
@@ -292,12 +450,7 @@ export class CodexAdapter extends GenericAdapter implements Adapter {
    */
   promptNotAccepted(snap: Snapshot, sentScreenText: string): boolean {
     if (snap.text === sentScreenText) return true;
-    const lines = snap.text.split("\n");
-    for (let i = lines.length - 1; i >= 0; i--) {
-      const m = composerRowRE.exec(lines[i]);
-      if (m) return m[1].trim() !== "";
-    }
-    return false;
+    return this.lastComposerRowText(snap);
   }
 
   /** Implements turns.SessionResumer — `codex resume <uuid>`. */
@@ -548,6 +701,9 @@ function detectPermissions(text: string): InputRequest | null {
   if (opts.length < 2) return null;
   // A live "›" selector on one of the parsed rows.
   if (!opts.some((o) => o.highlighted)) return null;
+  // Override aliasForLabel's generic proceed/deny vocabulary with a stable
+  // preset slug, kind-local to permissions_prompt only — see presetAlias.
+  for (const o of opts) o.alias = presetAlias(o.label);
   const req: InputRequest = {
     id: "",
     kind: KindPermissions,
@@ -678,6 +834,31 @@ function aliasForLabel(label: string): string {
     return "deny";
   }
   return "";
+}
+
+// presetAlias derives a stable /permissions preset alias from a parsed row
+// label, overriding aliasForLabel's generic proceed/deny vocabulary for
+// KindPermissions rows only: label lowercased, a trailing "(current)" suffix
+// stripped, trimmed, spaces replaced with hyphens. On the live 0.144.5 rows
+// this yields "ask-for-approval", "approve-for-me", "full-access" — stable
+// whether or not the row is the active preset, so "Approve for me (current)"
+// aliases identically to "Approve for me".
+//
+// MUST NEVER produce "proceed" or "deny": resolvePolicy's `{ default: "deny" }`
+// fallback (src/chat/conversation.ts) reaches permissions_prompt whenever no
+// per-kind policy is configured, and it is inert today only because
+// findOptionByAlias(req, "deny") finds nothing on this dialog. A plain label
+// transform can never coincide with either four/five-letter token by
+// construction — see the guarantee test in test/turns/codex/input.test.ts,
+// which checks every row of every /permissions fixture.
+const currentSuffixRE = /\s*\(current\)$/i;
+
+function presetAlias(label: string): string {
+  return label
+    .toLowerCase()
+    .replace(currentSuffixRE, "")
+    .trim()
+    .replace(/\s+/g, "-");
 }
 
 function containsAny(s: string, ...subs: string[]): boolean {

@@ -15,6 +15,7 @@ export type {
   Kind,
   MessageExtractor,
   PermissionModeCycler,
+  PermissionsDialogCapability,
   Quitter,
   RawSessionIDExtractor,
   RequestedAcquisitionMode,

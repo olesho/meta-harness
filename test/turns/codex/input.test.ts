@@ -492,6 +492,65 @@ describe("codex permissions dialog", () => {
     expect(opts[0].label.endsWith("(current)")).toBe(true);
     expect(opts[1].label).toBe("Approve for me");
     expect(opts[2].label).toBe("Full Access");
+    // Stable preset-slug aliases, kind-local to permissions_prompt: the label
+    // lowercased, "(current)" stripped, spaces -> hyphens.
+    expect(opts.map((o) => o.alias)).toEqual([
+      "ask-for-approval",
+      "approve-for-me",
+      "full-access",
+    ]);
+  });
+
+  test("corpus: /permissions dialog already on 'Approve for me (current)'", async () => {
+    // Companion fixture (META-HARNESS-122): the dialog reopened after Approve
+    // for me was already committed, so row 2 is BOTH highlighted AND current.
+    const req = codex.DetectInput(
+      await corpusScreen("permissions-approve-current"),
+    );
+    expect(req).not.toBeNull();
+    expect(req!.kind).toBe(codex.KindPermissions);
+    const opts = req!.options!;
+    expect(opts.map((o) => o.label)).toEqual([
+      "Ask for approval",
+      "Approve for me (current)",
+      "Full Access",
+    ]);
+    expect(opts.map((o) => o.highlighted === true)).toEqual([
+      false,
+      true,
+      false,
+    ]);
+    // approve-for-me resolves identically whether or not the row carries
+    // "(current)" — the alias a caller matches on must not depend on which
+    // preset happens to be active.
+    expect(opts.map((o) => o.alias)).toEqual([
+      "ask-for-approval",
+      "approve-for-me",
+      "full-access",
+    ]);
+  });
+
+  test("guarantee: no permissions-dialog row ever aliases 'proceed' or 'deny'", async () => {
+    // Load-bearing per the ticket: resolvePolicy's `{ default: "deny" }`
+    // fallback reaches permissions_prompt when no per-kind policy is
+    // configured, and it stays inert ONLY because findOptionByAlias(req,
+    // "deny") never finds a row here. This must hold by RULE, not accident —
+    // for every row of every fixture.
+    for (const scenario of [
+      "permissions-dialog",
+      "permissions-approve-current",
+    ]) {
+      const req = codex.DetectInput(await corpusScreen(scenario));
+      expect(req, scenario).not.toBeNull();
+      for (const o of req!.options!) {
+        expect(o.alias, `${scenario}: row ${o.id} (${o.label})`).not.toBe(
+          "proceed",
+        );
+        expect(o.alias, `${scenario}: row ${o.id} (${o.label})`).not.toBe(
+          "deny",
+        );
+      }
+    }
   });
 
   test("corpus: id is stable across a redraw", async () => {

@@ -70,6 +70,7 @@ turns/index.ts
   Kind: type
   MessageExtractor: type
   PermissionModeCycler: type
+  PermissionsDialogCapability: type
   Quitter: type
   RawSessionIDExtractor: type
   RequestedAcquisitionMode: type
