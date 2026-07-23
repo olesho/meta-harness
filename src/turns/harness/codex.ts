@@ -38,6 +38,18 @@ import { StatusWaitingForInput } from "../wrapper.ts";
 
 const enc = new TextEncoder();
 
+// permissionCycleCommand is Shift+Tab as legacy CSI Z (back-tab) — one press
+// advances Codex's collaboration mode by exactly one rung.
+//
+// CAPTURED LIVE against codex-cli 0.144.5 (test/corpus/codex/
+// permission-mode-cycle), NOT assumed. Codex enables the kitty keyboard
+// protocol (hence the CSI 13 u submit in primeSessionIDKeys below), so the
+// kitty encoding "\x1b[9;2u" was probed alongside CSI Z: BOTH toggle the mode,
+// so the choice is ours, and CSI Z is pinned for the same reason as on Claude
+// Code — legacy back-tab is understood whether or not the kitty protocol has
+// been negotiated at that moment. The alternative stays in the fixture notes.
+const permissionCycleCommand = enc.encode("\x1b[Z");
+
 // tokenUsageRE matches the per-turn Token usage footer Codex printed on ≤0.141.
 // Kept strict (anchored full footer) so it cannot false-fire on reply prose.
 const tokenUsageRE =
@@ -251,6 +263,20 @@ export class CodexAdapter extends GenericAdapter implements Adapter {
    */
   primeSessionIDKeys(): Uint8Array {
     return enc.encode("/status" + "\x1b[13u");
+  }
+
+  /**
+   * Implements turns.PermissionModeCycler — one Shift+Tab press advances
+   * Codex's collaboration mode by exactly one rung.
+   *
+   * The measured ring is a 2-cycle (Default ⇄ Plan), surfaced as a `Plan mode`
+   * marker on the right of the composer status line and as the
+   * `Collaboration mode: <name>` row of the `/status` box. Deliberately NOT
+   * encoded here — as on Claude Code, callers terminate by lap detection with a
+   * flat backstop, never by a hardcoded ring length.
+   */
+  permissionCycleKeys(): Uint8Array {
+    return permissionCycleCommand;
   }
 
   /**
