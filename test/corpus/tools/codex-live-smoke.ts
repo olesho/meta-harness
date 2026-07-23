@@ -94,9 +94,15 @@ function parseArgs(argv: string[]): Opts {
 }
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
-const sessionsRoot = join(homedir(), ".codex", "sessions");
+// Mirrors CodexReader.resolveRoot()'s fallback chain (minus the explicit
+// override this probe never sets): an isolated $CODEX_HOME moves codex's
+// session log with it, so the smoke must watch the same root the reader reads.
+const sessionsRoot =
+  process.env.CODEX_HOME !== undefined && process.env.CODEX_HOME !== ""
+    ? join(process.env.CODEX_HOME, "sessions")
+    : join(homedir(), ".codex", "sessions");
 
-/** All rollout file basenames under ~/.codex/sessions (recursive). */
+/** All rollout file basenames under the resolved sessions root (recursive). */
 function rolloutFiles(): Set<string> {
   const out = new Set<string>();
   const walk = (dir: string): void => {

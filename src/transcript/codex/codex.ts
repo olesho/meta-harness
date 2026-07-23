@@ -54,8 +54,33 @@ export class CodexReader {
     return locateLatestSession(this.resolveRoot(), workingDir);
   }
 
+  /**
+   * resolveRoot — explicit sessionsRoot → $CODEX_HOME/sessions → ~/.codex/sessions.
+   *
+   * The CODEX_HOME rung exists because codex's session log moves with an
+   * ISOLATED CODEX_HOME (the containment mechanism behind the "Approve for me"
+   * permission preset): without it a run under an isolated home silently reads
+   * the user's global root and reports an empty transcript with null usage.
+   *
+   * It is what makes src/cli/structured-runner.ts's module-level readTranscript
+   * / readUsage correct — they construct `new CodexReader()` with NO root. That
+   * is COMPLETE for the one-shot CLI path by construction: buildGuestEnv
+   * (structured-runner.ts) derives the guest env from the runner's own
+   * process.env verbatim, so any CODEX_HOME that reaches the child is by
+   * definition also in the runner's environment, where this fallback sees it.
+   *
+   * DOCUMENTED LIMIT: an isolated home supplied only through `Options.env` —
+   * i.e. never exported into the host process — is invisible here, because
+   * readTranscript / readUsage take no root parameter. Such a run reads the
+   * default root and returns an empty transcript. Widening those exported
+   * signatures is deliberately out of scope; callers that isolate via
+   * Options.env should construct CodexReader with an explicit sessionsRoot (the
+   * route CodexAdapter takes).
+   */
   resolveRoot(): string {
     if (this.sessionsRoot !== "") return this.sessionsRoot;
+    const home = process.env.CODEX_HOME;
+    if (home !== undefined && home !== "") return path.join(home, "sessions");
     return path.join(homedir(), ".codex", "sessions");
   }
 
