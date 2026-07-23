@@ -11,7 +11,10 @@
 
 import { afterEach, describe, expect, test } from "vitest";
 
-import type { Conversation } from "../../src/chat/index.ts";
+import {
+  parsePermissionMode,
+  type Conversation,
+} from "../../src/chat/index.ts";
 import { Context } from "../../src/internal/async/index.ts";
 import {
   ClaudeDefaultRung,
@@ -146,13 +149,20 @@ describe("fake-harness permission-cycle scaffolding", () => {
     const conv = await openFake(script);
     open.add(conv);
 
+    // Read the LIVE screen, not Conversation.permissionMode(): on codex that
+    // accessor returns the reading cached at prime and never re-parses, so it
+    // cannot see a second box (the hole its own docstring records). Confirming
+    // the cycle needs a fresh parse per probe — which is the whole reason this
+    // scenario paints two frames.
+    const read = () => parsePermissionMode(conv.screenSnapshot().text, "codex");
+
     // Probe 1. If the startup session-id primer already wrote its own /status,
     // this write simply lands in the next readUntil's accumulator, where it
     // cannot match the cycle key — either way the Default box is painted once.
     press(conv, "/status" + SubmitCSI13u);
     const first = await until("the Default /status box", 5000, () => {
-      const r = conv.permissionMode();
-      return r.collaboration === "default" ? r : undefined;
+      const r = read();
+      return r?.collaboration === "default" ? r : undefined;
     });
     expect(first.source).toBe("status");
 
@@ -160,10 +170,13 @@ describe("fake-harness permission-cycle scaffolding", () => {
     // BOTH directions of the measured Default ⇄ Plan 2-cycle.
     press(conv, PermissionCycleCSI);
     const second = await until("the Plan /status box", 5000, () => {
-      const r = conv.permissionMode();
-      return r.collaboration === "plan" ? r : undefined;
+      const r = read();
+      return r?.collaboration === "plan" ? r : undefined;
     });
     expect(second.source).toBe("status");
+    // The permissions axis is unmoved by the collaboration cycle — both boxes
+    // report the same `Permissions:` row.
+    expect(second.observed).toBe(first.observed);
 
     // The box stayed unwrapped, so the row-anchored session scrape still reads.
     expect(conv.screenSnapshot().text).toContain(">_ OpenAI Codex (v");
