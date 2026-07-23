@@ -5,7 +5,7 @@
 // reclassification fails loudly here and forces a conscious golden update.
 //
 // Regenerate after an INTENTIONAL change with:
-//   UPDATE_GOLDEN=1 bun test test/contract.test.ts
+//   UPDATE_GOLDEN=1 pnpm vitest run test/contract.test.ts
 //
 // This is the TS analogue of pkg/chat/contract_test.go's go_api.golden, widened
 // from one package to the whole public surface. It also freezes the Phase-0
