@@ -1,0 +1,15 @@
+{
+  "harness": "claude-code",
+  "binary_version": "2.1.218",
+  "recorded_at": "2026-07-23T06:59:24.744Z",
+  "cols": 120,
+  "rows": 40,
+  "notes": "hand-recorded capture of the claude permission-mode footer on the BYPASS rung",
+  "mode": "hand-recorded-interactive",
+  "keystrokes": [
+    "(none — launched directly into the target mode)"
+  ],
+  "footer_line": "⏵⏵ bypass permissions on (shift+tab to cycle)",
+  "footer_glyph_hex_6": "20,20,23f5,23f5,20,62",
+  "footer_glyph_hex_8": "20,20,23f5,23f5,20,62,79,70"
+}

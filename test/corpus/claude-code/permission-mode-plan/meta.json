@@ -1,0 +1,17 @@
+{
+  "harness": "claude-code",
+  "binary_version": "2.1.218",
+  "recorded_at": "2026-07-23T06:59:16.334Z",
+  "cols": 120,
+  "rows": 40,
+  "notes": "hand-recorded interactive capture of the claude permission-mode footer on the PLAN rung",
+  "mode": "hand-recorded-interactive",
+  "keystrokes": [
+    "shift+tab (ESC [ Z)",
+    "shift+tab (ESC [ Z)",
+    "shift+tab (ESC [ Z)"
+  ],
+  "footer_line": "⏸ plan mode on (shift+tab to cycle)",
+  "footer_glyph_hex_6": "20,20,23f8,20,70,6c",
+  "footer_glyph_hex_8": "20,20,23f8,20,70,6c,61,6e"
+}
