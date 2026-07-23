@@ -40,24 +40,24 @@ needed.
 
 The row labels actually rendered, top to bottom:
 
-| # | label                 | value in this probe (flagless)                            |
-| - | --------------------- | --------------------------------------------------------- |
-| 1 | `Model:`              | `gpt-5.6-sol (reasoning low, summaries auto)`              |
-| 2 | `Directory:`          | the cwd (**not stable — never anchor on it**)              |
-| 3 | `Permissions:`        | **`Workspace (Ask for approval)`**                         |
-| 4 | `Agents.md:`          | `<none>`                                                   |
-| 5 | `Account:`            | the login (redacted in the fixture)                        |
-| 6 | `Collaboration mode:` | **`Default`**                                              |
-| 7 | `Session:`            | the session UUID                                           |
-| 8 | `Weekly limit:`       | a usage meter — **or** `Limits:` (**not stable**, see §6)  |
+| #   | label                 | value in this probe (flagless)                            |
+| --- | --------------------- | --------------------------------------------------------- |
+| 1   | `Model:`              | `gpt-5.6-sol (reasoning low, summaries auto)`             |
+| 2   | `Directory:`          | the cwd (**not stable — never anchor on it**)             |
+| 3   | `Permissions:`        | **`Workspace (Ask for approval)`**                        |
+| 4   | `Agents.md:`          | `<none>`                                                  |
+| 5   | `Account:`            | the login (redacted in the fixture)                       |
+| 6   | `Collaboration mode:` | **`Default`**                                             |
+| 7   | `Session:`            | the session UUID                                          |
+| 8   | `Weekly limit:`       | a usage meter — **or** `Limits:` (**not stable**, see §6) |
 
 Per launch:
 
-| launch                              | `Permissions:` row | rendered value                 | parsed rung   |
-| ----------------------------------- | ------------------ | ------------------------------ | ------------- |
-| _(no permission flags)_             | **present**        | `Workspace (Ask for approval)` | `acceptEdits` |
-| `-s workspace-write -a on-request`  | **present**        | `Workspace (Ask for approval)` | `acceptEdits` |
-| `-s read-only -a never`             | **present**        | `Read Only (never)`            | `plan`        |
+| launch                             | `Permissions:` row | rendered value                 | parsed rung   |
+| ---------------------------------- | ------------------ | ------------------------------ | ------------- |
+| _(no permission flags)_            | **present**        | `Workspace (Ask for approval)` | `acceptEdits` |
+| `-s workspace-write -a on-request` | **present**        | `Workspace (Ask for approval)` | `acceptEdits` |
+| `-s read-only -a never`            | **present**        | `Read Only (never)`            | `plan`        |
 
 The first two are byte-identical because `-s workspace-write -a on-request` **is** codex's default
 posture — that pair alone proves nothing about whether the row tracks the launch. The third launch
@@ -90,7 +90,7 @@ that table needs to be withdrawn.** The three values this probe observed
 (`Workspace (Ask for approval)`, `Read Only (never)`) already appear in it and parsed to the
 expected rungs (`acceptEdits`, `plan`) through `parsePermissionMode` in `src/chat/permission.ts`.
 
-**Fixture ownership.** `test/corpus/codex/status-box/` — the corpus's first *flagless* `/status`
+**Fixture ownership.** `test/corpus/codex/status-box/` — the corpus's first _flagless_ `/status`
 capture — is owned by **META-HARNESS-155**, not META-HARNESS-102. The parent ticket's text was
 ambiguous about which subtask owed it; ownership is assigned here and recorded in the fixture's
 `meta.json` notes.
