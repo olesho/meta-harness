@@ -18,7 +18,7 @@
 // omitempty handling is needed JS-side.
 //
 // The table is EXPLICIT and ORDERED. Each entry maps a sentinel to {status,code}.
-import { ErrClosed, ErrInputPending, ErrInvalidOptions, ErrNoControl, ErrNoInputPending, ErrNotMultiSelect, ErrStaleInputRequest, ErrTurnInFlight, ErrUnknownHarness, ErrUnknownOption, isSentinel, } from "../chat/errors.js";
+import { ErrClosed, ErrInputPending, ErrInvalidOptions, ErrNoControl, ErrNoInputPending, ErrNotMultiSelect, ErrPermissionModeStalled, ErrPermissionModeUnreachable, ErrPermissionModeUnsupported, ErrStaleInputRequest, ErrTurnInFlight, ErrUnknownHarness, ErrUnknownOption, isSentinel, } from "../chat/errors.js";
 import { ctxCanceled, ctxDeadlineExceeded, } from "../internal/async/index.js";
 // Ordered sentinel→{status,code} table shared by both writers. Order is honored
 // via first-match, mirroring Go's switch. Codes match Go's writeChatError where
@@ -36,6 +36,29 @@ const CHAT_ERROR_TABLE = [
     { sentinel: ErrUnknownOption, status: 400, code: "unknown_option" },
     // MH-ONLY — DO NOT OMIT. Keeps a malformed multi-select answer off the 500 path.
     { sentinel: ErrNotMultiSelect, status: 400, code: "not_multi_select" },
+    // MH-ONLY — DO NOT OMIT. Go has no mid-session permission-mode switch, so its
+    // table never mapped these. Same rationale as the row above: keep the three
+    // setPermissionMode sentinels off the generic 500 path.
+    //
+    // 409 vs 400: unreachable/stalled are conflicts with the LIVE session state
+    // (wrong axis, no bypass-enabling launch, the switch never settled), which the
+    // same request may win later; unsupported is a property of the harness itself,
+    // so the request is malformed for this session and can never succeed → 400.
+    {
+        sentinel: ErrPermissionModeUnreachable,
+        status: 409,
+        code: "permission_mode_unreachable",
+    },
+    {
+        sentinel: ErrPermissionModeUnsupported,
+        status: 400,
+        code: "permission_mode_unsupported",
+    },
+    {
+        sentinel: ErrPermissionModeStalled,
+        status: 409,
+        code: "permission_mode_stalled",
+    },
 ];
 // Context sentinels writeRunTurnError maps in ADDITION to the chat table, ahead
 // of it (a run-turn timeout/cancel is not a chat sentinel).

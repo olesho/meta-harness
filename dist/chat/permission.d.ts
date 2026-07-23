@@ -32,6 +32,26 @@ export interface PermissionModeReading {
     observedAt: Date;
 }
 /**
+ * codex's collaboration axis, minus the un-requestable "unknown".
+ *
+ * Derived from `PermissionModeReading["collaboration"]` rather than spelled out
+ * again, so the requestable set cannot drift from the readable one: "unknown"
+ * is a READING outcome (no positive `Collaboration mode:` row was seen), never
+ * something a caller can ask setPermissionMode to reach.
+ */
+export type CollaborationMode = Exclude<NonNullable<PermissionModeReading["collaboration"]>, "unknown">;
+/**
+ * What setPermissionMode accepts: a ladder rung (META-HARNESS-99's closed 5-rung
+ * ladder) or a codex collaboration mode.
+ *
+ * The union is deliberately WIDER than any single harness: which half is legal
+ * depends on the harness the session runs. Asking for a target off this
+ * harness's axis (a ladder rung on codex, `"default"` on claude) is a runtime
+ * ErrPermissionModeUnreachable, not a compile error — the harness is not in the
+ * type.
+ */
+export type PermissionModeTarget = PermissionRung | CollaborationMode;
+/**
  * parsePermissionMode extracts the permission-mode reading from a rendered
  * harness screen. `text` is a Screen.snapshot().text (one line per row).
  *
