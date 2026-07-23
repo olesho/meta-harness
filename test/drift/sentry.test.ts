@@ -20,6 +20,22 @@ import {
   ExitDrift,
 } from "../../src/cli/check-versions.ts";
 import { isSentinel, type Sentinel } from "../../src/internal/async/index.ts";
+import { all as allVersions } from "../../src/versions/versions.ts";
+
+// The "nothing drifts" cases below stub the registry so every package's LATEST
+// equals its PINNED version. That map is DERIVED from the catalog rather than
+// restated as literals: the assertion under test is "latest == pinned ⇒ match",
+// and a hand-maintained copy of the pins silently turns every routine pin bump
+// (META-HARNESS-113) into a red sentry test. Keys are the registry's
+// percent-encoded package paths, matching how the sentry builds its URLs.
+function pinsAsLatest(): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const entry of allVersions().values()) {
+    if (entry.pinned === "") continue; // unpinned (opencode) has no latest to match
+    out[encodeURIComponent(entry.package)] = entry.pinned;
+  }
+  return out;
+}
 
 /** A minimal Response-like stand-in for a mocked fetch. */
 function okJson(body: unknown): Response {
@@ -189,11 +205,7 @@ describe("error paths — distinct sentinel, never false match/drift", () => {
 describe("checkAll + hasDrift against the embedded catalog", () => {
   test("all packages latest == pinned → all match, opencode unpinned", async () => {
     // Return each package's pinned value as latest so nothing drifts.
-    const pins: Record<string, string> = {
-      "%40openai%2Fcodex": "0.142.5",
-      "%40anthropic-ai%2Fclaude-code": "2.1.201",
-      "%40earendil-works%2Fpi-coding-agent": "0.76.0",
-    };
+    const pins = pinsAsLatest();
     vi.stubGlobal(
       "fetch",
       vi.fn(async (url: string) => {
@@ -231,11 +243,7 @@ describe("CLI exit-code contract", () => {
   });
 
   test("exit 0 — everything matches / unpinned", async () => {
-    const pins: Record<string, string> = {
-      "%40openai%2Fcodex": "0.142.5",
-      "%40anthropic-ai%2Fclaude-code": "2.1.201",
-      "%40earendil-works%2Fpi-coding-agent": "0.76.0",
-    };
+    const pins = pinsAsLatest();
     vi.stubGlobal(
       "fetch",
       vi.fn(async (url: string) => {

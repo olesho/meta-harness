@@ -12,8 +12,17 @@ import {
   type Probe,
 } from "../../src/discovery/discovery.ts";
 import { SemverDashVProbe, semverRe } from "../../src/discovery/probes.ts";
+import { pinned } from "../../src/versions/versions.ts";
 
 // Importing probes.ts above triggers the default-probe registration (init()).
+
+// The pins these tests assert against are READ FROM THE CATALOG, not hardcoded.
+// What is under test is the invariant "detected == pinned ⇒ no drift flag", not
+// any particular version string — hardcoding the literals meant every routine
+// version-pin bump (META-HARNESS-113 and its predecessors) had to hand-edit this
+// file, and a stale literal here fails as a discovery bug rather than as drift.
+const [codexPin] = pinned("codex");
+const [claudePin] = pinned("claude-code");
 
 interface NameContent {
   name: string;
@@ -47,29 +56,29 @@ describe("discovery", () => {
     expect(got.installed).toBe(false);
     expect(got.harness).toBe("codex");
     expect(got.binary).toBe("codex");
-    expect(got.pinnedVersion).toBe("0.142.5");
+    expect(got.pinnedVersion).toBe(codexPin);
     expect(got.installHint).not.toBe("");
     expect(got.installHint).toContain("codex");
     expect(got.versionMatchesPin).toBe(true);
   });
 
   test("lookup: installed via harness key", () => {
-    setShimPath({ name: "codex", body: "#!/bin/sh\necho 0.142.5\n" });
+    setShimPath({ name: "codex", body: `#!/bin/sh\necho ${codexPin}\n` });
     const got = lookup("codex");
     expect(got.installed).toBe(true);
     expect(got.harness).toBe("codex");
     expect(got.binary).toBe("codex");
-    expect(got.detectedVersion).toBe("0.142.5");
+    expect(got.detectedVersion).toBe(codexPin);
     expect(got.versionMatchesPin).toBe(true);
   });
 
   test("lookup: installed via binary name", () => {
-    setShimPath({ name: "claude", body: "#!/bin/sh\necho 2.1.201\n" });
+    setShimPath({ name: "claude", body: `#!/bin/sh\necho ${claudePin}\n` });
     const got = lookup("claude");
     expect(got.installed).toBe(true);
     expect(got.harness).toBe("claude-code");
     expect(got.binary).toBe("claude");
-    expect(got.detectedVersion).toBe("2.1.201");
+    expect(got.detectedVersion).toBe(claudePin);
     expect(got.versionMatchesPin).toBe(true);
   });
 
@@ -96,7 +105,7 @@ describe("discovery", () => {
     setShimPath({ name: "codex", body: "#!/bin/sh\necho 9.9.9\n" });
     const got = lookup("codex");
     expect(got.detectedVersion).toBe("9.9.9");
-    expect(got.pinnedVersion).toBe("0.142.5");
+    expect(got.pinnedVersion).toBe(codexPin);
     expect(got.versionMatchesPin).toBe(false);
   });
 
