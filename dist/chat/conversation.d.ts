@@ -72,6 +72,45 @@ export interface Options {
      * codex_update_notice still takes precedence (it is consulted first).
      */
     autoSkipCodexUpdateNotice?: boolean;
+    /**
+     * Opt-in AND containment, folded into one explicit act: the isolated
+     * `CODEX_HOME` this conversation was launched under, required before
+     * setCodexPermissionPreset will drive codex's `/permissions` dialog at all.
+     *
+     * THIS RUNG LEAKS OUT OF THE SESSION. Selecting a preset through that
+     * dialog writes `approvals_reviewer = "auto_review"` (and the
+     * `approval_policy.granular` variant) into the codex config for EVERY
+     * LATER SESSION that shares the same `CODEX_HOME` — not just this
+     * conversation. That is why the value must NAME the isolated home rather
+     * than merely opt in with a boolean: setCodexPermissionPreset refuses the
+     * write unless the resolved adapter reports (via its own bound launch env)
+     * that this exact path is what the conversation actually launched under.
+     * An ambient/inherited `CODEX_HOME` a caller happens to export — a
+     * fleet/agent process's own real, persistent config, say — can never
+     * satisfy the gate merely by matching; `cleanHarnessEnv(opts.env)`
+     * forwards everything except the CLAUDECODE markers, so without this
+     * check a bare `CODEX_HOME !== ~/.codex` predicate would pass for every
+     * conversation while the global write still landed somewhere durable.
+     *
+     * The isolated home must additionally be SEEDED with an `auth.json`
+     * credential, or codex sits on the first-run sign-in wall and the call
+     * times out — seeding is the caller's responsibility (see the
+     * `seedIsolatedCodexHome` test helper for the pattern).
+     *
+     * Refused (ErrPermissionsUnsupported) when Options.adapter is also
+     * supplied: that advanced/testing seam binds last-writer-wins across
+     * conversations, which is not a foundation a security predicate can rest
+     * on.
+     *
+     * Zero/absent ⇒ setCodexPermissionPreset throws
+     * ErrCodexPermissionsDisabled before any write.
+     *
+     * Known limit, out of scope here: an isolated home supplied ONLY through
+     * Options.env (never exported into the host process) is invisible to
+     * src/cli/structured-runner.ts's module-level readTranscript / readUsage,
+     * which take no root parameter.
+     */
+    allowCodexPermissionsWrite?: string;
     /** In-process resolver consulted when InputPolicy did not auto-answer. */
     onInputRequest?: (req: InputRequest) => [InputAnswer, boolean];
     /** Test-only idle-completion window override (ms). Zero = package default. */
@@ -159,6 +198,18 @@ export interface Options {
      */
     streamVersionPredicate?: StreamVersionPredicate;
 }
+/**
+ * The codex `/permissions` preset slugs setCodexPermissionPreset accepts — the
+ * adapter's stable per-row alias (codex.ts's presetAlias: label lowercased,
+ * "(current)" stripped, spaces hyphenated). The live dialog's rows are
+ * addressable by that same slug rule regardless of build/config, but only
+ * these three are TYPED here: they are the rows guaranteed present whenever
+ * the dialog exists at all — the `guardian_approval` feature flag can drop
+ * "Approve for me" (and repaint the whole row set as `Read Only` / `Default` /
+ * `Custom permissions`), which is a runtime ErrPermissionPresetUnavailable,
+ * not a compile-time concern.
+ */
+export type CodexPermissionPreset = "ask-for-approval" | "approve-for-me" | "full-access";
 export declare const DefaultActivityInterval = 10000;
 /** A size-1 coalesced wake signal — the Go `chan struct{}` of capacity 1. */
 declare class Signal {
@@ -306,6 +357,17 @@ export declare class Conversation {
     hookDrain?: HookDrain;
     currentInput: TurnsInputRequest | null;
     inputSurfaced: boolean;
+    /**
+     * One-shot latch: set by handleInputRequested when tryResolveInput claims a
+     * `permissions_prompt` on the caller's behalf (a caller-supplied
+     * onInputRequest that answers it) — the ONLY way codex's `/permissions`
+     * dialog can be resolved out from under setCodexPermissionPreset's own poll,
+     * since InputPolicy.default is provably inert against this kind (see that
+     * method's docstring) and a `byKind.permissions_prompt` entry is refused up
+     * front. setCodexPermissionPreset reads-and-clears this before every attempt
+     * so a stale latch from an EARLIER call can never misfire a later one.
+     */
+    private permissionsClaimedByResolver;
     writeStdin?: (p: Uint8Array) => void;
     private closedFlag;
     private closedResolve;
@@ -703,6 +765,155 @@ export declare class Conversation {
      * spending another press).
      */
     private confirmCodexCollaboration;
+    /**
+     * Structural probe for turns.PermissionsDialogCapability, mirroring
+     * adapterQuitSequence's shape (a runtime `typeof … === "function"` check,
+     * not compile-time). Returns null — not merely "unsupported" — whenever
+     * setCodexPermissionPreset has no dialog to drive:
+     *
+     *  - `this.opts.harness !== "codex"` — no other harness has this dialog;
+     *  - `this.opts.adapter` was caller-supplied — refused regardless of
+     *    whether THAT adapter happens to implement the capability. The seam is
+     *    documented "Advanced/testing" and binds last-writer-wins across
+     *    conversations (resolveAdapter mints a fresh adapter per conversation
+     *    on the normal path, so `boundCodexHome` is per-conversation only
+     *    there); a security predicate must not rest on it;
+     *  - the resolved adapter is missing any one of the five methods.
+     */
+    private codexPermissionsCapability;
+    /**
+     * `currentInput === null && readyForInput(...) && !composerHasText(snap)` —
+     * every failure path in setCodexPermissionPreset backs out through this
+     * predicate, never through readyForInput alone.
+     *
+     * The third clause is mandatory, not defensive: the dialog has no "go back"
+     * row (only ESC), so "fail closed" cannot mean "return an error and leave
+     * the dialog up" — every later send() would throw ErrInputPending forever.
+     * And if the `/permissions` write was itself swallowed as a paste, the
+     * composer holds literal `/permissions` text that codexPromptRE (ready.ts)
+     * matches just as happily as an empty composer, so a check without this
+     * clause would report the dialog settled while the composer still carries
+     * the command — the caller's NEXT send() would prepend it to their prompt.
+     */
+    private dialogSettled;
+    /**
+     * Writes `write()` (or nothing, for a bare poll), then classifies the
+     * screen/input state on every render until `classify()` returns non-null or
+     * `bound` elapses — check-before-wait, single subscription taken BEFORE the
+     * write (primeSessionID's pattern), so a render landing in between is never
+     * missed. Races the screen's notify signal alongside inputStateCh (fired by
+     * signalInputState whenever currentInput/inputSurfaced change), so a
+     * classifier reading either is woken promptly rather than only on repaint.
+     * Returns null on ctx cancellation or the bound elapsing; throws ErrClosed.
+     */
+    private pollCodexPermissions;
+    /**
+     * Dismisses the `/permissions` dialog without committing a preset: writes
+     * dialogBackoutKeys() (ESC) and waits (bounded) for dialogSettled(). If the
+     * composer still carries literal text afterward — ESC does not clear a
+     * composer holding literal text, only a live dialog — writes
+     * composerClearKeys() and checks once more. Returns whether the dialog is
+     * confirmed clear; never throws on its own account (the caller is already
+     * about to throw its own sentinel and decides how to report an unsettled
+     * backout).
+     */
+    private backoutPermissionsDialog;
+    /** Appends the "composer may still hold text" caveat when a backout left it unsettled. */
+    private failCodexPermissions;
+    /**
+     * Verifies a preset switch through the sanctioned mid-session reader only
+     * (refreshPermissionMode — 106's `/status` writer — then permissionMode —
+     * 102's pure read), confirming `raw` reads the value THIS preset commits.
+     * Both the commit path and the already-current no-op path run this
+     * identically and return the same reading; a mismatch throws rather than
+     * handing back a reading that was never confirmed. No second dialog parser
+     * is added here — this only compares against codexPresetExpectedRaw.
+     */
+    private verifyCodexPermissionPreset;
+    /**
+     * Drives codex's `/permissions` "Update Model Permissions" dialog to select
+     * `preset`, then returns the verified PermissionModeReading. WRITES — and,
+     * unlike every other write in this class, the write LEAKS OUT OF THE
+     * SESSION: selecting a preset persists `approvals_reviewer = "auto_review"`
+     * into codex's own config for every LATER session sharing the same
+     * `CODEX_HOME`. That is why this method is opt-in
+     * (Options.allowCodexPermissionsWrite) and fails closed unless the resolved
+     * adapter proves the write is contained inside the exact home the caller
+     * named.
+     *
+     * ## Gates, in this exact order, before a single byte is written
+     *
+     *  0. `this.opts.harness === "codex"`, `this.opts.adapter` NOT
+     *     caller-supplied, and the resolved adapter structurally implements
+     *     turns.PermissionsDialogCapability -> else ErrPermissionsUnsupported.
+     *     Modeled on quit()'s adapterQuitSequence probe / ErrQuitUnsupported.
+     *  1. not closed -> else ErrClosed
+     *  - `Options.inputPolicy.byKind.permissions_prompt` is unset -> else
+     *    ErrInvalidOptions. Two writers for one dialog is not a resolvable
+     *    race. `Options.inputPolicy.default` is DELIBERATELY not refused here:
+     *    resolvePolicy falls back to `{ kind: p.default }` whenever `byKind`
+     *    has no entry for this kind, so a bare `default` DOES reach
+     *    `permissions_prompt` — but it can never ACT on it. DispositionAnswer
+     *    resolves via `findOption(req, "")`, which returns null for the empty
+     *    optionID (its first line); DispositionDeny resolves via
+     *    `findOptionByAlias(req, "deny")`, which codex's preset-alias rule
+     *    (presetAlias) never emits. Refusing a global `default` a caller set
+     *    for OTHER kinds would break those callers for no security gain, so
+     *    only the kind-specific entry is refused.
+     *  2. `Options.allowCodexPermissionsWrite` is a non-empty string -> else
+     *     ErrCodexPermissionsDisabled
+     *  3. `adapter.permissionsWriteContained(allowCodexPermissionsWrite)` ->
+     *     else ErrCodexHomeNotIsolated. Fails closed: an unbound adapter
+     *     returns false.
+     *  4. `queue.held()` -> else ErrNoControl
+     *  5. `currentTurn === null` -> else ErrTurnInFlight
+     *  6. `currentInput === null` -> else ErrInputPending
+     *  7. `readyForInput(...)` -> else wait under the existing
+     *     awaitPromptReadyUntil rather than writing blind.
+     *
+     * ## Locking: `held()`, NOT `acquire()`
+     *
+     * Copies send()/answer() — closedFlag then queue.held() — never
+     * `this.queue.acquire(ctx)`. The gateway mints the control token BY HOLDING
+     * the non-reentrant ControlQueue (src/chat/control.ts), so acquiring here
+     * would park an HTTP caller behind its OWN token. See setPermissionMode's
+     * docstring for the full argument; quit() is the one exception and is not a
+     * precedent to follow.
+     *
+     * ## Sequence
+     *
+     * Writes `permissionsDialogKeys()` once, then polls check-before-wait, no
+     * resend, for the dialog to surface as `permissions_prompt`
+     * (inputAwaitingClient() on that kind — NOT pendingInput(), which returns
+     * null unless surfaced; readyForInput() cannot observe the dialog at all,
+     * since it goes false the instant the dialog is up). Three non-success
+     * exits, and each backs out (dialogBackoutKeys, then composerClearKeys if
+     * text remains) before throwing:
+     *
+     *  - a caller-supplied onInputRequest claimed the request first
+     *    (permissionsClaimedByResolver, set by handleInputRequested) ->
+     *    ErrCodexPermissionsRaced, with NO second answer() raced against it;
+     *  - codex refuses the slash command mid-turn (the busy-refusal line) ->
+     *    ErrTurnInFlight;
+     *  - the bound elapses with neither of the above (the dialog never opened —
+     *    including the write landing in the composer as a swallowed paste) ->
+     *    ErrPermissionPresetUnavailable, and no second `/permissions` write is
+     *    ever attempted.
+     *
+     * Once open, the target row is resolved by PRESET ALIAS, never by index:
+     * the `guardian_approval` feature flag can remove "Approve for me" entirely,
+     * and a digit would then silently select the WRONG row. No match -> back
+     * out, throw ErrPermissionPresetUnavailable (never ErrUnknownOption).
+     * Already-current (the target's raw label ends `(current)`) -> back out and
+     * jump straight to verification with NO commit — a redundant global write
+     * is not free, and the verification is what proves the label read
+     * correctly rather than merely assumed. Otherwise commits through the
+     * literal answer() path (findOption resolves the alias independent of row
+     * order and "(current)"), waits for dialogSettled() (bounded, not
+     * readyForInput alone), then verifies. Both paths run the identical
+     * verification and return the same reading.
+     */
+    setCodexPermissionPreset(ctx: Context, preset: CodexPermissionPreset): Promise<PermissionModeReading>;
     /** Respond to the interactive prompt currently awaiting an answer. */
     answer(_ctx: Context, requestID: string, ans: InputAnswer): Promise<void>;
     /** Records a pending request and tries policy/handler resolution, else surfaces. */

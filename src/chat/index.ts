@@ -95,6 +95,7 @@ export {
   resolveAdapter,
   type Options,
   type ReopenOptions,
+  type CodexPermissionPreset,
 } from "./conversation.ts";
 
 export type {

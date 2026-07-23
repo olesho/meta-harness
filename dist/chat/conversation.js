@@ -18,7 +18,7 @@ import { Context, isSentinel, wrap } from "../internal/async/index.js";
 import { ErrEmptySessionID, ErrSessionNotFound } from "../transcript/errors.js";
 import { stripIDEContextTags } from "../transcript/stripTags.js";
 import { RoleUser, RoleAssistant, TurnStatePending, TurnStateComplete, TurnStateErrored, EventTurn, EventInputRequest, EventInputResolved, DispositionAnswer, DispositionDeny, HistorySourceTranscript, HistorySourceStore, ReasonAuthRequired, ReasonUsageLimited, newID, } from "./types.js";
-import { ErrInvalidOptions, ErrUnknownHarness, ErrNoControl, ErrTurnInFlight, ErrClosed, ErrInputPending, ErrAuthRequired, ErrNoInputPending, ErrStaleInputRequest, ErrUnknownOption, ErrNotMultiSelect, ErrQuitUnsupported, ErrPermissionModeUnsupported, ErrPermissionModeUnreachable, ErrPermissionModeStalled, ErrResumeUnsupported, ErrNoHarnessSession, } from "./errors.js";
+import { ErrInvalidOptions, ErrUnknownHarness, ErrNoControl, ErrTurnInFlight, ErrClosed, ErrInputPending, ErrAuthRequired, ErrNoInputPending, ErrStaleInputRequest, ErrUnknownOption, ErrNotMultiSelect, ErrQuitUnsupported, ErrPermissionsUnsupported, ErrCodexPermissionsDisabled, ErrCodexHomeNotIsolated, ErrCodexPermissionsRaced, ErrPermissionPresetUnavailable, ErrPermissionModeUnsupported, ErrPermissionModeUnreachable, ErrPermissionModeStalled, ErrResumeUnsupported, ErrNoHarnessSession, } from "./errors.js";
 import { newControlQueue } from "./control.js";
 import { submitKeyForHarness, requiresPromptReadiness, readyForInput, authRequired, onboardingWall, usageLimitMessage, } from "./ready.js";
 import { cleanHarnessEnv } from "./env.js";
@@ -118,6 +118,26 @@ const authGateStabilizeGap = 2000;
 // primeBoundGap — the overall wall-clock bound on the startup session-id prime,
 // so Open can never hang on the /status scrape. (ms)
 const primeBoundGap = 800;
+// permissionsBusyPhrase is the tail codex prints when a slash command (any of
+// them, `/permissions` included) is typed while a turn is still in flight:
+// the full line is assembled with a leading glyph and the command name, but
+// this fragment is stable across commands, so matching on it alone is enough
+// to recognize the refusal without needing the exact command-name quoting.
+const permissionsBusyPhrase = "is disabled while a task is in progress";
+// codexPresetExpectedRaw — the live 0.144.5 `Permissions:` row value each
+// preset commits, keyed by the SAME alias setCodexPermissionPreset accepts.
+// This is what verifyCodexPermissionPreset confirms post-commit through the
+// sanctioned /status reader (102/106) — never a second dialog parser. Values
+// captured by test/corpus/codex/permissions-approve-current (containment
+// probe) and src/chat/permission.ts's codexPermissionRungs table (the other
+// two rows already have CLI-reachable spellings there; "Workspace (Approve
+// for me)" deliberately does not, which is the entire reason this preset
+// needs a dialog driver at all).
+const codexPresetExpectedRaw = {
+    "ask-for-approval": "Workspace (Ask for approval)",
+    "approve-for-me": "Workspace (Approve for me)",
+    "full-access": "Full Access",
+};
 // submitEchoGap — the wall-clock bound on the wait between writing a message's
 // text and writing its submit key, while the composer echoes the text. (ms)
 const submitEchoGap = 1500;
@@ -322,6 +342,17 @@ export class Conversation {
     hookDrain;
     currentInput = null;
     inputSurfaced = false;
+    /**
+     * One-shot latch: set by handleInputRequested when tryResolveInput claims a
+     * `permissions_prompt` on the caller's behalf (a caller-supplied
+     * onInputRequest that answers it) — the ONLY way codex's `/permissions`
+     * dialog can be resolved out from under setCodexPermissionPreset's own poll,
+     * since InputPolicy.default is provably inert against this kind (see that
+     * method's docstring) and a `byKind.permissions_prompt` entry is refused up
+     * front. setCodexPermissionPreset reads-and-clears this before every attempt
+     * so a stale latch from an EARLIER call can never misfire a later one.
+     */
+    permissionsClaimedByResolver = false;
     writeStdin;
     closedFlag = false;
     closedResolve;
@@ -1313,6 +1344,331 @@ export class Conversation {
                 throw ErrPermissionModeUnsupported;
         }
     }
+    // ── Codex `/permissions` preset dialog (opt-in, containment-gated) ───────
+    /**
+     * Structural probe for turns.PermissionsDialogCapability, mirroring
+     * adapterQuitSequence's shape (a runtime `typeof … === "function"` check,
+     * not compile-time). Returns null — not merely "unsupported" — whenever
+     * setCodexPermissionPreset has no dialog to drive:
+     *
+     *  - `this.opts.harness !== "codex"` — no other harness has this dialog;
+     *  - `this.opts.adapter` was caller-supplied — refused regardless of
+     *    whether THAT adapter happens to implement the capability. The seam is
+     *    documented "Advanced/testing" and binds last-writer-wins across
+     *    conversations (resolveAdapter mints a fresh adapter per conversation
+     *    on the normal path, so `boundCodexHome` is per-conversation only
+     *    there); a security predicate must not rest on it;
+     *  - the resolved adapter is missing any one of the five methods.
+     */
+    codexPermissionsCapability() {
+        if (this.opts.harness !== "codex")
+            return null;
+        if (this.opts.adapter !== undefined)
+            return null;
+        const a = this.adapter;
+        const needed = [
+            "permissionsDialogKeys",
+            "dialogBackoutKeys",
+            "composerClearKeys",
+            "composerHasText",
+            "permissionsWriteContained",
+        ];
+        for (const m of needed) {
+            if (typeof a[m] !== "function")
+                return null;
+        }
+        return this.adapter;
+    }
+    /**
+     * `currentInput === null && readyForInput(...) && !composerHasText(snap)` —
+     * every failure path in setCodexPermissionPreset backs out through this
+     * predicate, never through readyForInput alone.
+     *
+     * The third clause is mandatory, not defensive: the dialog has no "go back"
+     * row (only ESC), so "fail closed" cannot mean "return an error and leave
+     * the dialog up" — every later send() would throw ErrInputPending forever.
+     * And if the `/permissions` write was itself swallowed as a paste, the
+     * composer holds literal `/permissions` text that codexPromptRE (ready.ts)
+     * matches just as happily as an empty composer, so a check without this
+     * clause would report the dialog settled while the composer still carries
+     * the command — the caller's NEXT send() would prepend it to their prompt.
+     */
+    dialogSettled(cap) {
+        const snap = this.screen.snapshot();
+        return (this.currentInput === null &&
+            readyForInput(this.opts.harness, snap.text) &&
+            !cap.composerHasText(snap));
+    }
+    /**
+     * Writes `write()` (or nothing, for a bare poll), then classifies the
+     * screen/input state on every render until `classify()` returns non-null or
+     * `bound` elapses — check-before-wait, single subscription taken BEFORE the
+     * write (primeSessionID's pattern), so a render landing in between is never
+     * missed. Races the screen's notify signal alongside inputStateCh (fired by
+     * signalInputState whenever currentInput/inputSurfaced change), so a
+     * classifier reading either is woken promptly rather than only on repaint.
+     * Returns null on ctx cancellation or the bound elapsing; throws ErrClosed.
+     */
+    async pollCodexPermissions(ctx, bound, write, classify) {
+        const [notify, unsubscribe] = this.screen.subscribe();
+        const deadline = sleep(bound);
+        try {
+            if (write)
+                write();
+            let r = classify();
+            if (r !== null)
+                return r;
+            for (;;) {
+                const which = await Promise.race([
+                    ctx.done().then(() => "ctx"),
+                    this.closedPromise.then(() => "closed"),
+                    this.inputStateCh.receive().then(() => "input"),
+                    notify
+                        .receive()
+                        .then((v) => (v.ok ? "changed" : "closed")),
+                    deadline.promise.then(() => "deadline"),
+                ]);
+                if (which === "closed")
+                    throw ErrClosed;
+                if (which === "ctx" || which === "deadline")
+                    return null;
+                r = classify();
+                if (r !== null)
+                    return r;
+            }
+        }
+        finally {
+            deadline.cancel();
+            unsubscribe();
+        }
+    }
+    /**
+     * Dismisses the `/permissions` dialog without committing a preset: writes
+     * dialogBackoutKeys() (ESC) and waits (bounded) for dialogSettled(). If the
+     * composer still carries literal text afterward — ESC does not clear a
+     * composer holding literal text, only a live dialog — writes
+     * composerClearKeys() and checks once more. Returns whether the dialog is
+     * confirmed clear; never throws on its own account (the caller is already
+     * about to throw its own sentinel and decides how to report an unsettled
+     * backout).
+     */
+    async backoutPermissionsDialog(ctx, cap) {
+        const bound = this.permissionSettleDur();
+        const settled = await this.pollCodexPermissions(ctx, bound, () => {
+            this.writeKeys(cap.dialogBackoutKeys());
+        }, () => (this.dialogSettled(cap) ? true : null));
+        if (settled)
+            return true;
+        if (this.currentInput === null &&
+            cap.composerHasText(this.screen.snapshot())) {
+            const cleared = await this.pollCodexPermissions(ctx, bound, () => {
+                this.writeKeys(cap.composerClearKeys());
+            }, () => (this.dialogSettled(cap) ? true : null));
+            return cleared === true;
+        }
+        return false;
+    }
+    /** Appends the "composer may still hold text" caveat when a backout left it unsettled. */
+    failCodexPermissions(base, sentinel, settled) {
+        const suffix = settled
+            ? ""
+            : "; the composer may still hold unsubmitted text — check pendingInput() " +
+                "before reusing this conversation";
+        throw wrap(`chat: setCodexPermissionPreset: ${base}${suffix}`, sentinel);
+    }
+    /**
+     * Verifies a preset switch through the sanctioned mid-session reader only
+     * (refreshPermissionMode — 106's `/status` writer — then permissionMode —
+     * 102's pure read), confirming `raw` reads the value THIS preset commits.
+     * Both the commit path and the already-current no-op path run this
+     * identically and return the same reading; a mismatch throws rather than
+     * handing back a reading that was never confirmed. No second dialog parser
+     * is added here — this only compares against codexPresetExpectedRaw.
+     */
+    async verifyCodexPermissionPreset(ctx, preset) {
+        const r = await this.refreshPermissionMode(ctx);
+        if (r.source === "status" && r.raw === codexPresetExpectedRaw[preset]) {
+            return r;
+        }
+        throw wrap(`chat: setCodexPermissionPreset: verification did not confirm ` +
+            `${JSON.stringify(preset)} took effect (observed ` +
+            `${JSON.stringify(r.observed)}, raw ${JSON.stringify(r.raw)}, source ` +
+            `${JSON.stringify(r.source)})`, ErrPermissionPresetUnavailable);
+    }
+    /**
+     * Drives codex's `/permissions` "Update Model Permissions" dialog to select
+     * `preset`, then returns the verified PermissionModeReading. WRITES — and,
+     * unlike every other write in this class, the write LEAKS OUT OF THE
+     * SESSION: selecting a preset persists `approvals_reviewer = "auto_review"`
+     * into codex's own config for every LATER session sharing the same
+     * `CODEX_HOME`. That is why this method is opt-in
+     * (Options.allowCodexPermissionsWrite) and fails closed unless the resolved
+     * adapter proves the write is contained inside the exact home the caller
+     * named.
+     *
+     * ## Gates, in this exact order, before a single byte is written
+     *
+     *  0. `this.opts.harness === "codex"`, `this.opts.adapter` NOT
+     *     caller-supplied, and the resolved adapter structurally implements
+     *     turns.PermissionsDialogCapability -> else ErrPermissionsUnsupported.
+     *     Modeled on quit()'s adapterQuitSequence probe / ErrQuitUnsupported.
+     *  1. not closed -> else ErrClosed
+     *  - `Options.inputPolicy.byKind.permissions_prompt` is unset -> else
+     *    ErrInvalidOptions. Two writers for one dialog is not a resolvable
+     *    race. `Options.inputPolicy.default` is DELIBERATELY not refused here:
+     *    resolvePolicy falls back to `{ kind: p.default }` whenever `byKind`
+     *    has no entry for this kind, so a bare `default` DOES reach
+     *    `permissions_prompt` — but it can never ACT on it. DispositionAnswer
+     *    resolves via `findOption(req, "")`, which returns null for the empty
+     *    optionID (its first line); DispositionDeny resolves via
+     *    `findOptionByAlias(req, "deny")`, which codex's preset-alias rule
+     *    (presetAlias) never emits. Refusing a global `default` a caller set
+     *    for OTHER kinds would break those callers for no security gain, so
+     *    only the kind-specific entry is refused.
+     *  2. `Options.allowCodexPermissionsWrite` is a non-empty string -> else
+     *     ErrCodexPermissionsDisabled
+     *  3. `adapter.permissionsWriteContained(allowCodexPermissionsWrite)` ->
+     *     else ErrCodexHomeNotIsolated. Fails closed: an unbound adapter
+     *     returns false.
+     *  4. `queue.held()` -> else ErrNoControl
+     *  5. `currentTurn === null` -> else ErrTurnInFlight
+     *  6. `currentInput === null` -> else ErrInputPending
+     *  7. `readyForInput(...)` -> else wait under the existing
+     *     awaitPromptReadyUntil rather than writing blind.
+     *
+     * ## Locking: `held()`, NOT `acquire()`
+     *
+     * Copies send()/answer() — closedFlag then queue.held() — never
+     * `this.queue.acquire(ctx)`. The gateway mints the control token BY HOLDING
+     * the non-reentrant ControlQueue (src/chat/control.ts), so acquiring here
+     * would park an HTTP caller behind its OWN token. See setPermissionMode's
+     * docstring for the full argument; quit() is the one exception and is not a
+     * precedent to follow.
+     *
+     * ## Sequence
+     *
+     * Writes `permissionsDialogKeys()` once, then polls check-before-wait, no
+     * resend, for the dialog to surface as `permissions_prompt`
+     * (inputAwaitingClient() on that kind — NOT pendingInput(), which returns
+     * null unless surfaced; readyForInput() cannot observe the dialog at all,
+     * since it goes false the instant the dialog is up). Three non-success
+     * exits, and each backs out (dialogBackoutKeys, then composerClearKeys if
+     * text remains) before throwing:
+     *
+     *  - a caller-supplied onInputRequest claimed the request first
+     *    (permissionsClaimedByResolver, set by handleInputRequested) ->
+     *    ErrCodexPermissionsRaced, with NO second answer() raced against it;
+     *  - codex refuses the slash command mid-turn (the busy-refusal line) ->
+     *    ErrTurnInFlight;
+     *  - the bound elapses with neither of the above (the dialog never opened —
+     *    including the write landing in the composer as a swallowed paste) ->
+     *    ErrPermissionPresetUnavailable, and no second `/permissions` write is
+     *    ever attempted.
+     *
+     * Once open, the target row is resolved by PRESET ALIAS, never by index:
+     * the `guardian_approval` feature flag can remove "Approve for me" entirely,
+     * and a digit would then silently select the WRONG row. No match -> back
+     * out, throw ErrPermissionPresetUnavailable (never ErrUnknownOption).
+     * Already-current (the target's raw label ends `(current)`) -> back out and
+     * jump straight to verification with NO commit — a redundant global write
+     * is not free, and the verification is what proves the label read
+     * correctly rather than merely assumed. Otherwise commits through the
+     * literal answer() path (findOption resolves the alias independent of row
+     * order and "(current)"), waits for dialogSettled() (bounded, not
+     * readyForInput alone), then verifies. Both paths run the identical
+     * verification and return the same reading.
+     */
+    async setCodexPermissionPreset(ctx, preset) {
+        const cap = this.codexPermissionsCapability();
+        if (!cap)
+            throw ErrPermissionsUnsupported;
+        if (this.closedFlag)
+            throw ErrClosed;
+        if (this.opts.inputPolicy?.byKind?.[codex.KindPermissions]) {
+            throw wrap("chat: setCodexPermissionPreset refuses to run while " +
+                "Options.inputPolicy already answers permissions_prompt — two " +
+                "writers for one dialog is not a resolvable race", ErrInvalidOptions);
+        }
+        const home = this.opts.allowCodexPermissionsWrite;
+        if (!home)
+            throw ErrCodexPermissionsDisabled;
+        if (!cap.permissionsWriteContained(home))
+            throw ErrCodexHomeNotIsolated;
+        if (!this.queue.held())
+            throw ErrNoControl;
+        if (this.currentTurn !== null)
+            throw ErrTurnInFlight;
+        if (this.currentInput !== null)
+            throw ErrInputPending;
+        if (!readyForInput(this.opts.harness, this.screen.snapshot().text)) {
+            const deadline = sleep(this.primeBoundDur());
+            try {
+                const w = await this.awaitPromptReadyUntil(ctx, deadline.promise);
+                if (w !== "ready") {
+                    throw wrap("chat: setCodexPermissionPreset: the harness never reached a " +
+                        "ready prompt before the deadline; no /permissions write was made", ErrPermissionPresetUnavailable);
+                }
+            }
+            finally {
+                deadline.cancel();
+            }
+        }
+        this.permissionsClaimedByResolver = false;
+        const outcome = await this.pollCodexPermissions(ctx, this.primeBoundDur(), () => {
+            this.writeKeys(cap.permissionsDialogKeys());
+        }, () => {
+            if (this.permissionsClaimedByResolver)
+                return "raced";
+            if (this.currentInput?.kind === codex.KindPermissions &&
+                this.inputSurfaced) {
+                return { req: this.currentInput };
+            }
+            if (this.screen.snapshot().text.includes(permissionsBusyPhrase)) {
+                return "refused";
+            }
+            return null;
+        });
+        if (outcome === null) {
+            const settled = await this.backoutPermissionsDialog(ctx, cap);
+            this.failCodexPermissions(`the /permissions dialog never opened before the deadline ` +
+                `(preset ${JSON.stringify(preset)})`, ErrPermissionPresetUnavailable, settled);
+        }
+        if (outcome === "raced") {
+            const settled = await this.backoutPermissionsDialog(ctx, cap);
+            this.failCodexPermissions("the permissions_prompt was answered by another writer " +
+                "(a caller-supplied onInputRequest) before this driver's own poll " +
+                "observed it", ErrCodexPermissionsRaced, settled);
+        }
+        if (outcome === "refused") {
+            const settled = await this.backoutPermissionsDialog(ctx, cap);
+            this.failCodexPermissions("codex refused the /permissions command while a task was still in " +
+                "progress", ErrTurnInFlight, settled);
+        }
+        const req = outcome.req;
+        const opts = req.options ?? [];
+        const target = opts.find((o) => o.alias === preset);
+        if (!target) {
+            const settled = await this.backoutPermissionsDialog(ctx, cap);
+            this.failCodexPermissions(`permission preset unavailable: ${JSON.stringify(preset)}; rows: ` +
+                opts.map((o) => o.label).join(", "), ErrPermissionPresetUnavailable, settled);
+        }
+        const alreadyCurrent = /\(current\)\s*$/.test(target.label);
+        if (alreadyCurrent) {
+            const settled = await this.backoutPermissionsDialog(ctx, cap);
+            if (!settled) {
+                this.failCodexPermissions(`already on ${JSON.stringify(preset)}; could not confirm the ` +
+                    `dialog cleared after backing out with no commit`, ErrPermissionPresetUnavailable, settled);
+            }
+        }
+        else {
+            await this.answer(ctx, req.id, { optionID: preset });
+            const settled = await this.pollCodexPermissions(ctx, this.permissionSettleDur(), null, () => (this.dialogSettled(cap) ? true : null));
+            if (settled !== true) {
+                this.failCodexPermissions(`the /permissions dialog did not clear after selecting ${JSON.stringify(preset)}`, ErrPermissionPresetUnavailable, false);
+            }
+        }
+        return this.verifyCodexPermissionPreset(ctx, preset);
+    }
     // ── Interactive input ────────────────────────────────────────────────────
     /** Respond to the interactive prompt currently awaiting an answer. */
     async answer(_ctx, requestID, ans) {
@@ -1335,8 +1691,16 @@ export class Conversation {
         this.inputSurfaced = false;
         if (this.tryAutoDismissCodex(req))
             return;
-        if (this.tryResolveInput(req))
+        if (this.tryResolveInput(req)) {
+            // Deterministic "claimed by another resolver" signal for
+            // setCodexPermissionPreset: inputSurfaced stays false on this path, so
+            // without this latch a driver polling for the dialog cannot distinguish
+            // "answered out from under me" from "never opened at all".
+            if (req.kind === codex.KindPermissions) {
+                this.permissionsClaimedByResolver = true;
+            }
             return;
+        }
         this.inputSurfaced = true;
         this.signalInputState();
         this.emit({ type: EventInputRequest, input: toClientInputRequest(req) });
