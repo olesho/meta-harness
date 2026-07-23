@@ -59,9 +59,15 @@ const SELF = relative(root, fileURLToPath(import.meta.url));
 // inherited here." seedIsolatedCodexHome (META-HARNESS-122, a 103 subtask) is
 // exactly that code — it asserts a config.toml path is ABSENT from a seeded
 // isolated home, which is the point of the helper, not a scope violation.
+// Check 2's own docstring makes the same carve-out for the `/permissions`
+// command explicit ("outside META-HARNESS-103"): src/turns/harness/codex.ts's
+// permissionsDialogKeys (META-HARNESS-125, a 103 subtask) is the capability
+// seam that legitimately types it, gated by permissionsWriteContained — 106
+// never touches it and this absence check is unaffected.
 const EXEMPT = new Set([
   "test/helpers/codex_home.ts",
   "test/helpers/codex_home.test.ts",
+  "src/turns/harness/codex.ts",
 ]);
 
 function walk(dir: string, out: string[] = []): string[] {

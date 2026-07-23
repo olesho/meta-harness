@@ -180,7 +180,7 @@ export interface Adapter {
   permissionCycleKeys?(): Uint8Array;
   /**
    * turns.PermissionsDialogCapability — the harness's structured permission-
-   * preset dialog (codex's "/permissions" picker), probed structurally like
+   * preset dialog (codex's `/permissions` picker), probed structurally like
    * every other optional capability here. Omitted => the harness has no such
    * dialog surface.
    */

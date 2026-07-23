@@ -229,7 +229,7 @@ export interface Quitter {
 
 /**
  * Surfaces the harness's structured permission-preset dialog (codex's
- * "/permissions" "Update Model Permissions" picker) as a capability seam: the
+ * `/permissions` "Update Model Permissions" picker) as a capability seam: the
  * keystrokes that open/back out/clear it, a way to check whether the composer
  * still holds unsubmitted text, and the predicate that gates a preset commit
  * on the write actually landing in an isolated, caller-named home rather than

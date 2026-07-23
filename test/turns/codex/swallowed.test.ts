@@ -74,3 +74,39 @@ describe("codex promptNotAccepted", () => {
     expect(a.promptNotAccepted(s, "something else")).toBe(false);
   });
 });
+
+// composerHasText shares its last-"›"-row scan with promptNotAccepted (both
+// call the same private helper) — this pins that the extraction is
+// behaviour-preserving on both signals.
+describe("codex composerHasText", () => {
+  const a = codex.New();
+
+  test("a '›' row carrying text → true", async () => {
+    const s = await snap(swallowedScreen);
+    expect(a.composerHasText(s)).toBe(true);
+  });
+
+  test("a bare '› ' composer → false", async () => {
+    const s = await snap(readyScreen);
+    expect(a.composerHasText(s)).toBe(false);
+  });
+
+  test("assistant reply above an empty composer → false", async () => {
+    const s = await snap(replyScreen);
+    expect(a.composerHasText(s)).toBe(false);
+  });
+
+  test("no composer row at all → false", async () => {
+    const s = await snap(">_ OpenAI Codex (v0.142.5)\n\n  loading…");
+    expect(a.composerHasText(s)).toBe(false);
+  });
+
+  test("promptNotAccepted's byte-identical signal is untouched by the refactor", async () => {
+    // composerHasText does NOT see this signal — only promptNotAccepted's
+    // sentScreenText comparison does. Pinning both keeps the extraction
+    // provably behaviour-preserving on both of promptNotAccepted's signals.
+    const s = await snap(readyScreen);
+    expect(a.promptNotAccepted(s, s.text)).toBe(true);
+    expect(a.composerHasText(s)).toBe(false);
+  });
+});

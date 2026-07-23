@@ -1,7 +1,7 @@
 import type { TranscriptTurn } from "../../chat/deps.ts";
 import type { Snapshot } from "../../screen/index.ts";
 import { GenericAdapter } from "../generic.ts";
-import type { Adapter, Event, InputRequest } from "../types.ts";
+import type { Adapter, Event, InputRequest, PermissionsDialogCapability } from "../types.ts";
 import type { Status } from "../wrapper.ts";
 /**
  * CODEX_STATUS_MIN_COLS is the minimum terminal width at which the `/status` box
@@ -15,9 +15,17 @@ import type { Status } from "../wrapper.ts";
  */
 export declare const CODEX_STATUS_MIN_COLS = 60;
 /** Adapter implements turns.Adapter for Codex CLI. */
-export declare class CodexAdapter extends GenericAdapter implements Adapter {
+export declare class CodexAdapter extends GenericAdapter implements Adapter, PermissionsDialogCapability {
     /** Overrides ~/.codex/sessions for the transcript reader (readTranscript). */
     sessionsRoot: string;
+    /**
+     * The CODEX_HOME this adapter's conversation was launched under, per
+     * bindLaunchEnv: null until Open binds it, "" when bound but the variable is
+     * absent from the effective launch env, else the raw (unresolved) parsed
+     * value. permissionsWriteContained fails closed on either null or "" — see
+     * that method for why an ambient/inherited CODEX_HOME can never satisfy it.
+     */
+    boundCodexHome: string | null;
     private lastFingerprint;
     private lastInputID;
     private lastInput;
@@ -85,6 +93,93 @@ export declare class CodexAdapter extends GenericAdapter implements Adapter {
      * submitKeyForHarness("codex") and the quit sequence's hardcoded submit).
      */
     primeSessionIDKeys(): Uint8Array;
+    /**
+     * Implements PermissionsDialogCapability.permissionsDialogKeys — opens the
+     * `/permissions` "Update Model Permissions" picker: the slash command
+     * followed by the CSI 13 u submit key.
+     *
+     * CAPTURED LIVE against codex-cli 0.144.5 (test/corpus/codex/
+     * probe-backout-keys and probe-commit-keys-permissions, META-HARNESS-122):
+     * every probe session opened the dialog by typing `/permissions` then
+     * writing `\x1b[13u` as a single burst — the same free-text-composer submit
+     * primeSessionIDKeys uses for `/status` above, not the bare-CR encoding that
+     * (per the commit-key matrix probe) menu-ROW selection tolerates.
+     */
+    permissionsDialogKeys(): Uint8Array;
+    /**
+     * Implements PermissionsDialogCapability.dialogBackoutKeys — dismisses the
+     * `/permissions` dialog WITHOUT committing a preset (esc, not enter).
+     *
+     * CAPTURED LIVE against codex-cli 0.144.5 (test/corpus/codex/
+     * probe-backout-keys, META-HARNESS-122): both a bare ESC and CSI 27 u
+     * dismissed the dialog cleanly with no composer residue; bare ESC (the
+     * simpler encoding, and what a physical Esc key sends) is pinned. NOTE: a
+     * bare ESC is a byte-for-byte PREFIX of CSI 13 u / CSI 27 u — a caller
+     * distinguishing "was this an ESC key" from "was this a CSI-u sequence" must
+     * match the exact one-byte string, not just "starts with 0x1b" (see the
+     * probe's non-overlap note).
+     */
+    dialogBackoutKeys(): Uint8Array;
+    /**
+     * Implements PermissionsDialogCapability.composerClearKeys — empties a
+     * composer already holding literal, unsubmitted text.
+     *
+     * CAPTURED LIVE against codex-cli 0.144.5 (test/corpus/codex/
+     * probe-composer-clear-keys, META-HARNESS-122): Ctrl-U, Ctrl-A+Ctrl-K, and a
+     * backspace run all cleared the composer back to the idle placeholder;
+     * Ctrl-U is pinned as the shortest reliable encoding — one write regardless
+     * of how much text is typed, unlike a backspace run whose length must scale
+     * with it.
+     */
+    composerClearKeys(): Uint8Array;
+    /**
+     * Implements PermissionsDialogCapability.composerHasText — reports whether
+     * the composer (the last "›" row on screen) still carries typed text.
+     * Delegates to the same last-"›"-row scan promptNotAccepted uses, extracted
+     * to lastComposerRowText so both methods share one regex and one loop.
+     */
+    composerHasText(snap: Snapshot): boolean;
+    /**
+     * Implements PermissionsDialogCapability.permissionsWriteContained — the
+     * containment predicate gating a `/permissions` preset commit, which codex
+     * persists to `$CODEX_HOME/config.toml` (global if CODEX_HOME is unset).
+     * True only when:
+     *   1. boundCodexHome was actually bound (not null — bindLaunchEnv never ran,
+     *      e.g. a predicate consulted before Open) and not "" (bound, but the
+     *      launch env carried no CODEX_HOME at all);
+     *   2. resolve(boundCodexHome) === resolve(declaredHome) — the caller must
+     *      NAME the same isolated home the conversation actually launched under;
+     *      an ambient/inherited CODEX_HOME that happens to match by coincidence
+     *      still satisfies this, which is why (3) exists; and
+     *   3. that resolved path is not the real `~/.codex` — so even a caller who
+     *      launched with no isolation and then "declares" their own real home
+     *      cannot talk their way past the gate.
+     * resolve() is applied to both sides so `~`, relative, and trailing-slash
+     * spellings of the same directory compare equal.
+     */
+    permissionsWriteContained(declaredHome: string): boolean;
+    /**
+     * Optional capability (mirrors PiAdapter.bindLaunchEnv, src/turns/harness/
+     * pi.ts): chat calls this once at Open (and again on Reopen, since the call
+     * sits inside openWithSession) with the effective child env, so this adapter
+     * learns the CODEX_HOME the harness process actually launched under.
+     *
+     * LAYERING ASYMMETRY vs. pi's use of the same shape: pi's bindLaunchEnv binds
+     * a LOCATOR (where to read pi's session log from) — an inherited env value is
+     * fine there, since at worst a wrong locator just fails to find a transcript.
+     * Here the bound value feeds a SECURITY PREDICATE (permissionsWriteContained)
+     * — a strictly stronger claim. That is why an inherited/ambient CODEX_HOME
+     * can never be enough on its own: the caller must separately DECLARE the same
+     * isolated home to permissionsWriteContained, and the two must agree.
+     *
+     * The `this.sessionsRoot === ""` guard is load-bearing: CodexReader.
+     * resolveRoot() (src/transcript/codex/codex.ts) honours an explicitly-set
+     * sessionsRoot over its own CODEX_HOME rung, and test/chat/
+     * codex_swallow_override.test.ts / test/chat/codex_transcript_history.test.ts
+     * both assign sessionsRoot AFTER Open — this must not clobber that.
+     */
+    bindLaunchEnv(env: string[], _workingDir: string): void;
+    private lastComposerRowText;
     /**
      * Implements turns.PermissionModeCycler — one Shift+Tab press advances
      * Codex's collaboration mode by exactly one rung.

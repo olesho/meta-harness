@@ -125,18 +125,23 @@ describe("codex auto-dismiss", () => {
       options: [
         {
           id: "1",
-          alias: "",
+          alias: "ask-for-approval",
           label: "Ask for approval (current)",
           keys: enc.encode("1\r"),
           highlighted: true,
         },
         {
           id: "2",
-          alias: "",
+          alias: "approve-for-me",
           label: "Approve for me",
           keys: enc.encode("2\r"),
         },
-        { id: "3", alias: "", label: "Full Access", keys: enc.encode("3\r") },
+        {
+          id: "3",
+          alias: "full-access",
+          label: "Full Access",
+          keys: enc.encode("3\r"),
+        },
       ],
     });
     expect(permissions().kind).toBe(codex.KindPermissions);
