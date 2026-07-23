@@ -124,6 +124,87 @@ describe("parseStructuredArgs (safe-transport grammar)", () => {
     expect(off.sandboxDefaults).toBeUndefined();
   });
 
+  // --permission-mode shares valued()'s union with --model; the guard below is
+  // the direct regression test on `assign`'s old bare `else out.model = v`,
+  // which made every newly-added valued flag silently land in `model`.
+  test("--permission-mode sets permissionMode and NOT model (separated form)", () => {
+    const p = parseStructuredArgs([
+      "--prompt-file",
+      "/p",
+      "--permission-mode",
+      "plan",
+      "claude",
+    ]);
+    expect(p.error).toBeUndefined();
+    expect(p.permissionMode).toBe("plan");
+    expect(p.model).toBeUndefined();
+    expect(p.name).toBe("claude");
+  });
+
+  test("--permission-mode=V sets permissionMode and NOT model (= form)", () => {
+    const p = parseStructuredArgs(["--permission-mode=bypass", "codex"]);
+    expect(p.error).toBeUndefined();
+    expect(p.permissionMode).toBe("bypass");
+    expect(p.model).toBeUndefined();
+    expect(p.name).toBe("codex");
+  });
+
+  test("--permission-mode coexists with --model without either clobbering the other", () => {
+    const p = parseStructuredArgs([
+      "--model",
+      "gpt-5.3",
+      "--permission-mode",
+      "ask",
+      "claude",
+    ]);
+    expect(p.error).toBeUndefined();
+    expect(p.model).toBe("gpt-5.3");
+    expect(p.permissionMode).toBe("ask");
+  });
+
+  test("trailing --permission-mode with no operand is a usage error", () => {
+    expect(parseStructuredArgs(["--permission-mode"]).error).toBe(
+      "flag --permission-mode requires a value",
+    );
+  });
+
+  // The message is shared VERBATIM with the host-side check in src/env/turn.ts.
+  test("--sandbox-defaults + --permission-mode are mutually exclusive (both orders)", () => {
+    const msg =
+      "flags --sandbox-defaults and --permission-mode are mutually exclusive";
+    expect(
+      parseStructuredArgs([
+        "--sandbox-defaults",
+        "--permission-mode",
+        "plan",
+        "claude",
+      ]).error,
+    ).toBe(msg);
+    expect(
+      parseStructuredArgs([
+        "--permission-mode",
+        "plan",
+        "--sandbox-defaults",
+        "claude",
+      ]).error,
+    ).toBe(msg);
+    // Blanket over harnesses — codex injects no argv, but the rule is uniform.
+    expect(
+      parseStructuredArgs([
+        "--sandbox-defaults",
+        "--permission-mode=bypass",
+        "codex",
+      ]).error,
+    ).toBe(msg);
+    // Either flag ALONE stays legal.
+    expect(
+      parseStructuredArgs(["--sandbox-defaults", "claude"]).error,
+    ).toBeUndefined();
+    expect(
+      parseStructuredArgs(["--permission-mode", "plan", "claude"]).error,
+    ).toBeUndefined();
+  });
+
   test("--sandbox-defaults is valueless — the = form is rejected with the exact message", () => {
     expect(parseStructuredArgs(["--sandbox-defaults=x", "claude"]).error).toBe(
       "flag --sandbox-defaults takes no value",
@@ -336,6 +417,25 @@ describe("structured-runner main() — one-turn JSON contract (real pty + fake h
     const argv: string[] = JSON.parse(readFileSync(argvOut, "utf8"));
     expect(argv).not.toContain("--dangerously-skip-permissions");
   }, 25000);
+
+  test("--sandbox-defaults + --permission-mode: ExitUsage, stderr message, NO JSON on stdout", async () => {
+    const { promptPath } = stageTurn();
+    const { code, payload, stderr } = await captureMain([
+      "--prompt-file",
+      promptPath,
+      "--sandbox-defaults",
+      "--permission-mode",
+      "plan",
+      "claude",
+    ]);
+    expect(code).toBe(ExitUsage);
+    expect(stderr).toBe(
+      "structured-runner: flags --sandbox-defaults and --permission-mode are mutually exclusive\n",
+    );
+    // captureMain falls back to "{}" when stdout stayed empty — emit() always
+    // writes a populated object, so an empty payload IS "no JSON line".
+    expect(payload).toEqual({});
+  });
 
   test("forced deadline via HARNESS_WRAPPER_RUN_TIMEOUT: exit 124 + JSON status deadline + stderr anchor", async () => {
     const script = New("claude-code")
