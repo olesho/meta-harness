@@ -2082,7 +2082,9 @@ function resolvePolicy(
  * openWithSession backs both Open and Reopen, so a resumed session inherits the
  * same default.
  */
-export function launchInputPolicy(opts: Options): InputPolicy | undefined {
+export function launchInputPolicy(
+  opts: Pick<Options, "harness" | "permissionMode" | "inputPolicy">,
+): InputPolicy | undefined {
   switch (normHarness(opts.harness)) {
     case "claude":
     case "claude-code":
