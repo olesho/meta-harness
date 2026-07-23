@@ -66,6 +66,7 @@ export async function runTurn(ctx, cfg) {
         env: cfg.env,
         effort: cfg.effort,
         model: cfg.model,
+        permissionMode: cfg.permissionMode,
         cols: cfg.cols,
         rows: cfg.rows,
         store,

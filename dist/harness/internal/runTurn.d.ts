@@ -43,6 +43,16 @@ export interface TurnConfig {
      * default. */
     effort?: string;
     model?: string;
+    /**
+     * Launch-time permission posture, forwarded to chat.Options. Rungs least to
+     * most permissive: plan, manual, ask, auto, bypass (`ask` is ABOVE `manual` —
+     * it auto-accepts edits); claude also accepts acceptEdits / bypassPermissions
+     * / dontAsk, codex its read-only / workspace-write / danger-full-access
+     * sandbox values. Empty leaves the harness default. When this is a claude
+     * `bypass` and `inputPolicy` is absent, chat installs its default
+     * trust_prompt→proceed policy so the run is not wedged on the bypass dialog.
+     */
+    permissionMode?: string;
     /** Submitted as one user message. */
     prompt: string;
     /** Stops the interactive harness after the submitted turn completes or
