@@ -19,5 +19,5 @@ export { ContainerWorkspace, detectContainerRuntime } from "./container.js";
 // Host-side structured-turn client (design §7). Imports the exit constants +
 // result-schema type from src/turnproto (the ONE source of truth); turnproto is
 // dependency-light and never reaches into src/cli, so this barrel stays clean.
-export { runStructuredTurn, TurnProtocolError, TranscriptRetrievalUnsupportedError, } from "./turn.js";
+export { PermissionModeSandboxConflictError, runStructuredTurn, TurnProtocolError, TranscriptRetrievalUnsupportedError, } from "./turn.js";
 //# sourceMappingURL=index.js.map
