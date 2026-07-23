@@ -1193,6 +1193,34 @@ function glyphLine(text: string): string {
   return found === "" ? "no glyph line" : found;
 }
 
+/**
+ * redactWelcome masks the LEFT cell of claude's startup box in the screen dump.
+ *
+ * The failure report prints the WHOLE screen, and that cell carries the running
+ * operator's identity verbatim — `Welcome back <name>!`, and a `<model> ·
+ * <subscription> · <full name>` row that WRAPS across two cells. On any red run
+ * that would land in CI logs. Same reasoning, and the same column-preserving
+ * shape, as redactAccount above (check 4) and as the recorded-bytes redaction
+ * test/corpus/codex/status-box/meta.json documents.
+ *
+ * The whole cell is masked rather than the individual values because the wrap
+ * splits a name across rows, so no value-shaped regex can cover it. Nothing in
+ * that cell is load-bearing here: the box header (`Claude Code v…`), the
+ * composer and the footer line all live OUTSIDE it and survive untouched, and no
+ * assertion reads any of this.
+ */
+function redactWelcome(text: string): string {
+  return text.replace(
+    /^(│)([^│\r\n]*)(│[^\r\n]*│)$/gm,
+    (m, open: string, cell: string, tail: string) =>
+      cell.trim() === ""
+        ? m
+        : open +
+          "<redacted>".padEnd(cell.length, " ").slice(0, cell.length) +
+          tail,
+  );
+}
+
 /** What one live launch observed. `text` is the last frame read before close(). */
 interface FooterScrape {
   text: string;
@@ -1336,7 +1364,7 @@ describe("conformance: claude permission-mode footers (CONFORMANCE=1)", () => {
       `  If the footer was RENAMED: update claudeFooterRungs / claudeModeFooterRE in ` +
       `${FOOTER_PARSER} and re-record ${fixture}.\n` +
       `  If the FLAG was renamed: update ${SYMBOLS} and checks 1-2 above.\n` +
-      `  --- screen ---\n${scrape.text}\n  --- end screen ---`
+      `  --- screen ---\n${redactWelcome(scrape.text)}\n  --- end screen ---`
     );
   }
 
