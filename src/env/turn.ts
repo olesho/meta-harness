@@ -38,6 +38,32 @@ export interface TurnConfig {
   effort?: string;
   /** Model forwarded to the harness. */
   model?: string;
+  /** Permission-mode rung forwarded to the harness wrapper via the runner's
+   *  `--permission-mode` flag. Canonical rungs, least to most permissive:
+   *  `plan`, `manual`, `ask`, `auto`, `bypass` (`ask` sits ABOVE `manual`
+   *  because it auto-accepts edits). Unset or `""` injects nothing. Supported
+   *  on claude-code and codex only. Mutually exclusive with `sandboxDefaults`
+   *  (rejected host-side — see PermissionModeSandboxConflictError).
+   *
+   *  The value is validated INSIDE THE GUEST, so an operator meets it as one of
+   *  two distinct result shapes rather than a host-side throw:
+   *
+   *  - Invalid rung, current guest image: `structured-runner` parses the flag
+   *    fine, the wrapper throws `ErrInvalidConfig`, and the runner's catch emits
+   *    a JSON line `{ status: "errored", reason: "wrapper: invalid config:
+   *    PermissionMode …" }` and exits 1. That payload is returned VERBATIM —
+   *    status `errored`, message preserved in `reason`. (`statusForExit` is not
+   *    consulted: it only runs when stdout carried no JSON.)
+   *  - Guest image predates this flag: `parseStructuredArgs` rejects the unknown
+   *    flag → `ExitUsage` (2) with NO JSON → `statusForExit` → status
+   *    `startup_error`, with the runner's stderr in `reason`, reading
+   *    `structured-runner: unknown flag: --permission-mode`. That string is the
+   *    version-skew fingerprint.
+   *
+   *  Codex honesty caveat: codex `plan` pins the PERMISSIONS axis only
+   *  (`-s read-only -a untrusted`); the collaboration-axis `/plan` write is
+   *  META-HARNESS-106. */
+  permissionMode?: string;
   /** Extra args forwarded verbatim to the harness after `--`. */
   harnessArgs?: string[];
   /** Opt into the runner's sandbox defaults (`--sandbox-defaults`): IS_SANDBOX=1
@@ -84,6 +110,22 @@ export class TranscriptRetrievalUnsupportedError extends Error {
   }
 }
 
+/** Thrown when a turn asks for BOTH `sandboxDefaults` and a non-empty
+ *  `permissionMode`. The two flags are mutually exclusive — `--sandbox-defaults`
+ *  hard-codes the most permissive rung while `--permission-mode` names one — and
+ *  structured-runner's parser rejects the pair with exit 2. This client fails
+ *  fast on the HOST so the caller does not pay a prompt upload plus a guest
+ *  round-trip (a real cost on a remote workspace) just to be told exit 2. The
+ *  message is byte-identical to the guest-side one. */
+export class PermissionModeSandboxConflictError extends Error {
+  constructor() {
+    super(
+      "flags --sandbox-defaults and --permission-mode are mutually exclusive",
+    );
+    this.name = "PermissionModeSandboxConflictError";
+  }
+}
+
 /** Mirrors structured-runner's resolveHarnessName WITHOUT importing from src/cli
  *  (bin-only territory a public barrel must not reach into). Accepts both the
  *  short aliases and the canonical names. */
@@ -109,6 +151,11 @@ function buildArgv(
   const argv = [binary, "--prompt-file", promptPath];
   if (cfg.effort !== undefined) argv.push("--effort", cfg.effort);
   if (cfg.model !== undefined) argv.push("--model", cfg.model);
+  // Deliberately ALSO excludes "": an explicit empty permissionMode means
+  // "unset" here rather than pushing a `--permission-mode ""` pair the wrapper
+  // would no-op on anyway — noise in the argv and in traces.
+  if (cfg.permissionMode !== undefined && cfg.permissionMode !== "")
+    argv.push("--permission-mode", cfg.permissionMode);
   if (cfg.sandboxDefaults) argv.push("--sandbox-defaults");
   argv.push(cfg.harness);
   if (cfg.harnessArgs && cfg.harnessArgs.length > 0)
@@ -139,6 +186,17 @@ export async function runStructuredTurn(
   ws: Workspace,
   cfg: TurnConfig,
 ): Promise<StructuredTurnResult> {
+  // Fail fast BEFORE staging/uploading the prompt: structured-runner rejects the
+  // pair with exit 2, and paying a guest round-trip to learn that is exactly the
+  // cost this check exists to avoid.
+  if (
+    cfg.sandboxDefaults &&
+    typeof cfg.permissionMode === "string" &&
+    cfg.permissionMode !== ""
+  ) {
+    throw new PermissionModeSandboxConflictError();
+  }
+
   const binary = cfg.binary ?? DEFAULT_BINARY;
   const cwd = cfg.cwd ?? ws.guestPath("repo");
 

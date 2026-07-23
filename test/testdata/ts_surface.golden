@@ -262,6 +262,7 @@ env/index.ts
   ExecOpts: type
   ExecResult: type
   Outcome: type
+  PermissionModeSandboxConflictError: class{}
   PolicySpec: type
   Provisioner: type
   Redactor: type
