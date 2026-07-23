@@ -163,6 +163,22 @@ function parseClaudeFooter(text: string): ScreenReading {
 // construction, at any width, so CODEX_STATUS_MIN_COLS needs no tuning for this
 // read (that constant keeps its existing job: the primer's /status write gate).
 //
+// Measured widths, from the META-HARNESS-110 recordings (test/corpus/codex/
+// status-*, live 0.144.5 at 120x40; "intrinsic" = the minimum unwrapped width a
+// row needs, i.e. opening │ + label column + value + closing │):
+//
+//   Permissions:          up to 55  (widest value: Custom (workspace, untrusted))
+//   Collaboration mode:      30–33
+//   Session:                    62
+//   Directory:                  94  (cwd-dependent, not parsed)
+//
+// So the load-bearing row is `Session:` at 62, ABOVE the current
+// CODEX_STATUS_MIN_COLS = 60 — that constant's docstring derives 60 from the
+// 36-char UUID plus "Session: " plus borders, but the real box indents the value
+// into a fixed label column set by the widest label ("Collaboration mode:").
+// Raising it is a documented FOLLOW-UP with this evidence, deliberately not done
+// here: it is a write-gate heuristic, and both reads already fail closed.
+//
 // Non-global, matching statusSessionRE's shape — safe to .exec()/.test().
 const codexPermissionsRowRE =
   /│[^\S\r\n]*Permissions:[^\S\r\n]+([^\r\n│]+?)[^\S\r\n]*│/;
@@ -177,25 +193,67 @@ const codexCollaborationRowRE =
 const codexStatusHeader = ">_ OpenAI Codex (v";
 
 /**
- * `Permissions:` value → ladder rung.
+ * `Permissions:` value → ladder rung. FROZEN against live codex-cli 0.144.5.
+ *
+ * Every key below was observed end-to-end by the META-HARNESS-110 probe and is
+ * carried by a recorded fixture under test/corpus/codex/status-* (each fixture's
+ * meta.json names the launch flags that produced it). Nothing here is predicted.
+ *
+ *   launch flags                      Permissions: rendering          rung
+ *   -s workspace-write -a on-request  Workspace (Ask for approval)    acceptEdits
+ *   -s workspace-write -a untrusted   Custom (workspace, untrusted)   manual
+ *   -s workspace-write -a never       Custom (workspace, never)       auto
+ *   -s danger-full-access -a never    Full Access                     bypass
+ *   -s read-only -a untrusted         Read Only (untrusted)           plan
+ *   -s read-only -a never             Read Only (never)               plan
+ *   -s read-only -a on-request        Read Only (Ask for approval)    plan
+ *
+ * Two corrections the live probe forced on the predicted table:
+ *
+ *   - `Custom (read-only, untrusted)` DOES NOT EXIST. 0.144.5 gives the
+ *     read-only sandbox its own presentation family, `Read Only (<policy>)`,
+ *     rather than the `Custom (<sandbox>, <policy>)` form. That predicted key is
+ *     gone; `Read Only (untrusted)` replaces it.
+ *   - The read-only family is NOT uniform in how it spells the approval policy:
+ *     `untrusted` and `never` appear verbatim, `on-request` is prettified to
+ *     "Ask for approval". That is why this is an exhaustive lookup of observed
+ *     strings and never a parsed `<sandbox>, <policy>` pair — an unobserved
+ *     spelling must fall through to unknown + raw, not be guessed at.
+ *
+ * All three `Read Only (…)` spellings map to `plan` on the permissions axis. The
+ * approval policy is load-bearing under `workspace-write` (it discriminates
+ * three rungs) but cannot be under `read-only`: nothing is writable, so there is
+ * no edit for an approval policy to gate and every read-only session is the same
+ * permissions posture. Mapping only the `untrusted` spelling would leave a
+ * session launched `-s read-only -a never` reporting permanent unresolvable
+ * drift (normalizePermissionRung maps the `read-only` launch spelling to `plan`,
+ * so `requested` would be `plan` against a forever-`unknown` `observed`).
+ *
+ * `plan` here is the PERMISSIONS AXIS ONLY. A codex session is honestly "plan"
+ * only when `observed === "plan"` AND `collaboration === "plan"` — the epic's
+ * plan rung is `-s read-only -a untrusted` PLUS a post-launch `/plan`, and the
+ * probe confirmed those two axes move independently (test/corpus/codex/
+ * status-readonly-default and status-plan share launch flags and differ only in
+ * whether `/plan` ran).
  *
  * `Workspace (Approve for me)` maps to NOTHING by design: the epic records it
  * has no CLI spelling (`-a granular` is rejected; the accepted `-a` values are
  * untrusted | on-request | never), so it can never be a `requested` rung.
  * Coercing it onto one would make a caller comparing `requested` to `observed`
  * raise a false drift alarm — so it reports `observed: "unknown"` with the value
- * preserved in `raw`, like any other off-ladder state.
- *
- * `Custom (workspace, never)` → `auto` is PROVISIONAL: predicted, pending
- * confirmation against a live codex 0.144.5 by a sibling task.
+ * preserved in `raw`, like any other off-ladder state. It was NOT re-probed by
+ * META-HARNESS-110 (unreachable from the CLI); the exclusion stands on that same
+ * reasoning.
  */
 const codexPermissionRungs: Record<string, PermissionRung | undefined> = {
   "workspace (ask for approval)": "acceptEdits",
   "full access": "bypass",
   "custom (workspace, untrusted)": "manual",
+  "custom (workspace, never)": "auto",
   // Permissions axis only — the collaboration axis is reported separately.
-  "custom (read-only, untrusted)": "plan",
-  "custom (workspace, never)": "auto", // provisional
+  "read only (untrusted)": "plan",
+  "read only (never)": "plan",
+  "read only (ask for approval)": "plan",
 };
 
 // The codex path always reports source "status" — the only source a pure screen

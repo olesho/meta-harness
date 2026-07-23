@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { newScreen } from "../../../src/screen/index.ts";
 import * as codex from "../../../src/turns/harness/codex.ts";
+import { corpusBytes } from "../corpus.ts";
 
 const tmpRoots: string[] = [];
 afterAll(() => {
@@ -135,5 +136,71 @@ describe("codex session id", () => {
   test("resumeArgs leads with the `resume <uuid>` subcommand", () => {
     const args = codex.New().resumeArgs("sess-uuid");
     expect(args).toEqual(["resume", "sess-uuid"]);
+  });
+});
+
+// Until META-HARNESS-110 recorded these, every /status test above was synthetic
+// and statusSessionRE had NO recorded-corpus coverage — a real layout change to
+// the box would not have failed a single test. These replay live codex-cli
+// 0.144.5 recordings, so they are the fixtures that would catch one.
+describe("codex session id: recorded /status corpus", () => {
+  const scenarios = [
+    "status-default", // Default collaboration
+    "status-plan", // Plan collaboration
+    "status-manual",
+    "status-auto",
+    "status-bypass",
+    "status-readonly-default",
+    "status-readonly-never",
+    "status-readonly-onrequest",
+  ];
+
+  async function replay(scenario: string) {
+    const bytes = corpusBytes("codex", scenario);
+    expect(bytes, scenario).not.toBeNull();
+    const scr = newScreen(120, 40);
+    await scr.write(bytes!);
+    return scr.snapshot();
+  }
+
+  for (const scenario of scenarios) {
+    test(`${scenario}: scrapes the Session row through statusBoxHeaderRE`, async () => {
+      const snap = await replay(scenario);
+      // The recordings never show the `codex resume <uuid>` hint (no /quit), so
+      // the capture below can only have come through the /status branch — the
+      // one statusBoxHeaderRE now gates.
+      expect(snap.text).not.toMatch(/codex resume /);
+      const [id, ok] = codex.New().extractSessionID(snap);
+      expect(ok).toBe(true);
+      expect(id).toMatch(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
+      );
+      // The captured id is the one painted in the box, not one scraped elsewhere.
+      expect(snap.text).toContain("Session:");
+      expect(snap.text).toContain(id);
+    });
+  }
+
+  test("the recordings carry distinct session ids — no cross-fixture contamination", async () => {
+    const ids: string[] = [];
+    for (const scenario of scenarios) {
+      const [id] = codex.New().extractSessionID(await replay(scenario));
+      ids.push(id);
+    }
+    expect(new Set(ids).size).toBe(scenarios.length);
+  });
+
+  test("stripping the codex banner closes the gate — the box rows alone do not capture", async () => {
+    // statusBoxHeaderRE gates HARNESS IDENTITY: `>_ OpenAI Codex (v` is the
+    // startup banner, not a box-only string. With it removed the `│ Session: … │`
+    // rows are still on screen, and the scrape must still decline.
+    const snap = await replay("status-default");
+    const text = snap.text.replaceAll(
+      ">_ OpenAI Codex (v",
+      ">_ Some Other CLI(",
+    );
+    expect(text).toMatch(/│[^\r\n]*Session:[^\r\n]*│/);
+    const [, ok] = codex.New().extractSessionID({ ...snap, text });
+    expect(ok).toBe(false);
   });
 });

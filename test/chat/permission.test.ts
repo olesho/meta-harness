@@ -1,6 +1,8 @@
 // Deterministic tests for the pure permission-mode parser: synthetic footer /
-// `/status` fixtures plus a replay of the recorded claude `auto` corpus. No live
-// CLI, no PTY, no Conversation.
+// `/status` fixtures, a replay of the recorded claude `auto` corpus, and a
+// replay of the eight recorded codex `/status` boxes (test/corpus/codex/
+// status-*, live codex-cli 0.144.5) that freeze the Permissions: mapping table.
+// No live CLI, no PTY, no Conversation.
 
 import { describe, expect, test } from "vitest";
 
@@ -188,12 +190,16 @@ describe("parsePermissionMode: codex /status", () => {
   });
 
   test("each mapped Permissions: value yields its rung", () => {
+    // The frozen table — every entry observed live on codex-cli 0.144.5 and
+    // carried by a test/corpus/codex/status-* fixture (replayed below).
     const cases: [string, string][] = [
       ["Workspace (Ask for approval)", "acceptEdits"],
       ["Full Access", "bypass"],
       ["Custom (workspace, untrusted)", "manual"],
-      ["Custom (read-only, untrusted)", "plan"],
       ["Custom (workspace, never)", "auto"],
+      ["Read Only (untrusted)", "plan"],
+      ["Read Only (never)", "plan"],
+      ["Read Only (Ask for approval)", "plan"],
     ];
     for (const [value, rung] of cases) {
       const r = parsePermissionMode(
@@ -216,12 +222,22 @@ describe("parsePermissionMode: codex /status", () => {
   });
 
   test("an unrecognized Custom (<sandbox>, <policy>) pair is unknown + raw", () => {
-    const r = parsePermissionMode(
-      statusBox(["  Permissions:   Custom (read-only, never)"], 64),
-      "codex",
-    )!;
-    expect(r.observed).toBe("unknown");
-    expect(r.raw).toBe("Custom (read-only, never)");
+    // `Custom (read-only, …)` is the shape the table PREDICTED before the live
+    // probe; 0.144.5 renders `Read Only (…)` instead. The table is an exhaustive
+    // lookup of observed strings, so the never-observed shape must fall through
+    // rather than be reconstructed from the sandbox/policy pair.
+    for (const value of [
+      "Custom (read-only, never)",
+      "Custom (read-only, untrusted)",
+      "Custom (workspace, on-request)",
+    ]) {
+      const r = parsePermissionMode(
+        statusBox(["  Permissions:   " + value], 64),
+        "codex",
+      )!;
+      expect(r.observed, value).toBe("unknown");
+      expect(r.raw, value).toBe(value);
+    }
   });
 
   test("absence of the Collaboration mode row is NOT a signal — collaboration stays unknown", () => {
@@ -269,6 +285,145 @@ describe("parsePermissionMode: codex /status", () => {
     const r = parsePermissionMode(scr.snapshot().text, "codex")!;
     expect(r.observed).toBe("manual");
     expect(r.raw).toBe("Custom (workspace, untrusted)");
+  });
+});
+
+describe("parsePermissionMode: codex /status corpus replay", () => {
+  /** Replays a recorded `/status` box through a real Screen, as the parser sees it. */
+  async function statusReading(scenario: string) {
+    const bytes = corpusBytes("codex", scenario);
+    expect(bytes, scenario).not.toBeNull();
+    const scr = newScreen(120, 40);
+    await scr.write(bytes!);
+    return {
+      text: scr.snapshot().text,
+      reading: parsePermissionMode(scr.snapshot().text, "codex")!,
+    };
+  }
+
+  // The frozen table, one recorded fixture per row. Each was captured live from
+  // codex-cli 0.144.5 with the launch flags named in its meta.json.
+  const fixtures: {
+    scenario: string;
+    raw: string;
+    observed: string;
+    collaboration: string;
+  }[] = [
+    {
+      scenario: "status-default",
+      raw: "Workspace (Ask for approval)",
+      observed: "acceptEdits",
+      collaboration: "default",
+    },
+    {
+      scenario: "status-manual",
+      raw: "Custom (workspace, untrusted)",
+      observed: "manual",
+      collaboration: "default",
+    },
+    {
+      scenario: "status-auto",
+      raw: "Custom (workspace, never)",
+      observed: "auto",
+      collaboration: "default",
+    },
+    {
+      scenario: "status-bypass",
+      raw: "Full Access",
+      observed: "bypass",
+      collaboration: "default",
+    },
+    {
+      scenario: "status-readonly-default",
+      raw: "Read Only (untrusted)",
+      observed: "plan",
+      collaboration: "default",
+    },
+    {
+      scenario: "status-readonly-never",
+      raw: "Read Only (never)",
+      observed: "plan",
+      collaboration: "default",
+    },
+    {
+      scenario: "status-readonly-onrequest",
+      raw: "Read Only (Ask for approval)",
+      observed: "plan",
+      collaboration: "default",
+    },
+    {
+      scenario: "status-plan",
+      raw: "Read Only (untrusted)",
+      observed: "plan",
+      collaboration: "plan",
+    },
+  ];
+
+  for (const f of fixtures) {
+    test(`${f.scenario} reads ${f.observed} / ${f.collaboration} from the recorded box`, async () => {
+      const { reading } = await statusReading(f.scenario);
+      expect(reading.raw).toBe(f.raw);
+      expect(reading.observed).toBe(f.observed);
+      expect(reading.collaboration).toBe(f.collaboration);
+      expect(reading.source).toBe("status");
+    });
+  }
+
+  test("Default collaboration is read from the POSITIVE row, not inferred from absence", async () => {
+    const { text, reading } = await statusReading("status-default");
+    // The row is really painted — "default" here is a reading, not a fallback.
+    expect(text).toMatch(
+      /│[^\r\n]*Collaboration mode:[^\r\n]*Default[^\r\n]*│/,
+    );
+    expect(reading.collaboration).toBe("default");
+    expect(reading.collaboration).not.toBe("unknown");
+  });
+
+  test("Plan collaboration is read from the positive row", async () => {
+    const { text, reading } = await statusReading("status-plan");
+    expect(text).toMatch(/│[^\r\n]*Collaboration mode:[^\r\n]*Plan[^\r\n]*│/);
+    expect(reading.collaboration).toBe("plan");
+  });
+
+  test("the two axes do NOT collapse: same launch flags, /plan is the only difference", async () => {
+    // status-readonly-default and status-plan were both launched
+    // `-s read-only -a untrusted`; only status-plan then ran `/plan`. A codex
+    // session is honestly "plan" only when BOTH axes say so.
+    const noPlan = (await statusReading("status-readonly-default")).reading;
+    const withPlan = (await statusReading("status-plan")).reading;
+
+    expect(noPlan.observed).toBe("plan");
+    expect(withPlan.observed).toBe("plan");
+    expect(noPlan.raw).toBe(withPlan.raw); // identical permissions axis
+
+    expect(noPlan.collaboration).toBe("default");
+    expect(withPlan.collaboration).toBe("plan");
+
+    const honestlyPlan = (r: typeof noPlan) =>
+      r.observed === "plan" && r.collaboration === "plan";
+    expect(honestlyPlan(noPlan)).toBe(false);
+    expect(honestlyPlan(withPlan)).toBe(true);
+  });
+
+  test("auto is no longer provisional — the recorded box round-trips requested === observed", async () => {
+    // The META-HARNESS-110 acceptance gate: `-s workspace-write -a never` must
+    // not report permanent unresolvable drift on a rung the ladder can express.
+    const { reading } = await statusReading("status-auto");
+    expect(normalizePermissionRung("never", "codex")).toBe("auto");
+    expect(reading.observed).toBe("auto");
+    expect(normalizePermissionRung("never", "codex")).toBe(reading.observed);
+  });
+
+  test("every recorded box also exposes the Session: row the id scrape depends on", async () => {
+    // First recorded-corpus coverage for statusSessionRE
+    // (src/turns/harness/codex.ts) — until these fixtures landed it had none.
+    const sessionRowRE =
+      /│[^\S\r\n]*Session:[^\S\r\n]+[0-9a-fA-F-]{36}[^\S\r\n]*│/;
+    for (const f of fixtures) {
+      const { text } = await statusReading(f.scenario);
+      expect(text, f.scenario).toContain(">_ OpenAI Codex (v");
+      expect(sessionRowRE.test(text), f.scenario).toBe(true);
+    }
   });
 });
 
