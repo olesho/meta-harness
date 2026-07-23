@@ -71,11 +71,20 @@ const SELF = relative(root, fileURLToPath(import.meta.url));
 // permissionsDialogKeys (META-HARNESS-125, a 103 subtask) is the capability
 // seam that legitimately types it, gated by permissionsWriteContained — 106
 // never touches it and this absence check is unaffected.
+//
+// test/chat/set_codex_permission_preset.test.ts is setCodexPermissionPreset's
+// OWN test file (META-HARNESS-127, the 103 subtask this driver ships in): it
+// paints a composer that swallowed the literal command
+// (CodexDirtyComposer(0, "/permissions")) and the busy-refusal line codex
+// prints while a task is in flight, both of which the driver itself must
+// detect. Same carve-out as fakeharness_permissions.test.ts above — test-only
+// scaffolding for this exact driver, not a 106 code path.
 const EXEMPT = new Set([
   "test/helpers/codex_home.ts",
   "test/helpers/codex_home.test.ts",
   "test/chat/fakeharness.ts",
   "test/chat/fakeharness_permissions.test.ts",
+  "test/chat/set_codex_permission_preset.test.ts",
   "src/turns/harness/codex.ts",
 ]);
 

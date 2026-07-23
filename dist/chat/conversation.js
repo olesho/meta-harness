@@ -1695,9 +1695,13 @@ export class Conversation {
             // Deterministic "claimed by another resolver" signal for
             // setCodexPermissionPreset: inputSurfaced stays false on this path, so
             // without this latch a driver polling for the dialog cannot distinguish
-            // "answered out from under me" from "never opened at all".
+            // "answered out from under me" from "never opened at all". Waking
+            // inputStateCh is load-bearing, not cosmetic: it is the ONLY signal a
+            // poller blocked in Promise.race gets on this path (no screen change is
+            // guaranteed to follow), the same way the surfaced branch below wakes it.
             if (req.kind === codex.KindPermissions) {
                 this.permissionsClaimedByResolver = true;
+                this.signalInputState();
             }
             return;
         }

@@ -657,8 +657,19 @@ export class Builder {
    * `Session:` row carries this script's session id so the box also satisfies
    * the existing session-id scrape, and the banner row is CodexStatusBanner —
    * the harness-identity gate that scrape keys off.
+   *
+   * `permissions` defaults to the original hardcoded "Workspace (Ask for
+   * approval)" row so every existing call site is unaffected; a
+   * setCodexPermissionPreset scenario (META-HARNESS-103) that needs to
+   * confirm a preset commit passes the row THAT preset writes instead (see
+   * codexPresetExpectedRaw, src/chat/conversation.ts) — the Permissions row
+   * moves independently of the Collaboration row this method already varies.
    */
-  CodexStatus(delayMs: number, collaboration: "Default" | "Plan"): this {
+  CodexStatus(
+    delayMs: number,
+    collaboration: "Default" | "Plan",
+    permissions = "Workspace (Ask for approval)",
+  ): this {
     const rule = "─".repeat(Builder.codexStatusInner);
     const statusLine = "  gpt-5.6-sol medium · ~/proj";
     return this.frame(
@@ -673,9 +684,7 @@ export class Builder {
           "  Model:                gpt-5.6-sol (reasoning medium, summaries auto)",
         ),
         this.codexStatusRow("  Directory:            ~/proj"),
-        this.codexStatusRow(
-          "  Permissions:          Workspace (Ask for approval)",
-        ),
+        this.codexStatusRow("  Permissions:          " + permissions),
         this.codexStatusRow("  Agents.md:            AGENTS.md"),
         this.codexStatusRow("  Collaboration mode:   " + collaboration),
         this.codexStatusRow("  Session:              " + this.s.session_id),
