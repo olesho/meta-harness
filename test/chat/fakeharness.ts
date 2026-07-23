@@ -15,6 +15,7 @@ import {
   Open,
   type Conversation,
   type Options,
+  type PermissionRung,
   type Turn,
 } from "../../src/chat/index.ts";
 import {
@@ -53,6 +54,78 @@ export const SubmitCSI13u = "\x1b[13u";
 
 /** SubmitCR — the byte chat.Send writes to submit a turn for pi: a bare CR. */
 export const SubmitCR = "\r";
+
+/**
+ * PermissionCycleCSI — the bytes the wrapper writes to advance the
+ * permission-mode ring by exactly one rung: ESC [ Z, legacy back-tab
+ * (Shift+Tab). Scenarios wait for it via AwaitPermissionCycle, pinning the
+ * cycle contract the way SubmitCSI13u pins the submit contract.
+ *
+ * ONE constant, not one per harness, because the two adapters that implement
+ * turns.PermissionModeCycler pin the SAME sequence: `permissionCycleCommand` in
+ * src/turns/harness/claudecode.ts and in src/turns/harness/codex.ts are both
+ * `enc.encode("\x1b[Z")`. That is not a coincidence to be papered over — it is
+ * the recorded outcome of META-HARNESS-114's live probe (test/corpus/
+ * claude-code/permission-mode-cycle and test/corpus/codex/
+ * permission-mode-cycle, claude-code 2.1.218 / codex-cli 0.144.5). Both TUIs
+ * enable the kitty keyboard protocol, so the kitty spelling "\x1b[9;2u" was
+ * probed alongside CSI Z and BOTH advance the ring by exactly one rung on both
+ * harnesses; each adapter pins CSI Z because legacy back-tab is understood
+ * whether or not the kitty protocol has been negotiated at that moment. Should
+ * a future capture split the two, split this into one constant per harness
+ * rather than widening the regex.
+ */
+export const PermissionCycleCSI = "\x1b[Z";
+
+/**
+ * ClaudeModeFooters — the permission-mode footer line claude-code paints for
+ * each rung of the ladder, as captured live on 2.1.218 (the `footer_line` field
+ * of each test/corpus/claude-code/permission-mode-* meta.json, corroborated by
+ * `footer_per_screen` in the permission-mode-cycle recording).
+ *
+ * Two properties consuming tests depend on, both load-bearing:
+ *
+ *   1. `manual` is the ONLY rung WITHOUT the "(shift+tab to cycle)" suffix. A
+ *      painter that appended that suffix uniformly would make the parser tests
+ *      lie — src/chat/permission.ts matches the structural "<words> on"
+ *      fragment precisely so the suffix-less default is not invisible to it.
+ *   2. EVERY rung paints a line. There is no marker-absent rung on claude, so a
+ *      painter set that omitted the default would encode a fiction.
+ *
+ * The " · ← for agents" tail is the spelling src/chat/permission.ts records
+ * from 2.1.217; the 2.1.218 capture environment did not paint it (see the
+ * `spelling_note` on every META-HARNESS-109 fixture). It is inert either way —
+ * the parser's fragment stops at the trailing " on" and never runs to
+ * end-of-line — so it is painted here to match the wider (and documented) of
+ * the two real spellings.
+ */
+export const ClaudeModeFooters: Readonly<Record<PermissionRung, string>> = {
+  auto: "⏵⏵ auto mode on (shift+tab to cycle) · ← for agents",
+  manual: "⏸ manual mode on · ← for agents",
+  acceptEdits: "⏵⏵ accept edits on (shift+tab to cycle) · ← for agents",
+  plan: "⏸ plan mode on (shift+tab to cycle) · ← for agents",
+  bypass: "⏵⏵ bypass permissions on (shift+tab to cycle) · ← for agents",
+};
+
+/**
+ * ClaudeDefaultRung — the rung a fresh claude-code session launches on, and so
+ * the footer PermissionFooter paints when a scenario does not name one.
+ *
+ * `manual` per src/chat/permission.ts ("it is claude's current DEFAULT"). The
+ * META-HARNESS-114 probe recording launched into `auto` — an environment
+ * difference (a settings.json / flag default), not a contradiction — which is
+ * exactly why scenarios name their starting rung explicitly rather than relying
+ * on the harness's own default.
+ */
+export const ClaudeDefaultRung: PermissionRung = "manual";
+
+/**
+ * CodexStatusBanner — the `/status` box header the codex session-id scrape
+ * gates on (statusBoxHeaderRE, src/turns/harness/codex.ts:~87). It establishes
+ * harness identity, so CodexStatus paints it verbatim inside the box; without
+ * it neither extractSessionID nor the collaboration-row parse engages.
+ */
+export const CodexStatusBanner = ">_ OpenAI Codex (v0.144.5)";
 
 const promptPlaceholder = "{{prompt}}";
 
@@ -170,6 +243,24 @@ export class Builder {
   /** Blocks until the wrapper writes a bare digit (question-option select). */
   AwaitDigit(): this {
     return this.waitInput("[0-9]", false, "digit");
+  }
+
+  /**
+   * Blocks until the wrapper writes the permission-mode cycle key (Shift+Tab).
+   *
+   * `capture: false` — unlike AwaitSubmit, the cycle key carries no prompt text
+   * ahead of it, so there is nothing to substitute into a later echo frame.
+   * Nothing is needed on the .mjs side: waitInput compiles until_regex straight
+   * into readUntil (fakeharness.mjs:25-41), which matches over a latin1 view, so
+   * the literal ESC byte in PermissionCycleCSI matches the raw control byte the
+   * wrapper writes exactly as SubmitCSI13u's already does.
+   */
+  AwaitPermissionCycle(): this {
+    return this.waitInput(
+      quoteMeta(PermissionCycleCSI),
+      false,
+      "permission-cycle",
+    );
   }
 
   private ccScreen(...lines: string[]): string {
@@ -290,6 +381,68 @@ export class Builder {
     );
   }
 
+  // --- claude-code permission-mode vocabulary (2.1.218 capture) ---
+
+  /**
+   * Paints a settled, ready claude composer carrying the permission-mode footer
+   * for `rung` — one frame per rung of the ladder, so a scenario can answer each
+   * Shift+Tab press with the screen the real TUI would repaint.
+   *
+   * The footer goes LAST, below the resume hint: it is the bottom-most line on a
+   * real screen and src/chat/permission.ts takes the LAST match, so painting it
+   * anywhere else would let scrollback outrank it. Otherwise this is Idle()'s
+   * shape — ready composer, no busy marker — because cycling the ring does not
+   * take the session out of the ready state.
+   */
+  PermissionFooter(delayMs: number, rung: PermissionRung): this {
+    return this.frame(
+      delayMs,
+      this.ccScreen(
+        ccHeader,
+        "",
+        ccPrompt,
+        "",
+        this.resumeHint(),
+        ClaudeModeFooters[rung],
+      ),
+      false,
+    );
+  }
+
+  /**
+   * Paints claude's Bypass Permissions acceptance dialog — the blocking screen
+   * `bypassAnchor` (src/turns/harness/claudecode.ts) detects as
+   * `kind: "trust_prompt"` and `claudeBypassAnchor` (src/chat/ready.ts:17)
+   * treats as not-ready-for-input.
+   *
+   * Parked MID-RING by a scenario, this proves a cycle loop re-checks for a
+   * pending input request between presses instead of reporting a stall: the
+   * screen is idle and non-busy, but no rung footer is painted and the composer
+   * "❯" is consumed by the menu rows, so a loop that only watched the footer
+   * would sit here until its backstop fired.
+   */
+  BypassPrompt(delayMs: number): this {
+    return this.frame(
+      delayMs,
+      this.ccScreen(
+        " ▐▛███▜▌   " + ccHeader + " v2.1.218",
+        "",
+        "╭────────────────────────────────────────╮",
+        "│ Bypass Permissions mode                │",
+        "│                                        │",
+        "│ In Bypass Permissions mode, Claude     │",
+        "│ Code will not ask for your approval    │",
+        "│ before running potentially dangerous   │",
+        "│ commands.                              │",
+        "│                                        │",
+        "│ ❯ 1. No, exit                          │",
+        "│   2. Yes, I accept                     │",
+        "╰────────────────────────────────────────╯",
+      ),
+      false,
+    );
+  }
+
   // --- claude-code AskUserQuestion vocabulary (shapes verified on 2.1.210) ---
 
   private static readonly qRule = "─".repeat(120);
@@ -396,6 +549,73 @@ export class Builder {
         this.resumeHint(),
       ),
       true, // echo: substitute the captured prompt into the composer row
+    );
+  }
+
+  /**
+   * codexStatusInner — the character width INSIDE the `/status` box borders.
+   *
+   * The scrape is row-anchored: statusSessionRE and codexCollaborationRowRE both
+   * require the closing "│" on the SAME physical line, so a wrapped row fails to
+   * match and the reading falls to "unknown". 93 + the two borders = 95 columns,
+   * comfortably above CODEX_STATUS_MIN_COLS (60, src/turns/harness/codex.ts:99)
+   * and matching the live 0.144.5 box in test/corpus/codex/permission-mode-cycle
+   * (recorded at 120x40 — the width openFake defaults to).
+   */
+  private static readonly codexStatusInner = 93;
+
+  private codexStatusRow(text: string): string {
+    const inner = Builder.codexStatusInner;
+    return "│" + text.padEnd(inner, " ").slice(0, inner) + "│";
+  }
+
+  /**
+   * Paints a codex `/status` box reporting the given collaboration mode.
+   *
+   * TWO frames exist (Default and Plan), not one, because the consuming loop
+   * probes `/status`, presses Shift+Tab once, and probes again: the confirm path
+   * has to be deterministic in BOTH directions of the measured 2-cycle
+   * (Default ⇄ Plan), so a scenario answers each probe with the box the real TUI
+   * would repaint. Rows and label column are the live 0.144.5 shape; the
+   * `Session:` row carries this script's session id so the box also satisfies
+   * the existing session-id scrape, and the banner row is CodexStatusBanner —
+   * the harness-identity gate that scrape keys off.
+   */
+  CodexStatus(delayMs: number, collaboration: "Default" | "Plan"): this {
+    const rule = "─".repeat(Builder.codexStatusInner);
+    const statusLine = "  gpt-5.6-sol medium · ~/proj";
+    return this.frame(
+      delayMs,
+      this.ccScreen(
+        "/status",
+        "",
+        "╭" + rule + "╮",
+        this.codexStatusRow("  " + CodexStatusBanner),
+        this.codexStatusRow(""),
+        this.codexStatusRow(
+          "  Model:                gpt-5.6-sol (reasoning medium, summaries auto)",
+        ),
+        this.codexStatusRow("  Directory:            ~/proj"),
+        this.codexStatusRow(
+          "  Permissions:          Workspace (Ask for approval)",
+        ),
+        this.codexStatusRow("  Agents.md:            AGENTS.md"),
+        this.codexStatusRow("  Collaboration mode:   " + collaboration),
+        this.codexStatusRow("  Session:              " + this.s.session_id),
+        this.codexStatusRow(""),
+        "╰" + rule + "╯",
+        "",
+        codexPrompt,
+        "",
+        this.resumeHint(),
+        // The composer status line carries a "Plan mode" marker on the right
+        // while the Plan rung is live — the second surface the 2-cycle shows up
+        // on, painted so a scenario can assert either one.
+        collaboration === "Plan"
+          ? statusLine.padEnd(60, " ") + "Plan mode"
+          : statusLine,
+      ),
+      false,
     );
   }
 
