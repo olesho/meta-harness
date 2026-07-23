@@ -2077,16 +2077,16 @@ describe("conformance: claude mid-session switch (CONFORMANCE=1)", () => {
             ).toBe(start);
             expect(after.requested).toBe(start);
 
-            // A switch that actually MOVED must have cost at least one press;
-            // only the no-op case (its own test below) may cost zero.
-            if (target !== start || before === 0) {
-              expect(
-                counter.presses(),
-                `claude ${version}: setPermissionMode(${JSON.stringify(target)}) reported ` +
-                  `success without writing a cycle keystroke.\n` +
-                  claudeReport(conv, rig, `switch -> ${target}`),
-              ).toBeGreaterThan(before);
-            }
+            // Every step of the CHAIN genuinely moves (no step asks for the rung
+            // it is already on — that is the no-op case's own test below), so
+            // each must have cost at least one press. A success reported without
+            // a keystroke would mean the loop never drove the ring at all.
+            expect(
+              counter.presses(),
+              `claude ${version}: setPermissionMode(${JSON.stringify(target)}) reported ` +
+                `success without writing a cycle keystroke.\n` +
+                claudeReport(conv, rig, `switch -> ${target}`),
+            ).toBeGreaterThan(before);
 
             // And the LIVE screen agrees with the returned reading — the return
             // value is not a private bookkeeping value.
@@ -2342,13 +2342,19 @@ describe("conformance: codex mid-session switch (CONFORMANCE=1)", () => {
   function codexReport(conv: Conversation, rig: Rig, detail: string): string {
     const version = info.detectedVersion || "?";
     const text = conv.screenSnapshot().text;
-    const r = conv.permissionMode();
+    // BOTH readings, because on codex they can legitimately differ and which one
+    // moved is the first thing the next reader needs: `cached` is what
+    // permissionMode() serves (the prime-time box, unbounded-stale, refreshed
+    // only by refreshPermissionMode), `live` is what the screen says right now.
+    const cached = conv.permissionMode();
+    const live = parsePermissionMode(text, "codex");
     return (
       `codex ${version} LIVE MID-SESSION SWITCH DRIFT.\n` +
       `  case:           ${detail}\n` +
       `  launch flags:   ${LAUNCH_ARGS.join(" ")}\n` +
-      `  collaboration:  ${r.collaboration ?? "(none)"}\n` +
-      `  observed rung:  ${r.observed} (source ${r.source}, raw ${JSON.stringify(r.raw ?? "")})\n` +
+      `  cached reading: collaboration ${cached.collaboration ?? "(none)"}, observed ` +
+      `${cached.observed} (source ${cached.source}, raw ${JSON.stringify(cached.raw ?? "")})\n` +
+      `  live parse:     ${live ? `collaboration ${live.collaboration ?? "(none)"}, observed ${live.observed} (raw ${JSON.stringify(live.raw ?? "")})` : "(parsePermissionMode returned null)"}\n` +
       `  Collaboration:  ${rowText(text, "Collaboration mode:")}\n` +
       `  Permissions:    ${rowText(text, "Permissions:")}\n` +
       `  pending input:  ${conv.pendingInput()?.kind ?? "(none)"}\n` +
@@ -2422,9 +2428,17 @@ describe("conformance: codex mid-session switch (CONFORMANCE=1)", () => {
           t.skip(boxPrecondition(conv, rig));
           return;
         }
-        const before = conv.permissionMode();
+        // The pre-state is read off the LIVE box, deliberately NOT off
+        // permissionMode(): on codex that serves the PRIME-TIME cache, which the
+        // META-HARNESS-155 probe recorded as `collaboration: "unknown"` on all
+        // three launches it drove (primeSessionID exits as soon as the id and the
+        // mode-box parse land, and the collaboration row paints below them). The
+        // cache being half-painted is exactly why setPermissionMode re-probes and
+        // never trusts it — asserting the start rung through it would be
+        // asserting the bug.
         expect(
-          before.collaboration,
+          parsePermissionMode(conv.screenSnapshot().text, "codex")
+            ?.collaboration,
           `codex ${version}: a launch that never ran \`/plan\` must start on Default.\n` +
             codexReport(conv, rig, "start"),
         ).toBe("default");
@@ -2523,7 +2537,11 @@ describe("conformance: codex mid-session switch (CONFORMANCE=1)", () => {
           t.skip(boxPrecondition(conv, rig));
           return;
         }
-        expect(conv.permissionMode().collaboration).toBe("default");
+        // The LIVE box, not the prime-time cache — see the toggle case above.
+        expect(
+          parsePermissionMode(conv.screenSnapshot().text, "codex")
+            ?.collaboration,
+        ).toBe("default");
 
         const counter = cycleCounter(conv);
         const release = await conv.acquireControl(rig.ctx);
