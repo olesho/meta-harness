@@ -664,9 +664,11 @@ describe("conformance: permission-flag surface (CONFORMANCE=1)", () => {
 // MECHANICS — launch and scrape. Nothing is sent. Conversation.primeSessionID
 // already writes CodexAdapter.primeSessionIDKeys() (literally `/status` plus the
 // CSI 13u submit) BEFORE Open returns, gated on cols >= CODEX_STATUS_MIN_COLS
-// (60; the suite's default 120 clears it). So this check is a screenSnapshot()
-// read off the freshly-opened conversation — writing a SECOND `/status` would
-// need control-token acquisition and duplicate that machinery for nothing.
+// (60; the suite's default 120 clears it). So this check REUSES that prime — it
+// polls screenSnapshot() on the freshly-opened conversation until the box
+// settles (see PRIME_BOUND / STATUS_PAINT_BOUND) and never writes a second
+// `/status`, which would need control-token acquisition and would duplicate that
+// machinery for nothing.
 //
 // NEVER DRIVE `/permissions`. Selecting a preset in that dialog writes
 // ~/.codex/config.toml GLOBALLY — running the test suite would mutate the
