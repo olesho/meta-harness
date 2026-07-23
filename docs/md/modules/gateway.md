@@ -114,6 +114,7 @@ select and launch the harness:
   "rows": 40,
   "effort": "high",
   "model": "opus",
+  "permission_mode": "plan",
   "disable_codex_auto_dismiss": false,
   "auto_skip_codex_update_notice": false
 }
@@ -122,10 +123,30 @@ select and launch the harness:
 → `201 {"id": "<conversation id>"}`. The id **is** the chat session id, and is the
 registry key.
 
-> **No `permission_mode` on the wire yet.** `effort` and `model` are the only launch knobs
-> the gateway accepts. The wrapper's third knob
-> ([permission mode](wrapper.md#permission-mode)) is **not** a gateway field — it is
-> tracked separately as META-HARNESS-101. Sending it is not a way to set the rung.
+#### `permission_mode`
+
+The wrapper's third launch knob ([permission mode](wrapper.md#permission-mode)),
+selecting the rung the harness starts on. **The gateway does not own the vocabulary** —
+it neither restates the accepted values nor maps them to flags. It forwards the string
+verbatim and delegates validation to the wrapper's own predicates, so the accepted set is
+whatever the wrapper accepts today, per harness. Look it up there, not here.
+
+`""` is indistinguishable from omitting the field: both leave the rung unset and inject
+nothing.
+
+> **An explicit permission flag in `args` WINS.** The mapping is all-or-nothing: if `args`
+> already carries the harness's own permission flag, `permission_mode` injects nothing and
+> the flag you passed stands. The request is still **accepted** — this is not a `400`. So
+> `{"args": ["--permission-mode", "acceptEdits"], "permission_mode": "plan"}` launches with
+> `acceptEdits`. Pass one or the other, not both.
+
+> **codex `plan` is honoured in part.** It pins the **permissions** axis
+> (`sandbox_mode="read-only"`, `approval_policy="untrusted"`) and leaves the
+> **collaboration** axis unset — there is no launch flag for the latter, only a post-open
+> step. On this route that is fine: the conversation is registered, so the
+> `approval_prompt` that `approval_policy="untrusted"` produces surfaces on the SSE stream
+> and a client answers it via `POST /v1/conversations/{id}/input`. (On `POST /v1/turns` it
+> is not — see that section.)
 
 The conversation is opened with a **background** context, not a request-scoped one — the
 harness must outlive the HTTP request that started it.
@@ -133,6 +154,20 @@ harness must outlive the HTTP request that started it.
 Failure modes: `400 invalid_json`, `400 invalid_options`, `400 unknown_harness`,
 `409 already_open` (a conversation already exists for that session id),
 `503 shutting_down`.
+
+`400 invalid_options` now also covers **unsupported launch-knob values**, pre-checked
+before the harness is spawned rather than surfacing as an opaque `500`:
+
+| Cause                                                    | `error`                                                |
+| -------------------------------------------------------- | ------------------------------------------------------ |
+| `effort` value the wrapper does not accept               | `effort <v> is not supported`                          |
+| `effort` on a harness without an effort knob             | `effort is not supported for harness <h>`              |
+| `permission_mode` on a harness without a permission knob | `permission_mode is not supported for harness <h>`     |
+| `permission_mode` value that harness does not accept     | `permission_mode <v> is not supported for harness <h>` |
+
+Both pre-checks are **skipped when `harness` is absent**, so a body with no harness still
+gets the honest presence error (`Harness and BinaryPath are required`) rather than being
+blamed on a field it may not have sent.
 
 > **Pass `working_dir` if you intend to read history.** It is optional on the wire, but
 > for a harness with a transcript reader (Claude Code, Codex, pi) an empty working dir
@@ -224,14 +259,18 @@ full lifecycle.
   "rows": 40,
   "effort": "high",
   "model": "opus",
+  "permission_mode": "plan",
   "turn_harness": "codex",
   "exit_after_turn": true,
   "timeout_seconds": 900
 }
 ```
 
-As with `POST /v1/conversations`, `effort` and `model` are the only launch knobs on the
-wire; `permission_mode` is **not** a field here either (META-HARNESS-101).
+`permission_mode` behaves as on `POST /v1/conversations` — same delegated vocabulary,
+same `""`-is-unset rule, same explicit-`args`-wins precedence, and the same two
+`400 invalid_options` causes (validated against `turn_harness || harness`, alongside the
+identical pair for `effort`). **What differs is codex `plan`, and it differs badly enough
+to be a usage requirement** — see the warning below.
 
 `harness`, `binary_path`, and `prompt` are **required** — each missing one is its own
 `400 invalid_options` (`"harness is required"`, …), validated up front rather than after
@@ -243,6 +282,22 @@ is one-shot by definition.
 `eventBuffer`) are deliberately **not** wire-decoded. The run is unattended: the server
 installs [`AutoAcceptTrust`](oneshot.md) to clear the trust prompt, and the bounded
 context is the guard against every other input kind hanging.
+
+> **A permission rung that gates approvals needs `timeout_seconds` on this route.**
+> `AutoAcceptTrust` answers `trust_prompt` and **nothing else** — it carries no default
+> disposition — and this endpoint registers no conversation, so it exposes no `/input`
+> route through which a caller could answer anything either. A codex rung that sets
+> `approval_policy="untrusted"` (`plan`, `manual`) therefore produces an `approval_prompt`
+> that **nobody can answer**: the run stays open until the client disconnects
+> (`408 canceled`). Pass `timeout_seconds` to bound it into an honest `504 timeout`, or
+> use `POST /v1/conversations`, where a client answers the prompt for real.
+>
+> This is not a rejection: a turn that only reads never trips an approval gate and
+> completes normally under the read-only sandbox, which is the deterministic and genuinely
+> useful half of the rung. The gateway does not second-guess which it will be.
+>
+> The `plan` rung's **collaboration** axis stays permanently unset here regardless —
+> setting it is a post-open step, and one-shot is unattended by construction.
 
 → `200` with the turn-result envelope:
 
@@ -380,7 +435,8 @@ The timed paths (`messages`, `input`) map the context sentinels **first**:
 Matching walks the error `cause` chain by sentinel code — never match on message text.
 
 The daemon's own (non-sentinel) errors are `400 invalid_json`, `400 invalid_options`
-(missing `/v1/turns` fields), `400 unsupported`, `404 not_found`, `404 unknown_token`,
+(on **both** `POST /v1/turns` and `POST /v1/conversations`: a missing required field, or
+an unsupported `effort` / `permission_mode` value or harness), `400 unsupported`, `404 not_found`, `404 unknown_token`,
 `409 already_open`, `409 no_control`, `500 history_failed`, `503 shutting_down`.
 
 Every error — sentinel-mapped or not — uses Go's `errorResponse` body:

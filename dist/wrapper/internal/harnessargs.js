@@ -1,6 +1,11 @@
 // Shared helpers for translating per-harness CLI args (effort, model,
 // permission mode).
-/** Normalize a harness name for switch matching ("claude-code" → matches "claude"). */
+/**
+ * Trim + lowercase a harness name for switch matching. It performs NO aliasing:
+ * "claude-code" does not fold into "claude". Callers that must accept both
+ * spellings list `case "claude": case "claude-code":` explicitly (see effort.ts
+ * and permission.ts).
+ */
 export function normHarness(h) {
     return (h ?? "").trim().toLowerCase();
 }
