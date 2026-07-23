@@ -58,6 +58,9 @@ export {
   ErrUnknownOption,
   ErrNotMultiSelect,
   ErrQuitUnsupported,
+  ErrPermissionModeUnsupported,
+  ErrPermissionModeUnreachable,
+  ErrPermissionModeStalled,
   ErrResumeUnsupported,
   ErrNoHarnessSession,
 } from "./errors.ts";
@@ -66,6 +69,8 @@ export {
   type PermissionRung,
   type PermissionModeSource,
   type PermissionModeReading,
+  type CollaborationMode,
+  type PermissionModeTarget,
   parsePermissionMode,
   normalizePermissionRung,
 } from "./permission.ts";

@@ -16,6 +16,9 @@ import {
   ErrNoControl,
   ErrNoInputPending,
   ErrNotMultiSelect,
+  ErrPermissionModeStalled,
+  ErrPermissionModeUnreachable,
+  ErrPermissionModeUnsupported,
   ErrStaleInputRequest,
   ErrTurnInFlight,
   ErrUnknownHarness,
@@ -73,6 +76,24 @@ describe("writeChatError — sentinel table", () => {
     ["ErrInvalidOptions", ErrInvalidOptions, 400, "invalid_options"],
     ["ErrUnknownOption", ErrUnknownOption, 400, "unknown_option"],
     ["ErrNotMultiSelect", ErrNotMultiSelect, 400, "not_multi_select"],
+    [
+      "ErrPermissionModeUnreachable",
+      ErrPermissionModeUnreachable,
+      409,
+      "permission_mode_unreachable",
+    ],
+    [
+      "ErrPermissionModeUnsupported",
+      ErrPermissionModeUnsupported,
+      400,
+      "permission_mode_unsupported",
+    ],
+    [
+      "ErrPermissionModeStalled",
+      ErrPermissionModeStalled,
+      409,
+      "permission_mode_stalled",
+    ],
   ];
 
   test.each(cases)("%s → %d", (_name, err, status, code) => {
@@ -112,6 +133,69 @@ describe("writeChatError — sentinel table", () => {
       status: 500,
       code: "internal",
     });
+  });
+});
+
+// META-HARNESS-115: the three MH-only setPermissionMode rows. Asserted through
+// BOTH writers (writeRunTurnError delegates to the chat table) and through a
+// cause chain, because the raiser wraps the sentinel with concrete evidence
+// (observed axis value, source, raw, press count) rather than throwing it bare.
+describe("permission-mode sentinels — MH-only rows", () => {
+  const cases: [string, unknown, number, string][] = [
+    [
+      "ErrPermissionModeUnreachable",
+      ErrPermissionModeUnreachable,
+      409,
+      "permission_mode_unreachable",
+    ],
+    [
+      "ErrPermissionModeUnsupported",
+      ErrPermissionModeUnsupported,
+      400,
+      "permission_mode_unsupported",
+    ],
+    [
+      "ErrPermissionModeStalled",
+      ErrPermissionModeStalled,
+      409,
+      "permission_mode_stalled",
+    ],
+  ];
+
+  test.each(cases)(
+    "%s → %d through both writers, NOT 500",
+    (_name, err, status, code) => {
+      expect(mapChatError(err)).toEqual({ status, code });
+      expect(mapRunTurnError(err)).toEqual({ status, code });
+
+      const chat = capture(writeChatError, err);
+      expect(chat.status).toBe(status);
+      expect(chat.body.code).toBe(code);
+      expect(typeof chat.body.error).toBe("string");
+
+      const runTurn = capture(writeRunTurnError, err);
+      expect(runTurn.status).toBe(status);
+      expect(runTurn.body.code).toBe(code);
+    },
+  );
+
+  test.each(cases)(
+    "%s resolves through an evidence-carrying cause chain",
+    (name, err, status, code) => {
+      const wrapped = wrap(
+        `set permission mode: observed=unknown source=footer raw="" presses=5 (${name})`,
+        err,
+      );
+      expect(mapChatError(wrapped)).toEqual({ status, code });
+      const got = capture(writeChatError, wrapped);
+      expect(got.status).toBe(status);
+      expect(got.body.code).toBe(code);
+    },
+  );
+
+  test("the three sentinels carry distinct codes", () => {
+    const codes = cases.map(([, err]) => mapChatError(err).code);
+    expect(new Set(codes).size).toBe(3);
   });
 });
 
