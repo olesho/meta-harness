@@ -86,6 +86,17 @@ export declare class CodexAdapter extends GenericAdapter implements Adapter {
      */
     primeSessionIDKeys(): Uint8Array;
     /**
+     * Implements turns.PermissionModeCycler — one Shift+Tab press advances
+     * Codex's collaboration mode by exactly one rung.
+     *
+     * The measured ring is a 2-cycle (Default ⇄ Plan), surfaced as a `Plan mode`
+     * marker on the right of the composer status line and as the
+     * `Collaboration mode: <name>` row of the `/status` box. Deliberately NOT
+     * encoded here — as on Claude Code, callers terminate by lap detection with a
+     * flat backstop, never by a hardcoded ring length.
+     */
+    permissionCycleKeys(): Uint8Array;
+    /**
      * Implements turns.SwallowedPromptDetector. On codex 0.142.5 a swallowed
      * submit (the text+Enter burst consumed as a paste) leaves the prompt text
      * sitting in the composer with the Enter rendered as a newline — shape

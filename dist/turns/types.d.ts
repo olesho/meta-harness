@@ -178,6 +178,11 @@ export interface TranscriptReader {
 export interface Quitter {
     quitSequence(): Uint8Array;
 }
+/** Supplies the keystroke that advances the harness's permission-mode ring. */
+export interface PermissionModeCycler {
+    /** One press that advances the ring by exactly one rung. */
+    permissionCycleKeys(): Uint8Array;
+}
 /** Recovers the assistant's reply text from the rendered screen. */
 export interface MessageExtractor {
     /** Returns [message, true] or ["", false] when it can't isolate one. */

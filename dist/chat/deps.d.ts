@@ -144,6 +144,18 @@ export interface Adapter {
     /** turns.Quitter — the graceful-exit keystroke sequence. */
     quitSequence?(): Uint8Array;
     /**
+     * turns.PermissionModeCycler — one keystroke that advances the harness's
+     * permission-mode ring by exactly one rung.
+     *
+     * Like every other optional entry here this is DOCUMENTATION of the
+     * optional-capability set, NOT compile-time checking: the chat-side probes
+     * cast the adapter to Record<string, unknown> and never consult AdapterDeps
+     * (see adapterQuitSequence, src/chat/conversation.ts). The only real guards
+     * are the runtime `typeof … === "function"` probe at the call site and the
+     * contract test asserting exactly which adapters expose the method.
+     */
+    permissionCycleKeys?(): Uint8Array;
+    /**
      * turns.SessionForkResumer — reports whether `resume` mints a NEW harness
      * session id (forks) rather than continuing the old one. When true, the chat
      * layer arms a one-shot provisional refresh of the seeded id. Omitted =>

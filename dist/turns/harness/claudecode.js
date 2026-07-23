@@ -73,6 +73,19 @@ const busyMarker = "esc to interrupt";
 const workingRE = /(?:…|\.\.\.)[^\S\r\n]*\(\d+[hms][^)\r\n]*·/u;
 // quitCommand is "/quit" + Claude's enhanced Enter (CSI 13 u).
 const quitCommand = enc.encode("/quit\x1b[13u");
+// permissionCycleCommand is Shift+Tab as legacy CSI Z (back-tab) — one press
+// advances the permission-mode footer by exactly one rung.
+//
+// CAPTURED LIVE against claude-code 2.1.218 (test/corpus/claude-code/
+// permission-mode-cycle), NOT assumed. Claude Code enables the kitty keyboard
+// protocol (which is why the submit key above is CSI 13 u and not \r), so the
+// kitty encoding "\x1b[9;2u" was probed alongside CSI Z: BOTH advance the ring
+// by exactly one rung, so the choice is ours. CSI Z wins because it is the
+// legacy back-tab every TUI key parser understands whether or not the kitty
+// protocol has been negotiated at that moment — we write raw bytes into a PTY
+// rather than acting as a terminal, so the wider-compatibility encoding is
+// strictly safer. The alternative stays recorded in the fixture notes.
+const permissionCycleCommand = enc.encode("\x1b[Z");
 /** Adapter implements turns.Adapter for Claude Code. */
 export class ClaudeCodeAdapter extends GenericAdapter {
     /** Overrides ~/.claude/projects for the on-disk transcript reader. */
@@ -240,6 +253,19 @@ export class ClaudeCodeAdapter extends GenericAdapter {
     /** Implements turns.Quitter. */
     quitSequence() {
         return quitCommand;
+    }
+    /**
+     * Implements turns.PermissionModeCycler — one Shift+Tab press advances the
+     * permission-mode ring by exactly one rung.
+     *
+     * The measured ring is 4 long launched normally (auto → manual → accept edits
+     * → plan → auto) and 5 when launched with a bypass-enabling flag, where
+     * `bypass permissions` joins it. Deliberately NOT encoded here: no code may
+     * depend on either number, so callers terminate by lap detection with a flat
+     * backstop. The measurement lives in the fixture notes as corroboration only.
+     */
+    permissionCycleKeys() {
+        return permissionCycleCommand;
     }
     /** Implements turns.SessionInitializer — `claude --session-id <uuid>`. */
     initSession() {

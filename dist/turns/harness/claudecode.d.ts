@@ -46,6 +46,17 @@ export declare class ClaudeCodeAdapter extends GenericAdapter implements Adapter
     promptNotAccepted(snap: Snapshot, sentScreenText: string): boolean;
     /** Implements turns.Quitter. */
     quitSequence(): Uint8Array;
+    /**
+     * Implements turns.PermissionModeCycler — one Shift+Tab press advances the
+     * permission-mode ring by exactly one rung.
+     *
+     * The measured ring is 4 long launched normally (auto → manual → accept edits
+     * → plan → auto) and 5 when launched with a bypass-enabling flag, where
+     * `bypass permissions` joins it. Deliberately NOT encoded here: no code may
+     * depend on either number, so callers terminate by lap detection with a flat
+     * backstop. The measurement lives in the fixture notes as corroboration only.
+     */
+    permissionCycleKeys(): Uint8Array;
     /** Implements turns.SessionInitializer — `claude --session-id <uuid>`. */
     initSession(): [string[], string];
     /** Implements turns.SessionResumer — `claude --resume <uuid>`. */
