@@ -45,9 +45,17 @@ const UUID_RE_SRC = "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}
 // bare `Session: <uuid>` string appearing in reply prose. It assumes the row
 // renders unwrapped on one screen line — see CODEX_STATUS_MIN_COLS.
 const statusSessionRE = new RegExp("│[^\\S\\r\\n]*Session:[^\\S\\r\\n]+(" + UUID_RE_SRC + ")[^\\S\\r\\n]*│");
-// statusBoxHeaderRE gates statusSessionRE on the `/status` box header so a lone
-// spoofed box row (borders around a "Session:" line in some other context) cannot
-// match. The header is the Codex banner the `/status` box renders above the rows.
+// statusBoxHeaderRE gates statusSessionRE on the Codex banner literal.
+//
+// What the literal actually does: `">_ OpenAI Codex (v"` is the codex STARTUP
+// BANNER, not a `/status`-box-only string — test/corpus/auth/codex/
+// normal-composer/screen.txt contains exactly one occurrence and NO `Session:` /
+// `Permissions:` / `Collaboration mode:` row. So this gate establishes HARNESS
+// IDENTITY ("this screen was painted by codex"), not box presence. The anti-spoof
+// weight is carried by the `│ … │` row anchors in statusSessionRE above.
+//
+// Non-global on purpose: consumed via .test(), which would be lastIndex-stateful
+// under /g. Same convention as every other regex in this file.
 const statusBoxHeaderRE = />_ OpenAI Codex \(v/;
 /**
  * CODEX_STATUS_MIN_COLS is the minimum terminal width at which the `/status` box
@@ -177,7 +185,12 @@ export class CodexAdapter extends GenericAdapter {
         const m = resumeRE.exec(snap.text);
         if (m)
             return [m[1], true];
-        if (snap.text.includes(">_ OpenAI Codex (v")) {
+        // The gate is named in this docstring and belongs with the other regexes at
+        // the top of the file; inlining it as String#includes is what left
+        // statusBoxHeaderRE dead. Behaviour-identical: same literal, no anchors, and
+        // non-global so .test() carries no lastIndex state.
+        // eslint-disable-next-line @typescript-eslint/prefer-includes
+        if (statusBoxHeaderRE.test(snap.text)) {
             const s = statusSessionRE.exec(snap.text);
             if (s)
                 return [s[1], true];
