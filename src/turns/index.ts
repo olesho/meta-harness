@@ -14,6 +14,7 @@ export type {
   InputRequest,
   Kind,
   MessageExtractor,
+  PermissionModeCycler,
   Quitter,
   RawSessionIDExtractor,
   RequestedAcquisitionMode,

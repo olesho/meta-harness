@@ -69,6 +69,7 @@ turns/index.ts
   InputResolved: string="input_resolved"
   Kind: type
   MessageExtractor: type
+  PermissionModeCycler: type
   Quitter: type
   RawSessionIDExtractor: type
   RequestedAcquisitionMode: type
