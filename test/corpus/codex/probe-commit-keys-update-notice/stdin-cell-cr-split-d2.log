@@ -1,0 +1,4 @@
+  63.986s  commit-cr-split-d2#0 2
+  64.175s  commit-cr-split-d2#1 \r
+  65.267s  backout-after-cr-split-d2 \x1b
+  66.175s  clear-after-cr-split-d2 \x15

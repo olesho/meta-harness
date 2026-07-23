@@ -1,0 +1,40 @@
+╭─────────────────────────────────────────────────╮                                                                     
+│ ✨ Update available! 0.144.5 -> 0.145.0         │                                                                      
+│ Run npm install -g @openai/codex to update.     │                                                                     
+│                                                 │                                                                     
+│ See full release notes:                         │                                                                     
+│ https://github.com/openai/codex/releases/latest │                                                                     
+╰─────────────────────────────────────────────────╯                                                                     
+                                                                                                                        
+╭────────────────────────────────────────────────────╮                                                                  
+│ >_ OpenAI Codex (v0.144.5)                         │                                                                  
+│                                                    │                                                                  
+│ model:     gpt-5.6-sol   /model to change          │                                                                  
+│ directory: /private/var/…/T/probe-codex-cwd-njbYrQ │                                                                  
+╰────────────────────────────────────────────────────╯                                                                  
+                                                                                                                        
+  Tip: Our most capable model yet. GPT-5.6 Sol can tackle complex code changes, dig into research, produce polished     
+  documents, and take on your most ambitious work. Sol is highly capable at lower reasoning efforts—try starting lower, 
+  then turn it up for harder jobs.                                                                                      
+                                                                                                                        
+• You have 3 usage limit resets available. Run /usage to use one.                                                       
+                                                                                                                        
+• Booting MCP server: codex_apps (0s • esc to interrupt)                                                                
+                                                                                                                        
+                                                                                                                        
+› Summarize recent commits                                                                                              
+                                                                                                                        
+  gpt-5.6-sol default · /private/var/folders/_p/kgsjzrc91g57sggc0v8gfnch0000gn/T/probe-codex-cwd-njbYrQ                 
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        

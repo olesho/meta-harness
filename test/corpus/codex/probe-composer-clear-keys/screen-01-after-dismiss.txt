@@ -1,0 +1,40 @@
+                                                                                                                        
+╭────────────────────────────────────────────────────╮                                                                  
+│ >_ OpenAI Codex (v0.144.5)                         │                                                                  
+│                                                    │                                                                  
+│ model:     loading   /model to change              │                                                                  
+│ directory: /private/var/…/T/probe-codex-cwd-RJozBq │                                                                  
+╰────────────────────────────────────────────────────╯                                                                  
+                                                                                                                        
+                                                                                                                        
+› Explain this codebase                                                                                                 
+                                                                                                                        
+  gpt-5.6-sol default · /private/var/folders/_p/kgsjzrc91g57sggc0v8gfnch0000gn/T/probe-codex-cwd-RJozBq                 
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        

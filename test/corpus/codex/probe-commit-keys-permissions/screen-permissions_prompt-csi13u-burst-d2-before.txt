@@ -1,0 +1,40 @@
+╭────────────────────────────────────────────────────╮                                                                  
+│ >_ OpenAI Codex (v0.144.5)                         │                                                                  
+│                                                    │                                                                  
+│ model:     gpt-5.6-sol   /model to change          │                                                                  
+│ directory: /private/var/…/T/probe-codex-cwd-87zdDH │                                                                  
+╰────────────────────────────────────────────────────╯                                                                  
+                                                                                                                        
+  Tip: Our most capable model yet. GPT-5.6 Sol can tackle complex code changes, dig into research, produce polished     
+  documents, and take on your most ambitious work. Sol is highly capable at lower reasoning efforts—try starting lower, 
+  then turn it up for harder jobs.                                                                                      
+                                                                                                                        
+• You have 3 usage limit resets available. Run /usage to use one.                                                       
+                                                                                                                        
+• Permissions updated to Approve for me                                                                                 
+                                                                                                                        
+• Permissions updated to Full Access                                                                                    
+                                                                                                                        
+                                                                                                                        
+  Update Model Permissions                                                                                              
+                                                                                                                        
+  1. Ask for approval       Codex can read and edit files in the current workspace, and run commands. Approval is       
+                            required to access the internet or edit other files.                                        
+  2. Approve for me         Only ask for actions detected as potentially unsafe.                                        
+› 3. Full Access (current)  Codex can edit files outside this workspace and access the internet without asking for      
+                            approval. Exercise caution when using.                                                      
+                                                                                                                        
+  Press enter to confirm or esc to go back                                                                              
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        

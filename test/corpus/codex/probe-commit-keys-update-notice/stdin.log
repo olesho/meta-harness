@@ -1,0 +1,3 @@
+  64.008s  commit-cr-burst-d2#0 2\r
+  64.915s  backout-after-cr-burst-d2 \x1b
+  65.816s  clear-after-cr-burst-d2 \x15

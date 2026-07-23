@@ -1,0 +1,160 @@
+{
+  "harness": "codex",
+  "binary_version": "0.144.5",
+  "recorded_at": "2026-07-23T14:41:03.348Z",
+  "cols": 120,
+  "rows": 40,
+  "phase": "permissions",
+  "extra_args": [],
+  "ready": true,
+  "notes": "Live codex-cli 0.144.5 PROBE (META-HARNESS-122, probe 1 / commit-key matrix, permissions_prompt family): does a bare-CR digit selection actually commit an /permissions menu row, or does it need CSI 13 u, and does bursting the digit+submit as ONE pty write vs TWO separate writes matter?\n\nRecorded by test/corpus/tools/probe-codex-permissions.ts --phase permissions --open-shape split, under an isolated CODEX_HOME (auth.json only, no config.toml, so the dialog opens on '1. Ask for approval (current)' every time). All four cells ran in ONE continuous session: the dialog was reopened via /permissions before each cell and backed out+composer-cleared after, so the SAME process/composer state carried across cells (contrast: the update_notice family below, which needed a fresh process per cell because its notice renders only once per boot). The target digit alternates 2/3 (Approve for me / Full Access) across cells specifically so no cell ever re-commits the row already '(current)' \u2014 a successful commit is otherwise invisible on screen.\n\nRESULT \u2014 ALL FOUR CELLS COMMITTED, including the bare-CR burst:\n  * cr-burst-d2    '2\\r'              ONE write  -> committed=true (\"Permissions updated to Approve for me\")\n  * cr-split-d3    '3' then '\\r'      TWO writes -> committed=true (\"Permissions updated to Full Access\")\n  * csi13u-burst-d2 '2\\x1b[13u'       ONE write  -> committed=true (\"Permissions updated to Approve for me\")\n  * csi13u-split-d3 '3' then '\\x1b[13u' TWO writes -> committed=true (\"Permissions updated to Full Access\")\n\nThis CONTRADICTS the theory in ready.ts's submitKeyForHarness / conversation.ts's writeMessageAndSubmit docstring that a bare CR from a synthetic PTY writer is not a submit under the kitty keyboard protocol: that theory is about the free-text COMPOSER message-submission path (where a text+Enter burst risks being consumed as a paste with the Enter rendered as a literal newline). Menu-row selection is a different input path \u2014 parseMenuOptions's existing 'digit + bare CR' (codex.ts:597) already commits reliably here, burst or split, for this family. No encoding change is needed for permissions_prompt specifically; see the update_notice and approval_prompt fixtures alongside this one for whether all three families agree (cross-reference in the parent ticket report).\n\nCONTAINMENT: the isolated home's config.toml ended with approvals_reviewer=\"user\" (the last-committed preset was Full Access, csi13u-split-d3); real ~/.codex/config.toml and ~/.codex/auth.json were both sha256-identical before and after (see containment block) \u2014 the writes landed only in the isolated CODEX_HOME. stdin.log records every keystroke escape-encoded and IS the byte pin for this session.",
+  "containment": {
+    "codex_home": "/var/folders/_p/kgsjzrc91g57sggc0v8gfnch0000gn/T/probe-codex-home-K89xzW/home",
+    "isolated_home_files": [
+      ".personality_migration",
+      "auth.json",
+      "cache",
+      "config.toml",
+      "goals_1.sqlite",
+      "goals_1.sqlite-shm",
+      "goals_1.sqlite-wal",
+      "installation_id",
+      "logs_2.sqlite",
+      "logs_2.sqlite-shm",
+      "logs_2.sqlite-wal",
+      "memories_1.sqlite",
+      "memories_1.sqlite-shm",
+      "memories_1.sqlite-wal",
+      "models_cache.json",
+      "shell_snapshots",
+      "skills",
+      "state_5.sqlite",
+      "state_5.sqlite-shm",
+      "state_5.sqlite-wal",
+      "tmp"
+    ],
+    "isolated_config_written": true,
+    "isolated_config_has_approvals_reviewer": true,
+    "isolated_config_has_granular": false,
+    "real_home_before": {
+      "config.toml": "6b30f8db25c9e07b708f33bf930cff7a78e892a73f533f9214221454f37baad0",
+      "auth.json": "da2407c017149c61fc8e496c1a3d6e0015be3234c2585fb7c520b6ba1ea0394a"
+    },
+    "real_home_after": {
+      "config.toml": "6b30f8db25c9e07b708f33bf930cff7a78e892a73f533f9214221454f37baad0",
+      "auth.json": "da2407c017149c61fc8e496c1a3d6e0015be3234c2585fb7c520b6ba1ea0394a"
+    },
+    "real_home_unchanged": true,
+    "real_config_unchanged": true,
+    "real_auth_unchanged": true
+  },
+  "log": [
+    {
+      "phase": "boot-screen",
+      "update_notice": false,
+      "press_enter_to_continue": true,
+      "folder_trust": true,
+      "signin_wall": false,
+      "menu": {
+        "highlighted": "1. Yes, continue",
+        "current": null
+      }
+    },
+    {
+      "phase": "interstitial-dismiss",
+      "round": 0,
+      "encoding": "bare-cr",
+      "keys": "\\r",
+      "screen_changed": true,
+      "dismissed": true
+    },
+    {
+      "phase": "ready",
+      "ready": true,
+      "exited": false,
+      "at_ms": 3224
+    },
+    {
+      "phase": "cell",
+      "family": "permissions_prompt",
+      "cell": "cr-burst-d2",
+      "writes": [
+        "2\\r"
+      ],
+      "burst": true,
+      "before_highlight": "1. Ask for approval (current)",
+      "after_highlight": null,
+      "before_current": "1. Ask for approval (current)",
+      "after_current": null,
+      "selection_moved": true,
+      "dialog_dismissed": true,
+      "committed": true,
+      "confirmation_before": null,
+      "confirmation_after": "Approve for me",
+      "composer_row": "Improve documentation in @filename",
+      "screen_changed": true
+    },
+    {
+      "phase": "cell",
+      "family": "permissions_prompt",
+      "cell": "cr-split-d3",
+      "writes": [
+        "3",
+        "\\r"
+      ],
+      "burst": false,
+      "before_highlight": "2. Approve for me (current)",
+      "after_highlight": null,
+      "before_current": "2. Approve for me (current)",
+      "after_current": null,
+      "selection_moved": true,
+      "dialog_dismissed": true,
+      "committed": true,
+      "confirmation_before": "Approve for me",
+      "confirmation_after": "Full Access",
+      "composer_row": "Improve documentation in @filename",
+      "screen_changed": true
+    },
+    {
+      "phase": "cell",
+      "family": "permissions_prompt",
+      "cell": "csi13u-burst-d2",
+      "writes": [
+        "2\\x1b[13u"
+      ],
+      "burst": true,
+      "before_highlight": "3. Full Access (current)",
+      "after_highlight": null,
+      "before_current": "3. Full Access (current)",
+      "after_current": null,
+      "selection_moved": true,
+      "dialog_dismissed": true,
+      "committed": true,
+      "confirmation_before": "Full Access",
+      "confirmation_after": "Approve for me",
+      "composer_row": "Improve documentation in @filename",
+      "screen_changed": true
+    },
+    {
+      "phase": "cell",
+      "family": "permissions_prompt",
+      "cell": "csi13u-split-d3",
+      "writes": [
+        "3",
+        "\\x1b[13u"
+      ],
+      "burst": false,
+      "before_highlight": "2. Approve for me (current)",
+      "after_highlight": null,
+      "before_current": "2. Approve for me (current)",
+      "after_current": null,
+      "selection_moved": true,
+      "dialog_dismissed": true,
+      "committed": true,
+      "confirmation_before": "Approve for me",
+      "confirmation_after": "Full Access",
+      "composer_row": "Improve documentation in @filename",
+      "screen_changed": true
+    }
+  ]
+}

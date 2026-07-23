@@ -1,0 +1,98 @@
+{
+  "harness": "codex",
+  "binary_version": "0.144.5",
+  "recorded_at": "2026-07-23T14:40:08.558Z",
+  "cols": 120,
+  "rows": 40,
+  "phase": "backout",
+  "extra_args": [],
+  "ready": true,
+  "notes": "Live codex-cli 0.144.5 PROBE (META-HARNESS-122, probe 2 / dialogBackoutKeys): which ESC encoding actually dismisses the /permissions dialog when written by a synthetic PTY writer (not a real terminal, which would do its own kitty-protocol encoding of the ESC key).\n\nRecorded by test/corpus/tools/probe-codex-permissions.ts --phase backout --open-shape split, under an isolated CODEX_HOME seeded per test/helpers/codex_home.ts (auth.json only, no config.toml). Boot rendered the folder-trust interstitial (a bare '\\r' did NOT dismiss it; '\\x1b[13u' did on the next rung of the ladder), confirming the same is-this-a-real-Enter question applies beyond the three parseMenuOptions families.\n\nRESULT: BOTH candidates dismissed the /permissions dialog cleanly in this same session \u2014 bare '\\x1b' (dialog_dismissed=true) and CSI 27 u '\\x1b[27u' (dialog_dismissed=true). Neither left any residue in the composer afterward (composer_row read back to the placeholder-backed idle row both times). dialogBackoutKeys() can therefore be a bare ESC: '\\x1b' (single byte 0x1b) \u2014 the simpler encoding, and the one a human hitting the physical Esc key would send.\n\nNON-OVERLAP NOTE for the fake-harness subtask: a bare ESC ('\\x1b', one byte, 0x1b) is a byte-for-byte PREFIX of CSI 13 u ('\\x1b[13u', ready.ts:312 / codex.ts:240) and of CSI 27 u ('\\x1b[27u'). A matcher that tests 'first byte is 0x1b' is not sufficient to distinguish an ESC key from a CSI-u sequence; it must check that 0x1b is EITHER the entire write OR is not immediately followed by '[' \u2014 equivalently, match the exact byte string '\\x1b' (length 1) and treat any '\\x1b[...' as a distinct, non-ESC sequence.\n\nCONTAINMENT: real ~/.codex/config.toml and ~/.codex/auth.json were both sha256-identical before and after (see containment block). stdin.log records every keystroke escape-encoded and IS the byte pin for this session.",
+  "containment": {
+    "codex_home": "/var/folders/_p/kgsjzrc91g57sggc0v8gfnch0000gn/T/probe-codex-home-xeKXsW/home",
+    "isolated_home_files": [
+      ".personality_migration",
+      "auth.json",
+      "cache",
+      "config.toml",
+      "goals_1.sqlite",
+      "goals_1.sqlite-shm",
+      "goals_1.sqlite-wal",
+      "installation_id",
+      "logs_2.sqlite",
+      "logs_2.sqlite-shm",
+      "logs_2.sqlite-wal",
+      "memories_1.sqlite",
+      "memories_1.sqlite-shm",
+      "memories_1.sqlite-wal",
+      "models_cache.json",
+      "shell_snapshots",
+      "skills",
+      "state_5.sqlite",
+      "state_5.sqlite-shm",
+      "state_5.sqlite-wal",
+      "tmp"
+    ],
+    "isolated_config_written": true,
+    "isolated_config_has_approvals_reviewer": false,
+    "isolated_config_has_granular": false,
+    "real_home_before": {
+      "config.toml": "6b30f8db25c9e07b708f33bf930cff7a78e892a73f533f9214221454f37baad0",
+      "auth.json": "da2407c017149c61fc8e496c1a3d6e0015be3234c2585fb7c520b6ba1ea0394a"
+    },
+    "real_home_after": {
+      "config.toml": "6b30f8db25c9e07b708f33bf930cff7a78e892a73f533f9214221454f37baad0",
+      "auth.json": "da2407c017149c61fc8e496c1a3d6e0015be3234c2585fb7c520b6ba1ea0394a"
+    },
+    "real_home_unchanged": true,
+    "real_config_unchanged": true,
+    "real_auth_unchanged": true
+  },
+  "log": [
+    {
+      "phase": "boot-screen",
+      "update_notice": false,
+      "press_enter_to_continue": true,
+      "folder_trust": true,
+      "signin_wall": false,
+      "menu": {
+        "highlighted": "1. Yes, continue",
+        "current": null
+      }
+    },
+    {
+      "phase": "interstitial-dismiss",
+      "round": 0,
+      "encoding": "bare-cr",
+      "keys": "\\r",
+      "screen_changed": true,
+      "dismissed": true
+    },
+    {
+      "phase": "ready",
+      "ready": true,
+      "exited": false,
+      "at_ms": 3234
+    },
+    {
+      "phase": "backout",
+      "cand": "bare-esc",
+      "writes": [
+        "\\x1b"
+      ],
+      "dialog_dismissed": true,
+      "current_after": null,
+      "composer_row": "Run /review on my current changes"
+    },
+    {
+      "phase": "backout",
+      "cand": "csi-27u",
+      "writes": [
+        "\\x1b[27u"
+      ],
+      "dialog_dismissed": true,
+      "current_after": null,
+      "composer_row": "Run /review on my current changes"
+    }
+  ]
+}
