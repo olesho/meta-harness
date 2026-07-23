@@ -64,7 +64,7 @@ interface Config {
   env?: string[]; // environment as "KEY=VALUE" entries
   effort?: string; // low | medium | high | xhigh | max
   model?: string; // model override
-  permissionMode?: string; // plan | manual | ask | auto | bypass (+ native spellings)
+  permissionMode?: string; // plan | manual | ask | auto | bypass; codex "plan" pins permissions only, see below
   workingDir?: string;
   stdin?: unknown; // string | Uint8Array | async iterable, streamed to the PTY
 
@@ -84,8 +84,9 @@ validateConfig(cfg: Config): Error | null
 ```
 
 Validate without launching. Returns an error wrapping [`ErrInvalidConfig`](#errors) on
-failure (e.g. missing `binaryPath`/`stdout`, or `idleClassify < idleQuiet`), else `null`.
-`start`/`run` validate for you.
+failure (e.g. missing `binaryPath`/`stdout`, `idleClassify < idleQuiet`, or a
+`permissionMode` the harness has no mapping for — see [Permission mode](#permission-mode)),
+else `null`. `start`/`run` validate for you.
 
 The idle thresholds are ordered: the classifier tick runs at `max(idleQuiet/3, 100)` ms;
 `idleClassify` must be ≥ `idleQuiet`, and `staleThreshold` ≥ `idleClassify`.
@@ -369,10 +370,20 @@ rather than guessed.
   Code, where it is `--print`.)
 - Codex `plan` is honestly **the launch half only**: `-s read-only -a untrusted` pins the
   permissions axis, but the collaboration axis stays unset. It is _not_ launch-time parity
-  with Claude Code's `plan`.
-- Cursor / OpenCode / pi: no permission-mode translation;
-  `harnessSupportsPermissionMode` is `false` and `validateConfig` rejects a
-  `permissionMode` on them.
+  with Claude Code's `plan` — the post-launch `/plan` write is a separate, later scope
+  (META-HARNESS-106), not something this launch knob does.
+- Setting `permissionMode` on a harness that has no mapping is rejected by `validateConfig`
+  with `ErrInvalidConfig`, not silently ignored — the same two-check shape `effort` uses.
+  The translator itself is a no-op for those harnesses; the rejection happens one layer up.
+  This is why Cursor / OpenCode / pi (`harnessSupportsPermissionMode` is `false` for all
+  three) reject a configured `permissionMode` instead of quietly dropping it.
+
+This is a **launch-time** pin only. Codex also has a **mid-turn** permissions dialog —
+see [Guides › Handling input](../guides/handling-input.md#the-permissions-dialog-permissions_prompt)
+— and the two interact: answering that dialog writes `~/.codex/config.toml` **globally**,
+for every later session, while the `-s`/`-a` this knob emits are **per-invocation**. That
+difference is exactly why pinning the rung at launch is worth doing: it fixes the posture
+for this run regardless of what an earlier session left in the global config file.
 
 Vocabulary probed at claude-code 2.1.217 / codex-cli 0.144.5. The rationale for the Codex
 encoding — why `-s`/`-a` and not `-c`, why the guard is a strict superset of what we emit,
