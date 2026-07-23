@@ -22,7 +22,7 @@
 // Bun (project memory `meta-harness-node-pty-bun-broken`). There is no
 // "works under Bun" path.
 import { createServer, } from "node:http";
-import { EventInputRequest, EventInputResolved, Open, newMemStore, } from "../chat/index.js";
+import { EventInputRequest, EventInputResolved, Open, newMemStore, normalizePermissionRung, } from "../chat/index.js";
 import { isSentinel } from "../chat/errors.js";
 // First src/gateway → src/wrapper edge: pure predicates only (no sentinel).
 // The gateway does not restate either vocabulary; the wrapper owns both.
@@ -185,6 +185,27 @@ export function eventDTO(ev) {
     }
     return out;
 }
+/**
+ * Validate a `permission_mode` token SYNTACTICALLY: is it a name the vocabulary
+ * knows at all? Returns the normalized target, or undefined for a token off
+ * every axis.
+ *
+ * HARNESS-AGNOSTIC BY CONSTRUCTION — `normalizePermissionRung` is called with an
+ * empty harness, so only the closed 5-rung ladder's own spellings match and no
+ * per-harness native alias (claude's `bypassPermissions`, codex's
+ * `workspace-write`) sneaks in through the gateway. Whether a known token is
+ * legal FOR THIS SESSION is chat's call and comes back as
+ * ErrPermissionModeUnreachable → 409; the gateway holds no harness knowledge.
+ *
+ * `"default"` is the codex collaboration value, which is not a ladder rung and
+ * therefore has to be admitted explicitly.
+ */
+function normalizePermissionModeTarget(value) {
+    const rung = normalizePermissionRung(value, "");
+    if (rung)
+        return rung;
+    return value.trim().toLowerCase() === "default" ? "default" : undefined;
+}
 // ── The daemon ───────────────────────────────────────────────────────────────
 export class Server {
     convs = new Map();
@@ -296,6 +317,11 @@ export class Server {
                 (_q, s, p) => {
                     this.permissionMode(s, p);
                 },
+            ],
+            [
+                "POST",
+                "/v1/conversations/:id/permission-mode",
+                (q, s, p) => this.setPermissionMode(q, s, p),
             ],
         ];
         return defs.map(([method, pattern, handler]) => ({
@@ -726,6 +752,95 @@ export class Server {
             return;
         const snap = entry.conv.screenSnapshot();
         writeJSON(res, 200, permissionModeResponse(entry.conv.permissionMode(snap), snap.generation));
+    }
+    /**
+     * POST /v1/conversations/{id}/permission-mode — switch the live session's
+     * permission mode, or re-probe it.
+     *
+     *   {"token":"…","permission_mode":"plan"}   → drive the axis to that target
+     *   {"token":"…","refresh":true}             → re-probe, change nothing
+     *
+     * MH-ONLY, WITH NO GO COUNTERPART. Go's `harness-chatd` has no mid-session
+     * permission switch, so nothing here is corpus-covered: unlike the response
+     * DTOs (frozen by fixtures vendored byte-identically from Go), this route's
+     * request decoding gets no free cross-language guarantee and is pinned by
+     * hand-written tests instead.
+     *
+     * TOKEN-GATED, first thing after the decode, byte-for-byte the check
+     * `sendMessage`/`answerInput` do — changing an agent's permission rung is at
+     * least as privileged as sending it a prompt, and it runs BEFORE body
+     * validation so an un-tokened caller learns nothing about the body's fate.
+     * The gate applies to `refresh` too: a codex re-probe writes `/status` to the
+     * PTY, so it is not a read.
+     *
+     * EXPLICIT DISCRIMINATOR — exactly one of `permission_mode` or `refresh:true`.
+     * `readJSON` is a bare `JSON.parse` over an all-optional shape and validates
+     * nothing, so a client sending `permissionMode` / `mode` / `permission-mode`
+     * would otherwise land in a refresh-by-omission: 200, a plausible-looking
+     * reading, and the mode never changed. That is exactly the silent degradation
+     * the PTY-side mechanism works to eliminate, so neither-or-both is a 400
+     * (the ErrInvalidOptions row's {400, invalid_options}, written directly the
+     * way checkPermissionMode does).
+     *
+     * VALIDATION IS SYNTACTIC ONLY (see normalizePermissionModeTarget): a token
+     * off every axis is 400 here, because it matches no sentinel row downstream
+     * and would otherwise fall through to FALLBACK → 500. A KNOWN token that this
+     * session's harness cannot reach is chat's ErrPermissionModeUnreachable → 409.
+     *
+     * The body is 102's `permissionModeResponse` verbatim, so a client parses one
+     * shape for both the GET and the POST.
+     */
+    async setPermissionMode(req, res, params) {
+        const entry = this.lookup(res, params);
+        if (!entry)
+            return;
+        let body;
+        try {
+            body = await readJSON(req);
+        }
+        catch (err) {
+            writeError(res, 400, "invalid_json", err instanceof Error ? err.message : String(err));
+            return;
+        }
+        if (!entry.hasToken(body.token ?? "")) {
+            writeError(res, 409, "no_control", "caller does not hold the control token");
+            return;
+        }
+        const wantsSet = body.permission_mode !== undefined;
+        const wantsRefresh = body.refresh === true;
+        if (wantsSet === wantsRefresh) {
+            writeError(res, 400, "invalid_options", wantsSet
+                ? "permission_mode and refresh are mutually exclusive"
+                : "exactly one of permission_mode or refresh:true is required");
+            return;
+        }
+        let target;
+        if (wantsSet) {
+            target = normalizePermissionModeTarget(body.permission_mode ?? "");
+            if (target === undefined) {
+                writeError(res, 400, "invalid_options", `permission_mode ${JSON.stringify(body.permission_mode)} is not a known mode`);
+                return;
+            }
+        }
+        const { ctx, cleanup } = requestContext(req, res, body.timeout_seconds);
+        try {
+            const reading = target === undefined
+                ? await entry.conv.refreshPermissionMode(ctx)
+                : await entry.conv.setPermissionMode(ctx, target);
+            // The generation to compare against is read AFTER the switch settled —
+            // it is the frame the caller's next screen read would see.
+            const gen = entry.conv.screenSnapshot().generation;
+            writeJSON(res, 200, permissionModeResponse(reading, gen));
+        }
+        catch (err) {
+            // A timed op: a settle-bound or ctx deadline/cancel maps to 504/408 via
+            // writeRunTurnError, which falls through to the chat table (and so to the
+            // three permission_mode_* rows) for everything else.
+            writeRunTurnError(res, err);
+        }
+        finally {
+            cleanup();
+        }
     }
     /** Look the entry up once at handler entry; 404 when absent (Go's lookup). */
     lookup(res, params) {

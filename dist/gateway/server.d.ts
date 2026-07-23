@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { type IncomingMessage, type ServerResponse } from "node:http";
-import { type ConversationEvent, type InputAnswer, type Options, type PermissionModeReading, type Store, type Turn } from "../chat/index.ts";
+import { type ConversationEvent, type InputAnswer, type Options, type PermissionModeReading, type PermissionModeTarget, type Store, type Turn } from "../chat/index.ts";
 import type { Snapshot } from "../screen/screen.ts";
 import { Context } from "../internal/async/index.ts";
 import { type InputRequestDTO, type TurnDTO } from "./dto.ts";
@@ -22,6 +22,18 @@ export interface ConversationLike {
      * come from ONE frame.
      */
     permissionMode(snap?: Snapshot): PermissionModeReading;
+    /**
+     * MUTATING counterparts of the pure read above — both WRITE to the PTY (a
+     * cycle keystroke / a codex `/status` probe), which is why the route that
+     * drives them is token-gated where the GET is not.
+     *
+     * They live on `ConversationLike` rather than being reached through a cast
+     * because the POST handler calls them directly; `gateway` is not one of
+     * `test/contract.test.ts`'s PUBLIC_BARRELS, so widening this interface moves
+     * no golden.
+     */
+    setPermissionMode(ctx: Context, target: PermissionModeTarget): Promise<PermissionModeReading>;
+    refreshPermissionMode(ctx: Context): Promise<PermissionModeReading>;
     close(ctx?: Context): Promise<void>;
 }
 /**
@@ -162,6 +174,44 @@ export declare class Server {
      * comparison can never disagree about which frame they saw.
      */
     private permissionMode;
+    /**
+     * POST /v1/conversations/{id}/permission-mode — switch the live session's
+     * permission mode, or re-probe it.
+     *
+     *   {"token":"…","permission_mode":"plan"}   → drive the axis to that target
+     *   {"token":"…","refresh":true}             → re-probe, change nothing
+     *
+     * MH-ONLY, WITH NO GO COUNTERPART. Go's `harness-chatd` has no mid-session
+     * permission switch, so nothing here is corpus-covered: unlike the response
+     * DTOs (frozen by fixtures vendored byte-identically from Go), this route's
+     * request decoding gets no free cross-language guarantee and is pinned by
+     * hand-written tests instead.
+     *
+     * TOKEN-GATED, first thing after the decode, byte-for-byte the check
+     * `sendMessage`/`answerInput` do — changing an agent's permission rung is at
+     * least as privileged as sending it a prompt, and it runs BEFORE body
+     * validation so an un-tokened caller learns nothing about the body's fate.
+     * The gate applies to `refresh` too: a codex re-probe writes `/status` to the
+     * PTY, so it is not a read.
+     *
+     * EXPLICIT DISCRIMINATOR — exactly one of `permission_mode` or `refresh:true`.
+     * `readJSON` is a bare `JSON.parse` over an all-optional shape and validates
+     * nothing, so a client sending `permissionMode` / `mode` / `permission-mode`
+     * would otherwise land in a refresh-by-omission: 200, a plausible-looking
+     * reading, and the mode never changed. That is exactly the silent degradation
+     * the PTY-side mechanism works to eliminate, so neither-or-both is a 400
+     * (the ErrInvalidOptions row's {400, invalid_options}, written directly the
+     * way checkPermissionMode does).
+     *
+     * VALIDATION IS SYNTACTIC ONLY (see normalizePermissionModeTarget): a token
+     * off every axis is 400 here, because it matches no sentinel row downstream
+     * and would otherwise fall through to FALLBACK → 500. A KNOWN token that this
+     * session's harness cannot reach is chat's ErrPermissionModeUnreachable → 409.
+     *
+     * The body is 102's `permissionModeResponse` verbatim, so a client parses one
+     * shape for both the GET and the POST.
+     */
+    private setPermissionMode;
     /** Look the entry up once at handler entry; 404 when absent (Go's lookup). */
     private lookup;
 }
