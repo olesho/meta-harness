@@ -152,6 +152,7 @@ transcript/index.ts
 chat/index.ts
   Adapter: type
   Backend: type
+  CollaborationMode: type
   Conversation: class{acquireControl,activityIntervalDur,activityObserver,adapterBusy,adapterPromptNotAccepted,adapterQuitSequence,adapterRawSessionID,answer,assistantText,authRelabel,awaitComposerEcho,awaitPromptReady,awaitPromptReadyUntil,captureAndPersistSessionID,captureFromScreen,captureModeFromScreen,captureRawSessionID,captureTranscriptWatermark,cleanAssistantText,close,codexUnobservedSource,consumeWatcher,echoBoundDur,emit,emitAuthRequiredTurn,events,extractSessionID,getAdapter,handleInputRequested,handleInputResolved,handleTurnsEvent,history,historyWithSource,idleCompletionWatcher,idleGapDur,inputAwaitingClient,isClosed,markerGapDur,maybeExtractSessionID,maybeIdleComplete,observation,pendingInput,permissionMode,policyOption,primeBoundDur,primeSessionID,quit,readTranscriptTurns,screenSnapshot,send,sessionID,setPrimeOutcome,signalInputState,startPumps,transcriptOverrideEligible,transcriptProofOfCurrentTurn,tryAutoDismissCodex,tryResolveInput,tryTranscriptProof,usageLimitRelabel,waitReadyForSend,wrapper,writeAnswer,writeKeys,writeMessageAndSubmit}
   ConversationEvent: type
   Disposition: type
@@ -166,6 +167,9 @@ chat/index.ts
   ErrNoHarnessSession: object{code,name}
   ErrNoInputPending: object{code,name}
   ErrNotMultiSelect: object{code,name}
+  ErrPermissionModeStalled: object{code,name}
+  ErrPermissionModeUnreachable: object{code,name}
+  ErrPermissionModeUnsupported: object{code,name}
   ErrQuitUnsupported: object{code,name}
   ErrResumeUnsupported: object{code,name}
   ErrStaleInputRequest: object{code,name}
@@ -189,6 +193,7 @@ chat/index.ts
   Options: type
   PermissionModeReading: type
   PermissionModeSource: type
+  PermissionModeTarget: type
   PermissionRung: type
   ReasonAuthRequired: string="auth_required: harness login expired or re-authentication required — renew the harness login"
   ReasonUsageLimited: string="usage_limit: harness usage or session limit reached — retry after the quota window resets"
