@@ -33,6 +33,7 @@ import {
   ErrUnknownOption,
   type InputAnswer,
   type InputRequest,
+  type PermissionModeReading,
   type Turn,
 } from "../../src/chat/index.ts";
 import { Context, ctxCanceled } from "../../src/internal/async/index.ts";
@@ -163,6 +164,21 @@ class FakeConversation implements ConversationLike {
   async history(): Promise<Turn[]> {
     return this.turns;
   }
+  /** Bumped by tests that simulate a repainting harness. */
+  generation = 7;
+  /**
+   * The reading the fake reports. `generation` is filled from the snapshot the
+   * route hands in, exactly like the real Conversation's live claude path,
+   * unless `frozenReading` pins it (the cached-codex-box shape).
+   */
+  reading: Omit<PermissionModeReading, "generation" | "observedAt"> = {
+    observed: "acceptEdits",
+    raw: "accept edits",
+    source: "footer",
+  };
+  /** When set, the reading reports THIS generation — a cached, possibly stale parse. */
+  frozenGeneration?: number;
+
   screenSnapshot(): Snapshot {
     return {
       text: "SCREEN",
@@ -170,7 +186,15 @@ class FakeConversation implements ConversationLike {
       rows: 24,
       cursorCol: 3,
       cursorRow: 1,
-      generation: 7,
+      generation: this.generation,
+    };
+  }
+  permissionMode(snap?: Snapshot): PermissionModeReading {
+    const s = snap ?? this.screenSnapshot();
+    return {
+      ...this.reading,
+      generation: this.frozenGeneration ?? s.generation,
+      observedAt: new Date("2026-07-22T18:04:11.220Z"),
     };
   }
   async close(): Promise<void> {

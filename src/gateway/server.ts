@@ -38,6 +38,7 @@ import {
   type InputAnswer,
   type InputRequest,
   type Options,
+  type PermissionModeReading,
   type Session,
   type Store,
   type Turn,
@@ -60,6 +61,7 @@ import {
   inputRequestDTO,
   openResponse,
   parseAnswerRequest,
+  permissionModeResponse,
   screenResponse,
   turnDTO,
   turnResultDTO,
@@ -88,6 +90,12 @@ export interface ConversationLike {
   answer(ctx: Context, requestID: string, ans: InputAnswer): Promise<void>;
   history(): Promise<Turn[]>;
   screenSnapshot(): Snapshot;
+  /**
+   * A PURE read of the permission ladder — no PTY write, no store mutation.
+   * `snap` is passed by the route so the reading and the staleness comparison
+   * come from ONE frame.
+   */
+  permissionMode(snap?: Snapshot): PermissionModeReading;
   close(ctx?: Context): Promise<void>;
 }
 
@@ -481,6 +489,13 @@ export class Server {
         "/v1/conversations/:id/screen",
         (_q, s, p) => {
           this.screen(s, p);
+        },
+      ],
+      [
+        "GET",
+        "/v1/conversations/:id/permission-mode",
+        (_q, s, p) => {
+          this.permissionMode(s, p);
         },
       ],
     ];
@@ -998,6 +1013,31 @@ export class Server {
     const entry = this.lookup(res, params);
     if (!entry) return;
     writeJSON(res, 200, screenResponse(entry.conv.screenSnapshot()));
+  }
+
+  /**
+   * GET /v1/conversations/{id}/permission-mode — a pure read; requires no
+   * token (it mutates nothing: no PTY write, no store write).
+   *
+   * ONE SNAPSHOT SERVES BOTH GENERATIONS. `Snapshot.generation` increments on
+   * every successful write/resize and claude repaints continuously, so calling
+   * `permissionMode()` and THEN `screenSnapshot()` would see a bumped
+   * generation from any byte arriving in between and report `stale: true` on a
+   * genuinely live read. Taking the frame once means the reading and the
+   * comparison can never disagree about which frame they saw.
+   */
+  private permissionMode(
+    res: ServerResponse,
+    params: Record<string, string>,
+  ): void {
+    const entry = this.lookup(res, params);
+    if (!entry) return;
+    const snap = entry.conv.screenSnapshot();
+    writeJSON(
+      res,
+      200,
+      permissionModeResponse(entry.conv.permissionMode(snap), snap.generation),
+    );
   }
 
   /** Look the entry up once at handler entry; 404 when absent (Go's lookup). */

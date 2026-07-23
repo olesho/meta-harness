@@ -27,6 +27,11 @@ import type {
   Session,
   Turn,
 } from "../chat/types.ts";
+import type {
+  PermissionModeReading,
+  PermissionModeSource,
+  PermissionRung,
+} from "../chat/permission.ts";
 import type { TurnResult } from "../harness/index.ts";
 import type { Snapshot } from "../screen/screen.ts";
 
@@ -77,6 +82,59 @@ export interface ScreenResponseDTO {
   cursor_col: number;
   cursor_row: number;
   generation: number;
+}
+
+/**
+ * Wire shape of GET .../permission-mode. MH-ONLY — there is no Go counterpart,
+ * so nothing in `test/corpus/wire/` constrains it.
+ *
+ * CASING IS DELIBERATELY MIXED, and only the KEYS follow the file's snake_case
+ * rule. The VALUES are each vocabulary's own spelling, verbatim:
+ *   • `requested` / `observed` carry `PermissionRung` — camelCase
+ *     (`"acceptEdits"`), so they round-trip back through
+ *     `normalizePermissionRung` unchanged.
+ *   • `source` carries `PermissionModeSource` — snake_case
+ *     (`"written_uncaptured"`, `"too_narrow"`), the prime-outcome vocabulary.
+ * Do not "fix" either one into the other; a rewritten value breaks a consumer
+ * that compares it against the TS enum it came from.
+ *
+ * `requested`, `requested_raw`, `raw` and `collaboration` are OMITTED when
+ * empty (the style `sessionDTO` uses for `working_dir`). The omission carries
+ * meaning: `observed: "unknown"` WITH a `raw` is "the session is outside the
+ * ladder" (a renamed mode, `Workspace (Approve for me)`); `observed: "unknown"`
+ * with NO `raw` is "we could not see", and `source` says why.
+ */
+export interface PermissionModeResponseDTO {
+  /** The launch-requested rung, normalized; omitted when none was requested. */
+  requested?: PermissionRung;
+  /** The caller's verbatim launch spelling (e.g. "bypassPermissions"); omitted when empty. */
+  requested_raw?: string;
+  /** The rung the screen reports, or "unknown". */
+  observed: PermissionRung | "unknown";
+  /** The screen fragment `observed` came from; omitted when nothing was seen. */
+  raw?: string;
+  /** The codex collaboration axis; omitted when the harness has no such axis. */
+  collaboration?: "default" | "plan" | "unknown";
+  /** Why `observed` says what it says. */
+  source: PermissionModeSource;
+  /** The screen generation the reading was parsed from. */
+  generation: number;
+  /** The generation of the snapshot the handler measured. */
+  current_generation: number;
+  /**
+   * `current_generation !== generation` — A GENERATION COMPARISON, NOT A
+   * LIVENESS CLAIM. It says "the frame this reading was parsed from is not the
+   * frame you are being told about", nothing more. A live claude footer read is
+   * always `false` (it parsed the very frame the handler measured); a
+   * startup-cached codex `/status` box flips to `true` the moment anything has
+   * been drawn since. A CLOSED conversation also reports `false` — nothing
+   * writes after close, so the frozen frame trivially matches itself; callers
+   * distinguish that case with the conversation's own closed state, never with
+   * `stale`.
+   */
+  stale: boolean;
+  /** When the reading was taken (RFC3339). */
+  observed_at: string;
 }
 
 /** Wire shape of a Session. Mirrors Go sessionDTO. */
@@ -254,6 +312,38 @@ export function screenResponse(s: Snapshot): ScreenResponseDTO {
     cursor_row: s.cursorRow,
     generation: s.generation,
   };
+}
+
+/**
+ * permissionModeResponse: a PermissionModeReading + the generation of the frame
+ * the handler measured → wire JSON.
+ *
+ * `currentGeneration` MUST come from the SAME snapshot the reading was taken
+ * from (`conv.permissionMode(snap)` / `snap.generation`). Sampling the screen
+ * twice would let a byte arriving in between bump the generation and report
+ * `stale: true` on a genuinely live read.
+ *
+ * See PermissionModeResponseDTO for the casing contract (keys snake_case,
+ * values verbatim from their own vocabulary) and for what `stale` does and does
+ * not mean.
+ */
+export function permissionModeResponse(
+  r: PermissionModeReading,
+  currentGeneration: number,
+): PermissionModeResponseDTO {
+  const out: PermissionModeResponseDTO = {
+    observed: r.observed,
+    source: r.source,
+    generation: r.generation,
+    current_generation: currentGeneration,
+    stale: currentGeneration !== r.generation,
+    observed_at: r.observedAt.toISOString(),
+  };
+  if (r.requested) out.requested = r.requested;
+  if (r.requestedRaw) out.requested_raw = r.requestedRaw;
+  if (r.raw) out.raw = r.raw;
+  if (r.collaboration) out.collaboration = r.collaboration;
+  return out;
 }
 
 /** sessionDTO: MH Session → wire JSON. Ported from Go's toSessionDTO. */
