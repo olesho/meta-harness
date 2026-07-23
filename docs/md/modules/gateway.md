@@ -68,14 +68,16 @@ The lifecycle is therefore:
 POST   /v1/conversations                   → 201 { id }
 POST   /v1/conversations/{id}/control      → 200 { token }
 POST   /v1/conversations/{id}/messages     → 202 { turn_id }     (token required)
+POST   /v1/conversations/{id}/permission-mode → 200 { reading }  (token required)
 GET    /v1/conversations/{id}/events       → SSE stream          (no token)
 DELETE /v1/conversations/{id}/control/{token} → 204
 DELETE /v1/conversations/{id}              → 204
 ```
 
-`send` and `answer` are gated on the daemon's own `hasToken` check **before** reaching
-chat — a caller holding no token gets `409 no_control` even if nobody else holds
-control. Reads (`events`, `history`, `screen`) need no token.
+`send`, `answer` and the permission-mode **switch** are gated on the daemon's own
+`hasToken` check **before** reaching chat — a caller holding no token gets
+`409 no_control` even if nobody else holds control. Reads (`events`, `history`,
+`screen`, and the permission-mode `GET`) need no token.
 
 ---
 
@@ -95,6 +97,7 @@ control. Reads (`events`, `history`, `screen`) need no token.
 | `GET`    | `/v1/conversations/{id}/history`         | `200`       | The conversation's turns.                 |
 | `GET`    | `/v1/conversations/{id}/screen`          | `200`       | The rendered terminal snapshot.           |
 | `GET`    | `/v1/conversations/{id}/permission-mode` | `200`       | The live permission-ladder reading.       |
+| `POST`   | `/v1/conversations/{id}/permission-mode` | `200`       | Switch or re-probe it (token required).   |
 | `POST`   | `/v1/turns`                              | `200`       | Run one complete turn and tear down.      |
 
 An unmatched path or method is `404 not_found`.
@@ -283,6 +286,45 @@ prime-outcome vocabulary verbatim (`"written_uncaptured"`, snake_case).
 > conversation would also report `false` (nothing writes after close, so the frozen
 > frame matches itself), but that case cannot arise here: `DELETE /v1/conversations/{id}`
 > removes the entry from the registry synchronously, so the route `404`s instead.
+
+### `POST /v1/conversations/{id}/permission-mode`
+
+The mutating half of the route above: switch the live session's permission mode, or
+re-probe it. **MH-only — there is no Go counterpart.** The response body is the
+`GET`'s reading verbatim, so a client parses one shape for both.
+
+```json
+POST /v1/conversations/{id}/permission-mode
+{ "token": "…", "permission_mode": "plan" }     → drive the axis to that target
+{ "token": "…", "refresh": true }               → re-probe, change nothing
+```
+
+**A token is required** — for the `refresh` form too. Unlike the `GET`, neither form is
+a read: a switch presses a cycle keystroke and a codex refresh writes `/status`, both to
+the live PTY. A caller holding no token gets `409 no_control` before the body is even
+looked at.
+
+**Exactly one of `permission_mode` or `refresh: true`.** Neither, or both, is
+`400 invalid_options`. Omission deliberately does **not** mean "refresh": the request
+decoder validates nothing, so a client sending `permissionMode` or `mode` would
+otherwise get a `200` with a plausible reading and a mode that never changed.
+
+**Validation is syntactic only.** The gateway checks that `permission_mode` is a name
+the vocabulary knows — a ladder rung (`plan`, `manual`, `acceptEdits`, `auto`, `bypass`,
+case-insensitive) or codex's collaboration value `default` — and answers
+`400 invalid_options` otherwise. Per-harness native spellings (`bypassPermissions`,
+`workspace-write`) are **not** accepted here; the gateway holds no harness knowledge.
+Whether a known target is legal for _this_ session is chat's call and comes back as
+`409 permission_mode_unreachable` (wrong axis / no bypass-enabling launch),
+`400 permission_mode_unsupported` (the harness has no switch at all) or
+`409 permission_mode_stalled` (the switch never settled).
+
+`timeout_seconds` bounds the switch exactly as on `POST …/messages`: expiry is
+`504 timeout`, a disconnect `408 canceled` — never a `500`.
+
+> **A codex refresh leaves a visible `/status` box on screen.** That is deliberate: the
+> probe does not clear it (no `ESC`, no `Ctrl-L`), because clearing would race whatever
+> the session paints next. Expect the box in the next `GET …/screen`.
 
 ### `POST /v1/turns`
 
