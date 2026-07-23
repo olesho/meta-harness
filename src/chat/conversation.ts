@@ -1454,10 +1454,15 @@ export class Conversation {
     const never = new Promise<void>(() => {});
     try {
       if (write) write();
-      // The entry read has no `before` to move away from, so nothing bounds it
-      // but ctx — and ctx may carry no deadline at all. Bound it with the same
-      // settle gap: "the footer never became legible" is a Stalled, not a hang.
-      if (before === null) gap = sleep(this.permissionSettleDur());
+      // The gap is armed IMMEDIATELY, before any candidate exists, and it is the
+      // ONLY bound on the "nothing happened at all" case: a press that does not
+      // take (a dead PTY, or a byte sequence this build does not understand)
+      // produces no render, so there is no notification to wake on and ctx may
+      // carry no deadline. It is re-armed below whenever a NEW candidate
+      // appears, so each candidate gets its own full quiescent window — but NOT
+      // on every render, or a screen repainting the OLD value forever (a
+      // spinner) would keep the loop alive past any bound.
+      gap = sleep(this.permissionSettleDur());
       let cand: { value: string; generation: number } | null = null;
       let candReading: PermissionModeReading | null = null;
       for (;;) {
