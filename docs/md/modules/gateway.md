@@ -122,6 +122,11 @@ select and launch the harness:
 → `201 {"id": "<conversation id>"}`. The id **is** the chat session id, and is the
 registry key.
 
+> **No `permission_mode` on the wire yet.** `effort` and `model` are the only launch knobs
+> the gateway accepts. The wrapper's third knob
+> ([permission mode](wrapper.md#permission-mode)) is **not** a gateway field — it is
+> tracked separately as META-HARNESS-101. Sending it is not a way to set the rung.
+
 The conversation is opened with a **background** context, not a request-scoped one — the
 harness must outlive the HTTP request that started it.
 
@@ -224,6 +229,9 @@ full lifecycle.
   "timeout_seconds": 900
 }
 ```
+
+As with `POST /v1/conversations`, `effort` and `model` are the only launch knobs on the
+wire; `permission_mode` is **not** a field here either (META-HARNESS-101).
 
 `harness`, `binary_path`, and `prompt` are **required** — each missing one is its own
 `400 invalid_options` (`"harness is required"`, …), validated up front rather than after

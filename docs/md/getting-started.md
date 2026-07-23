@@ -170,7 +170,9 @@ reply on **stdout** — which is how an orchestrator invokes a turn:
 echo "Summarize README.md in one sentence." | node dist/cli/run.js claude -- --some-harness-flag
 ```
 
-Grammar: `run [--effort E] [--model M] <name> -- <harness args…>`. Exit codes are
+Grammar: `run [--effort E] [--model M] [--permission-mode P] <name> -- <harness args…>`.
+`P` is a permission rung — `plan` / `manual` / `ask` / `auto` / `bypass`, least to most
+permissive (`ask` sits above `manual` because it auto-accepts edits). Exit codes are
 orchestrator-friendly: `0` ok, `1` errored/fatal, `2` usage, `124` deadline. Configure
 the harness binary and per-run timeout through the environment
 (`HARNESS_BINARY*`, `HARNESS_WRAPPER_RUN_TIMEOUT`). Full details, including the container

@@ -69,8 +69,9 @@ Launches the harness binary under a PTY, streams its bytes into a `screen`, and 
 [`Status`](concepts.md#status) and [`ErrorClass`](concepts.md#error-class). It owns the
 process lifecycle (`start` / `wait` / `stop`), stdin forwarding, resize, and the
 exit-code classification. Per-harness "patterns" recognize each CLI's cost/quota,
-API-error, and prompt fingerprints; per-harness `effort`/`model` translators rewrite
-those knobs into each CLI's flags. See [`wrapper`](modules/wrapper.md).
+API-error, and prompt fingerprints; per-harness `effort`/`model`/`permissionMode`
+translators rewrite those knobs into each CLI's flags — the last one into Claude Code's
+`--permission-mode` and Codex's `-s`/`-a`. See [`wrapper`](modules/wrapper.md).
 
 ### `turns` — turn detection
 

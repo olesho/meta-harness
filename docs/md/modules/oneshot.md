@@ -106,6 +106,7 @@ interface OneShotConfig {
   env?: string[]; // KEY=VALUE; run through cleanEnv() unless you handle it
   effort?: string;
   model?: string;
+  permissionMode?: string; // plan | manual | ask | auto | bypass (+ native spellings)
   cols?: number; // default 120
   rows?: number; // default 40
   idleGap?: number; // test-only ms overrides

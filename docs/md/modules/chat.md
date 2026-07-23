@@ -104,7 +104,7 @@ is **not** a chat harness — see [Harnesses](../harnesses.md#cursor).)
 | `resume`                               | `string`                          | A [harness session id](../concepts.md#session) to resume (prepends the adapter's `resumeArgs`).                              |
 | `workingDir`                           | `string`                          | Child cwd.                                                                                                                   |
 | `env`                                  | `string[]`                        | Child env as `KEY=VALUE`. Omitted → inherits (and materializes) the parent env.                                              |
-| `effort` / `model`                     | `string`                          | Passed through to the [wrapper](wrapper.md#effort--model).                                                                   |
+| `effort` / `model` / `permissionMode`  | `string`                          | Passed through to the [wrapper](wrapper.md#effort--model); `permissionMode` is a [rung](wrapper.md#permission-mode).         |
 | `cols` / `rows`                        | `number`                          | PTY geometry (default 120×40).                                                                                               |
 | `eventBuffer`                          | `number`                          | Sizes the event stream (default 32).                                                                                         |
 | `inputPolicy`                          | `InputPolicy`                     | Pre-resolve interactive prompts without a live client.                                                                       |

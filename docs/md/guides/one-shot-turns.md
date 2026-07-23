@@ -92,7 +92,7 @@ hand to a [transcript reader](reading-history.md) or a later
 
 ---
 
-## Passing effort, model, and args
+## Passing effort, model, permission mode, and args
 
 ```ts
 await runOneShot(ctx, {
@@ -101,12 +101,18 @@ await runOneShot(ctx, {
   prompt: "Refactor the parser for clarity.",
   effort: "high", // translated to the harness's own flag
   model: "opus",
+  permissionMode: "ask", // plan | manual | ask | auto | bypass
   args: ["--some-harness-flag"],
   env: process.env ? undefined : [], // omit to inherit; the loop cleans CLAUDECODE markers for you
 });
 ```
 
-`effort`/`model` only affect harnesses that support them ([Claude Code, Codex](../harnesses.md)).
+`effort`/`model`/`permissionMode` only affect harnesses that support them
+([Claude Code, Codex](../harnesses.md)). The permission rungs run least to most permissive
+— `plan` → `manual` → `ask` → `auto` → `bypass` — with `ask` **above** `manual` because it
+auto-accepts edits. An explicit override in `args` wins over the translated one and
+suppresses injection entirely; see
+[`wrapper` › Permission mode](../modules/wrapper.md#permission-mode).
 The loop installs [`AutoAcceptTrust`](../modules/oneshot.md#environment-helpers) so a
 Claude Code folder-trust prompt never wedges the run.
 

@@ -92,16 +92,35 @@ credit / quota-exceeded hints in the output.
 
 ## Effort & model
 
-Two per-harness knobs meta-harness translates into each CLI's own flags:
+Three per-harness knobs meta-harness translates into each CLI's own flags:
 
 - **Effort** — reasoning effort, one of `low` / `medium` / `high` / `xhigh` / `max`.
   Supported by Claude Code (`--effort <level>`) and Codex
   (`-c model_reasoning_effort=...`, mapping `max → xhigh`); ignored by the others.
 - **Model** — a model override. Claude Code (`--model <m>`), Codex (`-c model=...`);
   ignored by the others.
+- **Permission mode** — how much the guest may do without being asked, as one of five
+  rungs. Supported by Claude Code (`--permission-mode <value>`) and Codex
+  (`-s <sandbox> [-a <policy>]`); ignored by the others.
 
-An override you pass explicitly in `args` always wins over the translated one. See
-[`wrapper`](modules/wrapper.md#effort--model).
+The permission rungs, **least to most permissive**:
+
+`plan` → `manual` → `ask` → `auto` → `bypass`
+
+**`ask` sits above `manual`** — `manual` prompts before every edit, while `ask`
+auto-accepts them. The name reads backwards; the ordering above is the authority.
+
+An override you pass explicitly in `args` always wins over the translated one — for all
+three knobs. For permission mode that suppression is all-or-nothing per harness: pin
+either axis yourself and the wrapper injects neither. Leaving a knob unset (or `""`)
+injects nothing, so the harness's own default wins.
+
+Codex's `plan` is honestly **the launch half only**: `-s read-only -a untrusted` pins the
+permissions axis, but the collaboration axis stays unset — it is _not_ launch-time parity
+with Claude Code's `plan`.
+
+See [`wrapper`](modules/wrapper.md#effort--model) and
+[`wrapper` › Permission mode](modules/wrapper.md#permission-mode).
 
 ---
 

@@ -338,13 +338,13 @@ common misreading of this ladder — the ordering above is the authority, not th
 
 ### Per-harness translation
 
-| Rung     | Claude Code                          | Codex                                    |
-| -------- | ------------------------------------ | ---------------------------------------- |
-| `plan`   | `--permission-mode plan`             | `-s read-only -a untrusted`              |
-| `manual` | `--permission-mode manual`           | `-s workspace-write -a untrusted`        |
-| `ask`    | `--permission-mode acceptEdits`      | `-s workspace-write -a on-request`       |
-| `auto`   | `--permission-mode auto`             | `-s workspace-write -a never`            |
-| `bypass` | `--permission-mode bypassPermissions` | `-s danger-full-access -a never`        |
+| Rung     | Claude Code                           | Codex                              |
+| -------- | ------------------------------------- | ---------------------------------- |
+| `plan`   | `--permission-mode plan`              | `-s read-only -a untrusted`        |
+| `manual` | `--permission-mode manual`            | `-s workspace-write -a untrusted`  |
+| `ask`    | `--permission-mode acceptEdits`       | `-s workspace-write -a on-request` |
+| `auto`   | `--permission-mode auto`              | `-s workspace-write -a never`      |
+| `bypass` | `--permission-mode bypassPermissions` | `-s danger-full-access -a never`   |
 
 Codex argv is `-s <sandbox> [-a <policy>]` — flags, never `-c sandbox_mode=…`.
 
