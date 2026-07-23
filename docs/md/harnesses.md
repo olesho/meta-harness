@@ -13,14 +13,14 @@ is the ground truth for "what works with which."
 
 ## Support matrix
 
-| Harness         | name             | binary     | npm package                       | pinned¹      | chat adapter²  | effort / model | transcript history³  |
-| --------------- | ---------------- | ---------- | --------------------------------- | ------------ | -------------- | -------------- | -------------------- |
-| **Claude Code** | `claude-code`    | `claude`   | `@anthropic-ai/claude-code`       | 2.1.201      | ✓ full         | ✓ / ✓          | ✓ `ClaudeCodeReader` |
-| **Codex**       | `codex`          | `codex`    | `@openai/codex`                   | 0.142.5      | ✓ full         | ✓ / ✓          | ✓ `CodexReader`      |
-| **pi**          | `pi`             | `pi`       | `@earendil-works/pi-coding-agent` | 0.76.0       | ✓ full         | ✗ / ✗          | ✓ `PiReader`⁴        |
-| **OpenCode**    | `opencode`       | `opencode` | `opencode-ai`                     | _(unpinned)_ | ◑ stub         | ✗ / ✗          | ✗ store only         |
-| **Cursor**      | `cursor`         | —          | —                                 | —            | ✗ wrapper-only | ✗ / ✗          | ✗ n/a                |
-| _(fallback)_    | `generic` / `""` | any        | —                                 | —            | ◑ status-only  | ✗ / ✗          | ✗ store only         |
+| Harness         | name             | binary     | npm package                       | pinned¹      | chat adapter²  | effort / model / permission | transcript history³  |
+| --------------- | ---------------- | ---------- | --------------------------------- | ------------ | -------------- | --------------------------- | -------------------- |
+| **Claude Code** | `claude-code`    | `claude`   | `@anthropic-ai/claude-code`       | 2.1.201      | ✓ full         | ✓ / ✓ / ✓                   | ✓ `ClaudeCodeReader` |
+| **Codex**       | `codex`          | `codex`    | `@openai/codex`                   | 0.142.5      | ✓ full         | ✓ / ✓ / ✓                   | ✓ `CodexReader`      |
+| **pi**          | `pi`             | `pi`       | `@earendil-works/pi-coding-agent` | 0.76.0       | ✓ full         | ✗ / ✗ / ✗                   | ✓ `PiReader`⁴        |
+| **OpenCode**    | `opencode`       | `opencode` | `opencode-ai`                     | _(unpinned)_ | ◑ stub         | ✗ / ✗ / ✗                   | ✗ store only         |
+| **Cursor**      | `cursor`         | —          | —                                 | —            | ✗ wrapper-only | ✗ / ✗ / ✗                   | ✗ n/a                |
+| _(fallback)_    | `generic` / `""` | any        | —                                 | —            | ◑ status-only  | ✗ / ✗ / ✗                   | ✗ store only         |
 
 ¹ From [`versions.json`](modules/versions.md); the upstream release each adapter is
 verified against. ² Whether [`chat.resolveAdapter`](modules/chat.md#opening-a-conversation) maps the
@@ -95,6 +95,10 @@ The most fully-supported harness. Name `claude-code`, binary `claude`.
   banners (`… resets HH:MM (TZ)` → a `resumeAt` instant), plus cost/retry/prompt
   fingerprints.
 - **Effort / model.** `--effort <level>` and `--model <m>`.
+- **Permission mode.** `--permission-mode <value>`: `plan → plan`, `manual → manual`,
+  `ask → acceptEdits`, `auto → auto`, `bypass → bypassPermissions`. The native spellings
+  `acceptEdits`, `bypassPermissions` and `dontAsk` are accepted as input too. Note `-p`
+  here is `--print`, so it is **never** treated as a permission override (unlike Codex).
 
 ---
 
@@ -135,6 +139,14 @@ Name `codex`, binary `codex`.
   cost/retry/prompt. No session-limit banner matcher.
 - **Effort / model.** `-c model_reasoning_effort="…"` (with `max → xhigh`) and
   `-c model="…"`.
+- **Permission mode.** `-s <sandbox> [-a <policy>]` — flags, never `-c sandbox_mode=…`.
+  `plan → -s read-only -a untrusted`, `manual → -s workspace-write -a untrusted`,
+  `ask → -s workspace-write -a on-request`, `auto → -s workspace-write -a never`,
+  `bypass → -s danger-full-access -a never`. The three native **sandbox** values
+  (`read-only`, `workspace-write`, `danger-full-access`) are accepted as a single-axis
+  request and emit `-s <value>` only, leaving approvals to `~/.codex/config.toml`. Codex
+  `plan` pins the permissions axis only — the collaboration axis stays unset, so this is
+  **not** launch-time parity with Claude Code's `plan`.
 
 ---
 
@@ -155,7 +167,7 @@ Name `pi`, binary `pi`. Session control is the strong suit; screen scraping is m
   `<config>/sessions/--<cwd-slug>--/<ts>_<uuid>.jsonl` and returns **`Turn[]`** directly.
 - **Turn detection.** No screen completion marker; `BusyDetector` recognizes
   `Working…`/`Thinking…`. `Quitter` sends `/quit`.
-- **Effort / model.** Not supported.
+- **Effort / model / permission mode.** Not supported.
 
 ---
 
@@ -210,6 +222,9 @@ discover(); // Info[] for every harness in versions.json
 ```
 
 Default version probes are registered for `codex`, `claude-code`, `opencode`, and `pi`.
-See [Concepts › Effort & model](concepts.md#effort--model) and the
+See [Concepts › Effort & model](concepts.md#effort--model),
+[`wrapper` › Permission mode](modules/wrapper.md#permission-mode) and the
 [versions catalog](modules/versions.md) for how pins bind adapter code to upstream
-releases.
+releases. The permission vocabulary above was probed at claude-code 2.1.217 /
+codex-cli 0.144.5; the Codex encoding rationale lives in
+[`docs/design/permission-argv-parity.md`](../design/permission-argv-parity.md).

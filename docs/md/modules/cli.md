@@ -15,7 +15,7 @@ compiled [`dist/cli/run.js`](../../../dist/cli/run.js) (declared as the package 
 ## Usage
 
 ```
-run [--effort E] [--model M] <name> -- <harness args…>
+run [--effort E] [--model M] [--permission-mode P] <name> -- <harness args…>
 ```
 
 ```bash
@@ -23,7 +23,10 @@ echo "Summarize README.md in one sentence." | node dist/cli/run.js claude -- --s
 ```
 
 - **stdin** → the prompt; **stdout** → the clean reply (trailing newline ensured).
-- Flags (`--effort`, `--model`) sit **before** `<name>`.
+- Flags (`--effort`, `--model`, `--permission-mode`) sit **before** `<name>`.
+- `--permission-mode P` takes a rung — `plan` / `manual` / `ask` / `auto` / `bypass`,
+  least to most permissive (`ask` is **above** `manual`; it auto-accepts edits). See
+  [`wrapper` › Permission mode](wrapper.md#permission-mode).
 - `<name>` is a short alias: `claude` → `claude-code`, `codex` → `codex`. Anything else is
   a usage error.
 - Everything after `--` is forwarded verbatim to the harness.

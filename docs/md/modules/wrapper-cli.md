@@ -71,6 +71,11 @@ interactive harness TUI. In tmux mode, trace events default to
 
 - `--effort <low|medium|high|xhigh|max>` — reasoning effort for supported harnesses.
 - `--model <id>` — model id for supported harnesses (`claude --model`, `codex -c model`).
+- `--permission-mode <plan|manual|ask|auto|bypass>` — launch-time permission rung for
+  supported harnesses (Claude Code, Codex). Least to most permissive in that order —
+  `ask` sits **above** `manual` because it auto-accepts edits. Native spellings are
+  accepted too. See
+  [`wrapper` › Permission mode](wrapper.md#permission-mode).
 
 ## `run` — delegated one-shot mode
 

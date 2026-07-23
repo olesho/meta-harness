@@ -56,7 +56,11 @@ or [`claude.ts`](../../../src/wrapper/internal/harness/claude.ts) (rich, with AP
 session-limit matchers) as templates. This is what lets
 [`classifyOutput("newcli", …)`](../modules/wrapper.md#classification) recognize the CLI's
 rate-limit and error prose. If the CLI supports reasoning effort or a model flag, add its
-translation to `src/wrapper/internal/effort.ts` / `model.ts`.
+translation to `src/wrapper/internal/effort.ts` / `model.ts`. If it has a launch-time
+permission axis, add the third translation to `src/wrapper/internal/permission.ts` — the
+five rungs (`plan`, `manual`, `ask`, `auto`, `bypass`, least to most permissive) plus the
+guard flags that suppress injection when the caller pinned the axis themselves. See
+[`wrapper` › Permission mode](../modules/wrapper.md#permission-mode).
 
 ---
 
@@ -146,6 +150,8 @@ accidentally re-exports something internal.
 - [ ] Runs as `generic`.
 - [ ] `versions.json` entry + discovery probe.
 - [ ] Wrapper pattern set wired into the classifier (+ effort/model if supported).
+- [ ] Permission-mode translation in `src/wrapper/internal/permission.ts` (+ its guard
+      flags), if the CLI has a launch-time permission axis.
 - [ ] Turns adapter: required core + the optional capabilities it supports; `New()`
       exported; `resolveAdapter` case added.
 - [ ] Transcript reader (if it has a log).

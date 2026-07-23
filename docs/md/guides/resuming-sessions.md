@@ -76,9 +76,16 @@ console.log(resumed.sessionID() === chatID); // true — same chat session
 
 **What the store persists vs what you re-supply.** A `Session` stores only `harness`,
 `workingDir`, and `harnessSessionID`. Everything else — `binaryPath`, `env`, `args`,
-`effort`, `model`, geometry, policies — is _not_ restored; pass it again via
-[`ReopenOptions`](../modules/chat.md#resume) (which omits `harness`/`workingDir`/`resume`,
-since those come from the record).
+`effort`, `model`, `permissionMode`, geometry, policies — is _not_ restored; pass it again
+via [`ReopenOptions`](../modules/chat.md#resume) (which omits
+`harness`/`workingDir`/`resume`, since those come from the record).
+
+> **Permission mode on a resumed Codex session.** Re-supplying `permissionMode` pins only
+> the axes the wrapper emits. A resumed Codex process still inherits whatever
+> `~/.codex/config.toml` holds globally — and a native sandbox value like `read-only` is
+> a single-axis request that leaves approvals to that file entirely. So the **requested**
+> rung is not necessarily the **effective** one; see
+> [`wrapper` › Permission mode](../modules/wrapper.md#permission-mode).
 
 > **Cross-process resume needs a durable store.** `MemStore` lives in memory, so it can
 > only `Reopen` within the same process. To resume after the process exits, implement the
