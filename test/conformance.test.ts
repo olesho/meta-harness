@@ -413,6 +413,15 @@ function squash(text: string): string {
  * value is asserted against the flag's OWN entry rather than anywhere in the
  * help text (codex's `never` and `read-only` both occur in unrelated prose).
  * Returns "" when the flag is absent — the caller asserts presence first.
+ *
+ * The span is a deliberately GENEROUS fixed window, not a parse: the two CLIs
+ * do not share a rendering (claude prints a one-line `(choices: …)`, codex's -s
+ * a one-line `[possible values: …]` and its -a a bulleted prose list), so any
+ * end-of-entry rule would be a third shape to keep in sync. The default covers
+ * the longest rendering today (codex -a, ~490 chars) with room to grow, at the
+ * cost of trailing into the next entry's prose — harmless unless that prose
+ * happens to contain a value that was in fact removed, which the excerpt in the
+ * failure message would show.
  */
 function flagSection(help: string, flag: string, span = 800): string {
   const at = help.indexOf(flag);
