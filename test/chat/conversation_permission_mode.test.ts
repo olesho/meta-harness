@@ -275,7 +275,16 @@ describe("codex: the box capture is decoupled from the id capture", () => {
     // /status box — exactly the shape that used to end the prime loop the
     // instant the id landed. Two AwaitSubmit/Idle pairs absorb the initial
     // /status and the one-shot halfway resend.
-    const bound = 300;
+    //
+    // Wide bound, same reason as the `primeBound: 2000` case above: this is the
+    // only test here that goes through openFake(), i.e. a real cold-spawned
+    // `node` fake harness. The bound is the whole window the prime loop has to
+    // see that first Idle frame, and a cold spawn + ESM resolve can eat far more
+    // than a few hundred ms when this file happens to be sequenced first and
+    // races vitest's own startup transforms (see vitest.config.ts, META-HARNESS-79).
+    // A tight bound here asserts nothing about the product — only about how warm
+    // the host was. The assertions below are unchanged.
+    const bound = 2000;
     const script = New("codex")
       .Idle()
       .AwaitSubmit()
