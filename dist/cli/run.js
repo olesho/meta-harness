@@ -33,12 +33,13 @@ export { ExitOK, ExitError, ExitUsage, ExitDeadline, DeadlineLine, parseTimeoutM
 import { ExitOK, ExitError, ExitUsage, ExitDeadline, DeadlineLine, parseTimeoutMs, } from "../turnproto/index.js";
 const HELP = `meta-harness run — one-shot harness turn (prompt on stdin → reply on stdout)
 
-usage: run [--effort E] [--model M] <name> -- <harness args...>
+usage: run [--effort E] [--model M] [--permission-mode P] <name> -- <harness args...>
 
   run <name>          drive one turn of the named harness
   <name>              short alias: claude → claude-code, codex → codex
   --effort E          reasoning effort passed to the harness
   --model M           model passed to the harness
+  --permission-mode P launch-time permission mode (plan, manual, ask, auto, bypass)
   --                  everything after is forwarded verbatim to the harness
   -h, --help          show this help
 
@@ -58,7 +59,7 @@ export function resolveHarnessName(name) {
     }
 }
 /**
- * parseArgs implements the grammar. Flags (--effort/--model) must precede <name>;
+ * parseArgs implements the grammar. Flags (--effort/--model/--permission-mode) must precede <name>;
  * <name> is the first non-flag token; a `--` separator ends CLI parsing and the
  * remainder is forwarded to the harness.
  */
@@ -75,7 +76,7 @@ export function parseArgs(argv) {
             out.error = "missing <name> before `--`";
             return out;
         }
-        if (a === "--effort" || a === "--model") {
+        if (a === "--effort" || a === "--model" || a === "--permission-mode") {
             const v = argv[i + 1];
             if (v === undefined) {
                 out.error = `flag ${a} requires a value`;
@@ -83,8 +84,10 @@ export function parseArgs(argv) {
             }
             if (a === "--effort")
                 out.effort = v;
-            else
+            else if (a === "--model")
                 out.model = v;
+            else
+                out.permissionMode = v;
             i++;
             continue;
         }
@@ -94,6 +97,10 @@ export function parseArgs(argv) {
         }
         if (a.startsWith("--model=")) {
             out.model = a.slice("--model=".length);
+            continue;
+        }
+        if (a.startsWith("--permission-mode=")) {
+            out.permissionMode = a.slice("--permission-mode=".length);
             continue;
         }
         if (a.startsWith("-")) {
@@ -183,6 +190,7 @@ export async function main(argv) {
             env,
             effort: parsed.effort,
             model: parsed.model,
+            permissionMode: parsed.permissionMode,
         });
         process.stdout.write(reply);
         if (!reply.endsWith("\n"))

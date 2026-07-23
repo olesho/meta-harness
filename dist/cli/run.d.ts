@@ -6,6 +6,8 @@ export interface ParsedArgs {
     help?: boolean;
     effort?: string;
     model?: string;
+    /** Launch-time permission mode (plan|manual|ask|auto|bypass); unset injects nothing. */
+    permissionMode?: string;
     /** Raw <name> token (pre-resolution). */
     name?: string;
     /** Args after `--`, forwarded to the harness. */
@@ -14,7 +16,7 @@ export interface ParsedArgs {
     error?: string;
 }
 /**
- * parseArgs implements the grammar. Flags (--effort/--model) must precede <name>;
+ * parseArgs implements the grammar. Flags (--effort/--model/--permission-mode) must precede <name>;
  * <name> is the first non-flag token; a `--` separator ends CLI parsing and the
  * remainder is forwarded to the harness.
  */
