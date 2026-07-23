@@ -35,6 +35,16 @@ export interface OneShotConfig {
   env?: string[];
   effort?: string;
   model?: string;
+  /**
+   * Launch-time permission posture, forwarded verbatim to chat.Options. Rungs
+   * least to most permissive: plan, manual, ask, auto, bypass (`ask` is ABOVE
+   * `manual` — it auto-accepts edits); claude also accepts acceptEdits /
+   * bypassPermissions / dontAsk, codex its read-only / workspace-write /
+   * danger-full-access sandbox values. Absent/"" injects nothing. A one-shot run
+   * always installs AutoAcceptTrust, so a claude `bypass` dialog is answered by
+   * that policy rather than by chat's default.
+   */
+  permissionMode?: string;
   /** Terminal geometry; defaults match chat.Open (120x40). */
   cols?: number;
   rows?: number;
@@ -213,6 +223,7 @@ export async function runOneShotDetailed(
       env: cfg.env,
       effort: cfg.effort,
       model: cfg.model,
+      permissionMode: cfg.permissionMode,
       cols: cfg.cols,
       rows: cfg.rows,
       idleGap: cfg.idleGap,

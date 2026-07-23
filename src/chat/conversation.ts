@@ -117,6 +117,11 @@ import {
   EnvConfigDirDeprecated,
   EnvSessionID,
 } from "../cli/hooks.ts";
+import { normHarness } from "../wrapper/internal/harnessargs.ts";
+import {
+  ClaudeModeBypassPermissions,
+  PermissionModeBypass,
+} from "../wrapper/internal/permissionrungs.ts";
 
 /** Options configures a single Conversation. Mirrors chat.Options. */
 export interface Options {
@@ -137,6 +142,20 @@ export interface Options {
   env?: string[];
   effort?: string;
   model?: string;
+  /**
+   * Launch-time permission posture, translated to the harness's own argv by the
+   * wrapper (claude `--permission-mode`, codex `-s`/`-a`). The canonical rungs,
+   * least to most permissive, are `plan`, `manual`, `ask`, `auto`, `bypass` —
+   * `ask` sits ABOVE `manual` because it auto-accepts edits. claude also accepts
+   * its native spellings `acceptEdits`, `bypassPermissions`, `dontAsk`; codex
+   * also accepts its native sandbox values `read-only`, `workspace-write`,
+   * `danger-full-access` (which set the `-s` axis only).
+   *
+   * Unset / "" injects nothing, so the harness's own default wins. An explicit
+   * permission flag in `args` also wins: the wrapper suppresses injection
+   * entirely rather than emitting a second, conflicting spelling.
+   */
+  permissionMode?: string;
   cols?: number;
   rows?: number;
   /** Backs the chat metadata. Required; pass newMemStore() for the default. */
@@ -2034,6 +2053,57 @@ function resolvePolicy(
   return null;
 }
 
+/**
+ * launchInputPolicy returns the InputPolicy the Conversation is constructed
+ * with: the caller's, except that a claude `bypass` launch with no trust_prompt
+ * disposition gets a built-in "proceed" answer.
+ *
+ * Why: selecting the bypass rung sets no env, so on a fresh HOME claude paints
+ * its blocking "Bypass Permissions mode" screen (claudeBypassAnchor → a
+ * claudeBlockingDialog that pins readyForInput false). One-shot callers already
+ * install oneshot's AutoAcceptTrust; a gateway/chat caller that passes no
+ * inputPolicy would instead get a surfaced input_request and an Open that never
+ * returns a usable handle. We do NOT inject IS_SANDBOX=1 to dodge the dialog —
+ * that would contradict the "env is forwarded verbatim" contract buildGuestEnv
+ * states — so the default is a policy, not an env edit.
+ *
+ * Precedence — the CALLER'S POLICY ALWAYS WINS, mirroring how
+ * autoSkipCodexUpdateNotice yields to an explicit codex_update_notice entry.
+ * The default fires only when resolvePolicy(opts.inputPolicy, "trust_prompt")
+ * is null, i.e. the caller supplied neither a byKind.trust_prompt entry nor a
+ * bare `default` disposition. optionID "proceed" resolves through findOption's
+ * alias match: claude's parseMenuOptions sets `id` to the menu number and
+ * `alias` to "proceed", exactly as AutoAcceptTrust already relies on.
+ *
+ * Gated on the HARNESS as well as the rung: a codex bypass would otherwise
+ * install a trust_prompt disposition no codex dialog ever produces — inert, but
+ * it makes the intent unreadable.
+ *
+ * openWithSession backs both Open and Reopen, so a resumed session inherits the
+ * same default.
+ */
+export function launchInputPolicy(opts: Options): InputPolicy | undefined {
+  switch (normHarness(opts.harness)) {
+    case "claude":
+    case "claude-code":
+      break;
+    default:
+      return opts.inputPolicy;
+  }
+  const mode = opts.permissionMode ?? "";
+  if (mode !== PermissionModeBypass && mode !== ClaudeModeBypassPermissions) {
+    return opts.inputPolicy;
+  }
+  if (resolvePolicy(opts.inputPolicy, "trust_prompt")) return opts.inputPolicy;
+  return {
+    ...opts.inputPolicy,
+    byKind: {
+      ...opts.inputPolicy?.byKind,
+      trust_prompt: { kind: DispositionAnswer, optionID: "proceed" },
+    },
+  };
+}
+
 function toClientInputRequest(req: TurnsInputRequest): InputRequest {
   const out: InputRequest = { id: req.id, kind: req.kind, prompt: req.prompt };
   if (req.options && req.options.length > 0) {
@@ -2178,7 +2248,7 @@ async function openWithSession(
   const scr = newScreen(cols, rows);
 
   const c = new Conversation({
-    opts: { ...opts, cols, rows },
+    opts: { ...opts, cols, rows, inputPolicy: launchInputPolicy(opts) },
     store: opts.store,
     adapter,
     screen: scr,
@@ -2335,6 +2405,7 @@ async function openWithSession(
     harness: opts.harness,
     effort: opts.effort,
     model: opts.model,
+    permissionMode: opts.permissionMode,
     // The SINGLE durable onLine callback fans out to BOTH consumers. StreamTap
     // runs synchronously (emitting live events with the current — possibly empty
     // — session id); raw capture is async (it persists the record), so an early
@@ -2396,8 +2467,8 @@ async function openWithSession(
  * ReopenOptions configures Reopen. `harness` and `workingDir` are omitted because
  * they are derived from the stored Session; `resume` is omitted because it is
  * derived from the stored harnessSessionID. Every other launch knob (binaryPath,
- * env, args, effort, model, cols, rows, inputPolicy, onInputRequest, …) must be
- * supplied by the caller — the stored Session persists ONLY harness, workingDir,
+ * env, args, effort, model, permissionMode, cols, rows, inputPolicy,
+ * onInputRequest, …) must be supplied by the caller — the stored Session persists ONLY harness, workingDir,
  * and harnessSessionID, so it cannot reconstruct them.
  */
 export type ReopenOptions = Omit<
@@ -2417,6 +2488,18 @@ export type ReopenOptions = Omit<
  * the stored harnessSessionID. The stored Session persists only those three
  * fields, so binaryPath, env, and all other launch knobs must be supplied by the
  * caller via ReopenOptions.
+ *
+ * permissionMode is a launch-ARG knob, so it applies on resume exactly as it does
+ * on a fresh Open: the translated permission argv is prepended alongside the
+ * adapter's resume prefix, and the explicit-override-wins guard still holds — an
+ * explicit permission flag carried by the resume args themselves suppresses
+ * injection. The claude bypass trust-prompt default (see launchInputPolicy) is
+ * inherited too, since openWithSession backs both entry points.
+ *
+ * Caveat for codex: a resumed session ALSO inherits whatever `~/.codex/config.toml`
+ * holds globally, so the REQUESTED rung is not necessarily the EFFECTIVE one.
+ * Learning the effective rung is a readback concern (META-HARNESS-102's
+ * refreshPermissionMode()), not something this launch knob can report.
  *
  * Throws ErrNoHarnessSession when the stored session never captured a harness
  * session id, and surfaces ErrResumeUnsupported unchanged when the derived
