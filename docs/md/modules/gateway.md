@@ -94,6 +94,7 @@ control. Reads (`events`, `history`, `screen`) need no token.
 | `GET`    | `/v1/conversations/{id}/events`          | `200` (SSE) | Subscribe to the event stream.            |
 | `GET`    | `/v1/conversations/{id}/history`         | `200`       | The conversation's turns.                 |
 | `GET`    | `/v1/conversations/{id}/screen`          | `200`       | The rendered terminal snapshot.           |
+| `GET`    | `/v1/conversations/{id}/permission-mode` | `200`       | The live permission-ladder reading.       |
 | `POST`   | `/v1/turns`                              | `200`       | Run one complete turn and tear down.      |
 
 An unmatched path or method is `404 not_found`.
@@ -239,6 +240,49 @@ A pure read — no token needed.
   "generation": 42
 }
 ```
+
+### `GET /v1/conversations/{id}/permission-mode`
+
+A pure read — no token needed, and it mutates nothing (no PTY write, no `/status`
+keystroke, no store write). Unknown id → `404 not_found`.
+
+```json
+{
+  "requested": "bypass",
+  "requested_raw": "bypassPermissions",
+  "observed": "acceptEdits",
+  "raw": "Workspace (Approve for me)",
+  "collaboration": "default",
+  "source": "status",
+  "generation": 12,
+  "current_generation": 4711,
+  "stale": true,
+  "observed_at": "2026-07-22T18:04:11.220Z"
+}
+```
+
+`requested`, `requested_raw`, `raw` and `collaboration` are **omitted when empty**.
+That omission carries meaning: `observed: "unknown"` **with** a `raw` means the session
+is in a state _outside_ the 5-rung ladder (a renamed mode, `Workspace (Approve for me)`),
+while `observed: "unknown"` with **no** `raw` means "we could not see" — and `source`
+says why (`no_footer`, `unparsed_footer`, `too_narrow`, `not_primed`, `not_written`,
+`written_uncaptured`, or `launch` for a harness with no screen reader at all).
+
+**Casing is mixed on purpose.** Only the KEYS are snake_case. `requested` / `observed`
+carry the `PermissionRung` spelling verbatim (`"acceptEdits"`, camelCase) so they
+round-trip back through the mode vocabulary unchanged; `source` carries the
+prime-outcome vocabulary verbatim (`"written_uncaptured"`, snake_case).
+
+`generation` is the screen generation the reading was **parsed from**;
+`current_generation` is the generation of the frame the handler measured. Both come from
+**one** snapshot, so a live claude footer read is never spuriously stale.
+
+> `stale` is `current_generation !== generation` — **a generation comparison, not a
+> liveness claim.** A live claude read is always `false`; a startup-cached codex
+> `/status` box flips to `true` as soon as anything has been drawn since. A _closed_
+> conversation would also report `false` (nothing writes after close, so the frozen
+> frame matches itself), but that case cannot arise here: `DELETE /v1/conversations/{id}`
+> removes the entry from the registry synchronously, so the route `404`s instead.
 
 ### `POST /v1/turns`
 
