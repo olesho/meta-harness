@@ -1,0 +1,2 @@
+export { type PermissionRung, type PermissionModeSource, type PermissionModeReading, parsePermissionMode, normalizePermissionRung, } from "../chat/permission.ts";
+//# sourceMappingURL=permission.d.ts.map

@@ -11,6 +11,7 @@ export { RoleUser, RoleAssistant, RoleSystem, TurnStatePending, TurnStateStreami
 export { MemStore, newMemStore } from "./memstore.js";
 export { cleanHarnessEnv } from "./env.js";
 export { ErrInvalidOptions, ErrUnknownHarness, ErrNoControl, ErrTurnInFlight, ErrClosed, ErrInputPending, ErrNoInputPending, ErrStaleInputRequest, ErrUnknownOption, ErrNotMultiSelect, ErrQuitUnsupported, ErrResumeUnsupported, ErrNoHarnessSession, } from "./errors.js";
+export { parsePermissionMode, normalizePermissionRung, } from "./permission.js";
 export { submitKeyForHarness, requiresPromptReadiness, readyForInput, authRequired, onboardingWall, } from "./ready.js";
 export { Conversation, Open, Reopen, resolveAdapter, } from "./conversation.js";
 //# sourceMappingURL=index.js.map

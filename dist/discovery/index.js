@@ -8,4 +8,5 @@ import "./probes.js";
 export { lookup, resolvePath, discover, registerProbe, resetCache, defaultProbeTimeoutMs, WELL_KNOWN_DIRS, } from "./discovery.js";
 export { SemverDashVProbe, semverRe } from "./probes.js";
 export { parseModelPicker, knownModels, defaultModel, isKnownModel, discoverModels, } from "./models.js";
+export { parsePermissionMode, normalizePermissionRung, } from "./permission.js";
 //# sourceMappingURL=index.js.map
