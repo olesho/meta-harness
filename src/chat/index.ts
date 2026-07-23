@@ -63,6 +63,14 @@ export {
 } from "./errors.ts";
 
 export {
+  type PermissionRung,
+  type PermissionModeSource,
+  type PermissionModeReading,
+  parsePermissionMode,
+  normalizePermissionRung,
+} from "./permission.ts";
+
+export {
   submitKeyForHarness,
   requiresPromptReadiness,
   readyForInput,

@@ -27,3 +27,10 @@ export {
   isKnownModel,
   discoverModels,
 } from "./models.ts";
+export {
+  type PermissionRung,
+  type PermissionModeSource,
+  type PermissionModeReading,
+  parsePermissionMode,
+  normalizePermissionRung,
+} from "./permission.ts";
