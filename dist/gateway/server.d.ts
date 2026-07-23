@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { type IncomingMessage, type ServerResponse } from "node:http";
-import { type ConversationEvent, type InputAnswer, type Options, type Store, type Turn } from "../chat/index.ts";
+import { type ConversationEvent, type InputAnswer, type Options, type PermissionModeReading, type Store, type Turn } from "../chat/index.ts";
 import type { Snapshot } from "../screen/screen.ts";
 import { Context } from "../internal/async/index.ts";
 import { type InputRequestDTO, type TurnDTO } from "./dto.ts";
@@ -16,6 +16,12 @@ export interface ConversationLike {
     answer(ctx: Context, requestID: string, ans: InputAnswer): Promise<void>;
     history(): Promise<Turn[]>;
     screenSnapshot(): Snapshot;
+    /**
+     * A PURE read of the permission ladder — no PTY write, no store mutation.
+     * `snap` is passed by the route so the reading and the staleness comparison
+     * come from ONE frame.
+     */
+    permissionMode(snap?: Snapshot): PermissionModeReading;
     close(ctx?: Context): Promise<void>;
 }
 /**
@@ -144,6 +150,18 @@ export declare class Server {
     private history;
     /** GET /v1/conversations/{id}/screen — a pure read; requires no token. */
     private screen;
+    /**
+     * GET /v1/conversations/{id}/permission-mode — a pure read; requires no
+     * token (it mutates nothing: no PTY write, no store write).
+     *
+     * ONE SNAPSHOT SERVES BOTH GENERATIONS. `Snapshot.generation` increments on
+     * every successful write/resize and claude repaints continuously, so calling
+     * `permissionMode()` and THEN `screenSnapshot()` would see a bumped
+     * generation from any byte arriving in between and report `stale: true` on a
+     * genuinely live read. Taking the frame once means the reading and the
+     * comparison can never disagree about which frame they saw.
+     */
+    private permissionMode;
     /** Look the entry up once at handler entry; 404 when absent (Go's lookup). */
     private lookup;
 }

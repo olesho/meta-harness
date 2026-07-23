@@ -143,6 +143,38 @@ export function screenResponse(s) {
         generation: s.generation,
     };
 }
+/**
+ * permissionModeResponse: a PermissionModeReading + the generation of the frame
+ * the handler measured → wire JSON.
+ *
+ * `currentGeneration` MUST come from the SAME snapshot the reading was taken
+ * from (`conv.permissionMode(snap)` / `snap.generation`). Sampling the screen
+ * twice would let a byte arriving in between bump the generation and report
+ * `stale: true` on a genuinely live read.
+ *
+ * See PermissionModeResponseDTO for the casing contract (keys snake_case,
+ * values verbatim from their own vocabulary) and for what `stale` does and does
+ * not mean.
+ */
+export function permissionModeResponse(r, currentGeneration) {
+    const out = {
+        observed: r.observed,
+        source: r.source,
+        generation: r.generation,
+        current_generation: currentGeneration,
+        stale: currentGeneration !== r.generation,
+        observed_at: r.observedAt.toISOString(),
+    };
+    if (r.requested)
+        out.requested = r.requested;
+    if (r.requestedRaw)
+        out.requested_raw = r.requestedRaw;
+    if (r.raw)
+        out.raw = r.raw;
+    if (r.collaboration)
+        out.collaboration = r.collaboration;
+    return out;
+}
 /** sessionDTO: MH Session → wire JSON. Ported from Go's toSessionDTO. */
 export function sessionDTO(s) {
     const out = {
