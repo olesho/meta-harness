@@ -187,6 +187,9 @@ chat/index.ts
   MemStore: class{appendTurn,createSession,getSession,listTurns,updateSession,updateTurn}
   Open: function
   Options: type
+  PermissionModeReading: type
+  PermissionModeSource: type
+  PermissionRung: type
   ReasonAuthRequired: string="auth_required: harness login expired or re-authentication required — renew the harness login"
   ReasonUsageLimited: string="usage_limit: harness usage or session limit reached — retry after the quota window resets"
   Reopen: function
@@ -214,7 +217,9 @@ chat/index.ts
   authRequired: function
   cleanHarnessEnv: function
   newMemStore: function
+  normalizePermissionRung: function
   onboardingWall: function
+  parsePermissionMode: function
   readyForInput: function
   requiresPromptReadiness: function
   resolveAdapter: function
@@ -224,6 +229,9 @@ discovery/index.ts
   DiscoverModelsOptions: type
   Info: type
   ModelInfo: type
+  PermissionModeReading: type
+  PermissionModeSource: type
+  PermissionRung: type
   Probe: type
   SemverDashVProbe: class{detect}
   WELL_KNOWN_DIRS: object{0,1,2,3}
@@ -234,7 +242,9 @@ discovery/index.ts
   isKnownModel: function
   knownModels: function
   lookup: function
+  normalizePermissionRung: function
   parseModelPicker: function
+  parsePermissionMode: function
   registerProbe: function
   resetCache: function
   resolvePath: function
