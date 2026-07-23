@@ -1,0 +1,56 @@
+{
+  "harness": "claude-code",
+  "binary_version": "2.1.218 (Claude Code)",
+  "recorded_at": "2026-07-23T09:13:48.852Z",
+  "cols": 120,
+  "rows": 40,
+  "extra_args": [],
+  "candidates": [
+    "\\x1b[Z",
+    "\\x1b[9;2u"
+  ],
+  "working": "\\x1b[Z",
+  "ready": true,
+  "log": [
+    {
+      "phase": "candidate",
+      "keys": "\\x1b[Z",
+      "changed": true
+    },
+    {
+      "phase": "candidate",
+      "keys": "\\x1b[9;2u",
+      "changed": true
+    },
+    {
+      "phase": "press",
+      "n": 1,
+      "changed": true
+    },
+    {
+      "phase": "press",
+      "n": 2,
+      "changed": true
+    },
+    {
+      "phase": "press",
+      "n": 3,
+      "changed": true
+    },
+    {
+      "phase": "press",
+      "n": 4,
+      "changed": true
+    },
+    {
+      "phase": "press",
+      "n": 5,
+      "changed": true
+    },
+    {
+      "phase": "press",
+      "n": 6,
+      "changed": true
+    }
+  ]
+}

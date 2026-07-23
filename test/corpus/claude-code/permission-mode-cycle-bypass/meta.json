@@ -1,0 +1,41 @@
+{
+  "harness": "claude-code",
+  "binary_version": "2.1.218",
+  "recorded_at": "2026-07-23T09:15:00.000Z",
+  "cols": 120,
+  "rows": 40,
+  "notes": "META-HARNESS-114. The RING-LENGTH corroboration half of the Shift+Tab capture: same probe as the sibling permission-mode-cycle recording, but launched with '--dangerously-skip-permissions'. MEASURED RING LENGTH: 5 — the session starts on 'bypass permissions on' and Shift+Tab walks bypass permissions -> auto -> manual -> accept edits -> plan -> bypass permissions -> auto -> manual -> accept edits, so the lap closes on press 4 and repeats. 'bypass permissions' IS on the ring here, i.e. a bypass-enabling launch flag ADDS a rung rather than merely pre-selecting one. THIS REFINES, AND DOES NOT CONTRADICT, the note on the META-HARNESS-109 permission-mode-bypass fixture ('bypass is NOT on the cycle'): that session was launched with '--permission-mode bypassPermissions' and, by its own meta, pressed NO keys, so it recorded the 4-ring measured from a NORMAL launch. What is newly measured here is that under '--dangerously-skip-permissions' the ring is 5. Whether the other two bypass-enabling flags ('--permission-mode bypassPermissions', '--allow-dangerously-skip-permissions') also produce a 5-ring was NOT probed — see not_measured. NO CODE DEPENDS ON EITHER NUMBER: the downstream loop terminates by lap detection with a flat backstop precisely so a 4-vs-5 ring, or a future sixth rung, needs no code change. Recorded as corroboration only. bytes.raw ENDS BEFORE TEARDOWN, as in the sibling recording.",
+  "mode": "scripted-probe",
+  "recorder": "test/corpus/tools/probe-shift-tab.ts (PTY bridge, src/wrapper/internal/pty.ts)",
+  "reproduce": "bun test/corpus/tools/probe-shift-tab.ts --out <dir> --bin claude --harness claude-code --presses 7 --candidates '\\x1b[Z' -- --dangerously-skip-permissions",
+  "launch_args": ["--dangerously-skip-permissions"],
+  "shift_tab_bytes_pinned": "\\x1b[Z",
+  "keystrokes": [
+    "\\x1b[Z x8 (1 candidate + 7 presses) — one rung per press, no exceptions"
+  ],
+  "measured_ring_length": 5,
+  "measured_ring_order": [
+    "bypass permissions on (shift+tab to cycle)",
+    "auto mode on (shift+tab to cycle)",
+    "manual mode on",
+    "accept edits on (shift+tab to cycle)",
+    "plan mode on (shift+tab to cycle)"
+  ],
+  "footer_per_screen": {
+    "screen-00-ready.txt": "⏵⏵ bypass permissions on (shift+tab to cycle)",
+    "screen-cand-_x1b_Z.txt": "⏵⏵ auto mode on (shift+tab to cycle)",
+    "screen-press-01.txt": "⏸ manual mode on",
+    "screen-press-02.txt": "⏵⏵ accept edits on (shift+tab to cycle)",
+    "screen-press-03.txt": "⏸ plan mode on (shift+tab to cycle)",
+    "screen-press-04.txt": "⏵⏵ bypass permissions on (shift+tab to cycle)",
+    "screen-press-05.txt": "⏵⏵ auto mode on (shift+tab to cycle)",
+    "screen-press-06.txt": "⏸ manual mode on",
+    "screen-press-07.txt": "⏵⏵ accept edits on (shift+tab to cycle)"
+  },
+  "not_measured": [
+    "Whether '--permission-mode bypassPermissions' and '--allow-dangerously-skip-permissions' also yield the 5-ring. Only '--dangerously-skip-permissions' was probed; the other two flags are assumed equivalent by name only, which is exactly the kind of assumption this fixture exists to avoid.",
+    "The kitty '\\x1b[9;2u' encoding was not re-probed in this session — it was already measured working in the sibling permission-mode-cycle recording, and this run pinned '\\x1b[Z' to keep the rung-per-press accounting unambiguous.",
+    "No 'Bypass Permissions mode' trust dialog was painted in this environment, so no dialog-dismissal keystrokes are in stdin.log; behaviour behind that dialog is unmeasured."
+  ],
+  "version_note": "claude --version reported '2.1.218 (Claude Code)'. This task does NOT bump src/versions/versions.json."
+}

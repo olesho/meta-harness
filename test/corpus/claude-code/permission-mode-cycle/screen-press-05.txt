@@ -1,0 +1,40 @@
+                                                                                                                        
+▗ ▗   ▖ ▖  Claude Code v2.1.218                                                                                         
+           Opus 4.8 (1M context) with high effort · Claude Max                                                          
+  ▘▘ ▝▝    ~/.orche/worktrees/agent-worker-96269776-c16b-4b33-a152-3666ca8b590f                                         
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                       ● high · /effort 
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯                                                                                                                       
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⚠ Transcript saving is off — inherited CLAUDE_CODE_CHILD_SESSION marker · restart with CLAUDE_CODE_FORCE_SESSION_PERS…
+  ~/.orche/worktrees/agent-worker-96269776-c16b-4b33-a152-3666ca8b590f (agent/META-HARNESS-114-96269776)                
+  ⏸ plan mode on (shift+tab to cycle)                                                                                   

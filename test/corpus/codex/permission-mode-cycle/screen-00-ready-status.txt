@@ -1,0 +1,40 @@
+│ Run npm install -g @openai/codex to update.     │                                                                     
+│                                                 │                                                                     
+│ See full release notes:                         │                                                                     
+│ https://github.com/openai/codex/releases/latest │                                                                     
+╰─────────────────────────────────────────────────╯                                                                     
+                                                                                                                        
+╭──────────────────────────────────────────────────────────╮                                                            
+│ >_ OpenAI Codex (v0.144.5)                               │                                                            
+│                                                          │                                                            
+│ model:     gpt-5.6-sol medium   /model to change         │                                                            
+│ directory: ~/…/worktrees/…76-c16b-4b33-a152-3666ca8b590f │                                                            
+╰──────────────────────────────────────────────────────────╯                                                            
+                                                                                                                        
+  Tip: Try the Codex App. Run 'codex app' or visit https://chatgpt.com/codex?app-landing-page=true                      
+                                                                                                                        
+• You have 3 usage limit resets available. Run /usage to use one.                                                       
+                                                                                                                        
+/status                                                                                                                 
+                                                                                                                        
+╭─────────────────────────────────────────────────────────────────────────────────────────────╮                         
+│  >_ OpenAI Codex (v0.144.5)                                                                 │                         
+│                                                                                             │                         
+│ Visit https://chatgpt.com/codex/settings/usage for up-to-date                               │                         
+│ information on rate limits and credits                                                      │                         
+│                                                                                             │                         
+│  Model:                gpt-5.6-sol (reasoning medium, summaries auto)                       │                         
+│  Directory:            ~/.orche/worktrees/agent-worker-96269776-c16b-4b33-a152-3666ca8b590f │                         
+│  Permissions:          Workspace (Ask for approval)                                         │                         
+│  Agents.md:            AGENTS.md                                                            │                         
+│  Account:              user@example.com (Plus)                                              │                         
+│  Collaboration mode:   Default                                                              │                         
+│  Session:              00000000-0000-7000-0000-000000000000                                 │                         
+│                                                                                             │                         
+│  Weekly limit:         [████████████████████] 100% left (resets 07:12 on 30 Jul)            │                         
+╰─────────────────────────────────────────────────────────────────────────────────────────────╯                         
+                                                                                                                        
+                                                                                                                        
+› Find and fix a bug in @filename                                                                                       
+                                                                                                                        
+  gpt-5.6-sol medium · ~/.orche/worktrees/agent-worker-96269776-c16b-4b33-a152-3666ca8b590f                             

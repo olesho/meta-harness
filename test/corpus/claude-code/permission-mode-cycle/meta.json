@@ -1,0 +1,46 @@
+{
+  "harness": "claude-code",
+  "binary_version": "2.1.218",
+  "recorded_at": "2026-07-23T09:14:47.000Z",
+  "cols": 120,
+  "rows": 40,
+  "notes": "META-HARNESS-114. THE Shift+Tab byte capture: the evidence that pins ClaudeCodeAdapter.permissionCycleKeys(). '\\x1b[Z' appeared NOWHERE in this repo's source before this task, and the sequence was NOT assumed — it was measured. Claude Code enables the kitty keyboard protocol unconditionally (which is why this repo's submit key is CSI 13 u and not '\\r'), so BOTH plausible encodings were probed in this single session: legacy back-tab '\\x1b[Z' AND the kitty encoding '\\x1b[9;2u'. RESULT: BOTH advance the ring by EXACTLY ONE rung — see stdin.log for the write order and the per-press screens for the footer after each. Because both work the choice is ours; the adapter pins '\\x1b[Z' because legacy back-tab is understood whether or not the kitty protocol has been negotiated at that moment (we write raw bytes into a PTY rather than acting as a terminal, so the wider-compatibility encoding is strictly safer). MEASURED RING LENGTH launched normally: 4 — auto -> manual -> accept edits -> plan -> auto, with the lap closing on press 2 and repeating exactly through press 6. 'bypass permissions' is NOT reachable by keystroke from a normal launch; see the sibling permission-mode-cycle-bypass recording, where it IS on the ring. NO CODE DEPENDS ON EITHER NUMBER — the downstream loop terminates by lap detection with a flat backstop — so the ring length is recorded here as corroboration only. Every rung paints a footer line INCLUDING the default the session launches in; note that '⏸ manual mode on' is the ONLY footer with NO '(shift+tab to cycle)' suffix, so a regex requiring that suffix silently fails to see it (the same trap META-HARNESS-109's permission-mode-manual fixture was landed for). The ' · ← for agents' tail the epic's table shows was NOT painted in this environment on 2.1.218 — matching the spelling_note on the META-HARNESS-109 fixtures. NOT rebakeable and not captured by record-pty: src/cli/screenbench-record.ts has no scripted-keystroke seam for Shift+Tab, and record-pty.ts writes only a prompt plus the submit key in probe mode while --interactive needs a human at a real terminal. Captured instead by test/corpus/tools/probe-shift-tab.ts, which reuses the SAME production seams record-pty does (PtyProcess from src/wrapper/internal/pty.ts, Screen from src/screen, readyForInput from src/chat/ready.ts) and scripts the presses itself. bytes.raw deliberately ENDS BEFORE TEARDOWN (the tool gates the tee before SIGTERM): on exit claude emits the alt-screen restore and pops the kitty protocol, and a stream ending with those replays as a BLANK screen.",
+  "mode": "scripted-probe",
+  "recorder": "test/corpus/tools/probe-shift-tab.ts (PTY bridge, src/wrapper/internal/pty.ts)",
+  "reproduce": "bun test/corpus/tools/probe-shift-tab.ts --out <dir> --bin claude --harness claude-code --presses 6",
+  "launch_args": [],
+  "shift_tab_bytes_measured": {
+    "\\x1b[Z": "advances one rung",
+    "\\x1b[9;2u": "advances one rung"
+  },
+  "shift_tab_bytes_pinned": "\\x1b[Z",
+  "keystrokes": [
+    "\\x1b[Z    (candidate 1) — auto -> manual",
+    "\\x1b[9;2u (candidate 2) — manual -> accept edits",
+    "\\x1b[Z    x6 (presses 1-6) — accept edits -> plan -> auto -> manual -> accept edits -> plan -> auto"
+  ],
+  "measured_ring_length": 4,
+  "measured_ring_order": [
+    "auto mode on (shift+tab to cycle)",
+    "manual mode on",
+    "accept edits on (shift+tab to cycle)",
+    "plan mode on (shift+tab to cycle)"
+  ],
+  "footer_per_screen": {
+    "screen-00-ready.txt": "⏵⏵ auto mode on (shift+tab to cycle)",
+    "screen-cand-_x1b_Z.txt": "⏸ manual mode on",
+    "screen-cand-_x1b_9_2u.txt": "⏵⏵ accept edits on (shift+tab to cycle)",
+    "screen-press-01.txt": "⏸ plan mode on (shift+tab to cycle)",
+    "screen-press-02.txt": "⏵⏵ auto mode on (shift+tab to cycle)",
+    "screen-press-03.txt": "⏸ manual mode on",
+    "screen-press-04.txt": "⏵⏵ accept edits on (shift+tab to cycle)",
+    "screen-press-05.txt": "⏸ plan mode on (shift+tab to cycle)",
+    "screen-press-06.txt": "⏵⏵ auto mode on (shift+tab to cycle)"
+  },
+  "not_measured": [
+    "Whether the kitty '\\x1b[9;2u' encoding stays accepted across claude versions — only 2.1.218 was probed, and only in one session.",
+    "Whether a Shift+Tab press is swallowed during claude's own startup window. The boot-window probe was run against codex only (see test/corpus/codex/permission-mode-cycle-boot-window); claude reached readyForInput() in ~1.2s here, leaving no window wide enough to script a press into reliably.",
+    "The ' · ← for agents' footer tail — absent in this environment, so whether it appears under other conditions (e.g. with agents configured) is unknown, not disproven."
+  ],
+  "version_note": "claude --version reported '2.1.218 (Claude Code)'. This task does NOT bump src/versions/versions.json."
+}

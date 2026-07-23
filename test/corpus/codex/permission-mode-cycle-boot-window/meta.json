@@ -1,0 +1,32 @@
+{
+  "harness": "codex",
+  "binary_version": "0.144.5",
+  "recorded_at": "2026-07-23T09:16:00.000Z",
+  "cols": 120,
+  "rows": 40,
+  "notes": "META-HARNESS-114, PROBE ITEM — the answer is recorded here; NO CODE IN THIS TASK REACTS TO IT. Question: is a Shift+Tab press SWALLOWED when it lands in codex's MCP-server boot window — the window in which '/plan' is refused with \"■ '/plan' is disabled while a task is in progress.\" even though the '›' composer is already painted? Nobody had probed this. ANSWER: YES, THE PRESS IS SWALLOWED. Method: one '\\x1b[Z' written at t=1546ms, with screen-boot-before-press.txt capturing the exact moment — it shows '• Booting MCP server: codex_apps (0s • esc to interrupt)' on the line directly above a painted '› Implement {feature}' composer, i.e. unambiguously inside the window in question. The readback then uses the authoritative surface: '/status' reports 'Collaboration mode:   Default' (screen-00-ready-status.txt). A press that had landed would have shown Plan, because the ring is a 2-cycle (see the sibling permission-mode-cycle recording) and this was the session's first press. IN-SESSION CONTROL, so the negative cannot be blamed on a dead PTY or a wrong encoding: after the boot window closed, two MORE '\\x1b[Z' presses were written into the SAME session and '/status' then reported 'Collaboration mode:   Default' again (screen-press-01-status.txt) — consistent with exactly TWO effective presses, not three. Had the boot-window press landed, three presses would have left the session on Plan. So the same bytes, over the same PTY, in the same session, worked after the window and did nothing inside it. Reproduced twice (an earlier run at the same 1500ms delay gave the identical result). CONSEQUENCE: none for this task. The downstream loop fails safely either way — a stall, never a silent wrong mode — so this is FOLLOW-UP TICKET material (the chat layer will want to hold the first permission-cycle press until the boot window closes, since readyForInput() alone does not gate it), NOT a change here. bytes.raw ENDS BEFORE TEARDOWN.",
+  "mode": "scripted-probe",
+  "recorder": "test/corpus/tools/probe-shift-tab.ts (PTY bridge, src/wrapper/internal/pty.ts)",
+  "reproduce": "bun test/corpus/tools/probe-shift-tab.ts --out <dir> --bin codex --harness codex --presses 1 --candidates '\\x1b[Z' --boot-keys '\\x1b[Z' --status --press-before-ready --boot-press-delay 1500 --ready-timeout 15000",
+  "launch_args": [],
+  "probe_question": "Is a Shift+Tab press swallowed during codex's MCP-server boot window?",
+  "probe_answer": "yes — swallowed",
+  "boot_window_evidence": "screen-boot-before-press.txt line: '• Booting MCP server: codex_apps (0s • esc to interrupt)' immediately above the painted '›' composer",
+  "keystrokes": [
+    "\\x1b[Z at t=1546ms — INSIDE the MCP boot window (swallowed)",
+    "/status + \\x1b[13u — readback: Collaboration mode: Default (proves the swallow)",
+    "\\x1b[Z x2 after the window closed — the in-session control",
+    "/status + \\x1b[13u — readback: Collaboration mode: Default (2 effective presses, an even lap)"
+  ],
+  "collaboration_mode_per_screen": {
+    "screen-00-ready-status.txt": "Collaboration mode:   Default   (after the boot-window press — it did NOT take)",
+    "screen-press-01-status.txt": "Collaboration mode:   Default   (after 2 further presses — consistent with 2 effective, not 3)"
+  },
+  "not_measured": [
+    "The exact instant the window closes. The press was placed at a fixed 1500ms delay because that reliably lands inside it on this machine; the boundary was not bisected, so 'how long to wait' has no measured answer here.",
+    "Whether the press is DISCARDED or merely QUEUED-then-dropped. Only the end state was observed, via /status; the two are indistinguishable from this recording.",
+    "Whether claude-code has an equivalent swallow window. Not probed — claude reached readyForInput() in ~1.2s, leaving no window wide enough to script a press into reliably.",
+    "The '/plan is disabled while a task is in progress' refusal itself was NOT reproduced in this recording — the boot window was identified by the 'Booting MCP server' line instead. The refusal message is quoted from the task description, not from these bytes."
+  ],
+  "version_note": "codex --version reported 'codex-cli 0.144.5'."
+}
