@@ -1827,6 +1827,18 @@ const CODEX_BOOT_MARKER = "Booting MCP server";
 const CODEX_SETTLE_POLLS = 4;
 
 /**
+ * How long to dwell after a SUCCESSFUL codex collaboration switch before writing
+ * again.
+ *
+ * Entering Plan makes codex re-select the model and print
+ * `• Model changed to <model> <effort> for Plan mode.` — real work behind a
+ * composer that is already painted and already parses. The boot-window fixture's
+ * lesson generalises: "the composer is drawn" is not "the composer will consume
+ * my keystroke", and the only honest response is to wait.
+ */
+const CODEX_POST_SWITCH_DWELL = 3000;
+
+/**
  * Polls until the codex `/status` box carries a legible `Collaboration mode:`
  * row AND the MCP boot window has closed, the session dies, or `bound` elapses.
  *
@@ -2555,10 +2567,12 @@ describe("conformance: codex mid-session switch (CONFORMANCE=1)", () => {
               codexReport(conv, rig, "default -> plan"),
           ).toBe(1);
 
-          // Settle again before the second write. Switching to Plan makes codex
-          // re-announce ("Model changed to … for Plan mode") and repaint the
-          // composer; the same reasoning as CODEX_SETTLE_POLLS applies to every
-          // write, not just the first.
+          // Settle again before the second write. Entering Plan is not a pure
+          // repaint: codex RE-SELECTS THE MODEL for it and announces the change
+          // ("Model changed to … for Plan mode"), so the return press must not
+          // race that work. The fixed dwell covers the announcement; the box
+          // predicate then covers the repaint, exactly as before the first press.
+          await new Promise((r) => setTimeout(r, CODEX_POST_SWITCH_DWELL));
           expect(
             await awaitCodexBox(conv, rig, STATUS_PAINT_BOUND),
             `codex ${version}: the session did not settle back to a quiet, ready composer ` +
