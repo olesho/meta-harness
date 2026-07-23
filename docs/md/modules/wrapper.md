@@ -20,6 +20,7 @@ import {
   ErrNone, ErrAuth, /* … */ errorClassString, type ErrorClass,
   ErrInvalidConfig, ErrBinaryNotFound, isBinaryNotFound, validateConfig, type Config,
   argsWithHarnessEffort, harnessSupportsEffort, isSupportedEffort, argsWithHarnessModel,
+  isSupportedPermissionMode, harnessSupportsPermissionMode, argsWithHarnessPermissionMode,
   ErrPTYAllocation, ErrPTYRead,
   trace,
 } from "meta-harness/wrapper"
@@ -63,6 +64,7 @@ interface Config {
   env?: string[]; // environment as "KEY=VALUE" entries
   effort?: string; // low | medium | high | xhigh | max
   model?: string; // model override
+  permissionMode?: string; // plan | manual | ask | auto | bypass (+ native spellings)
   workingDir?: string;
   stdin?: unknown; // string | Uint8Array | async iterable, streamed to the PTY
 
@@ -306,6 +308,76 @@ argsWithHarnessModel(harness: string, args: string[], model: string): string[]
 - Claude Code: `--effort <level>`, `--model <m>`.
 - Codex: `-c model_reasoning_effort="<level>"` (maps `max → xhigh`), `-c model="<m>"`.
 - Cursor / OpenCode / pi: no effort or model translation.
+
+---
+
+## Permission mode
+
+The third per-harness launch knob, beside effort and model. `Config.permissionMode` names
+how much the guest may do without being asked, and the wrapper translates it into each
+harness's own permission argv at launch.
+
+```ts
+isSupportedPermissionMode(harness: string, mode: string): boolean
+harnessSupportsPermissionMode(harness: string): boolean   // true for claude/claude-code, codex
+argsWithHarnessPermissionMode(harness: string, args: string[], mode: string): string[]
+```
+
+`isSupportedPermissionMode` takes the **harness**, deliberately unlike
+`isSupportedEffort(effort)`: the accepted vocabulary genuinely differs per harness, so a
+harness-blind predicate could only be the union of both — and would accept `dontAsk` on
+Codex.
+
+### The five rungs, least to most permissive
+
+`plan` → `manual` → `ask` → `auto` → `bypass`.
+
+**`ask` sits _above_ `manual`.** `manual` prompts before every edit; `ask` auto-accepts
+edits and only asks about the rest. The name reads backwards, which is the single most
+common misreading of this ladder — the ordering above is the authority, not the word.
+
+### Per-harness translation
+
+| Rung     | Claude Code                          | Codex                                    |
+| -------- | ------------------------------------ | ---------------------------------------- |
+| `plan`   | `--permission-mode plan`             | `-s read-only -a untrusted`              |
+| `manual` | `--permission-mode manual`           | `-s workspace-write -a untrusted`        |
+| `ask`    | `--permission-mode acceptEdits`      | `-s workspace-write -a on-request`       |
+| `auto`   | `--permission-mode auto`             | `-s workspace-write -a never`            |
+| `bypass` | `--permission-mode bypassPermissions` | `-s danger-full-access -a never`        |
+
+Codex argv is `-s <sandbox> [-a <policy>]` — flags, never `-c sandbox_mode=…`.
+
+**Native spellings are also accepted as input.** Claude Code additionally takes its own
+`acceptEdits` (same argv as `ask`), `bypassPermissions` (same argv as `bypass`) and
+`dontAsk`. Codex additionally takes its three native **sandbox** values — `read-only`,
+`workspace-write`, `danger-full-access` — as a **single-axis** request: those emit
+`-s <value>` only, leaving the approval axis to whatever `~/.codex/config.toml` holds. A
+native sandbox value names half a posture, which is a valid request rather than an error.
+Matching is case-sensitive; a wrong-case value is rejected loudly by `validateConfig`
+rather than guessed.
+
+- Unset or `""` injects nothing — the harness's own default wins.
+- **An explicit flag or config override already present in `args` wins** and suppresses
+  injection entirely — the same rule effort and model follow. It is all-or-nothing per
+  harness, both axes at once: if the caller pinned only the sandbox, the wrapper does not
+  half-inject an approval policy on top. On Claude Code the guard covers
+  `--permission-mode` and the skip-permissions flags; on Codex it covers `-s`/`--sandbox`,
+  `-a`/`--ask-for-approval`, `-p`/`--profile`,
+  `--dangerously-bypass-approvals-and-sandbox`, and the `sandbox_mode` / `approval_policy`
+  config keys in every `-c` spelling. (`-p` is guarded on Codex and **never** on Claude
+  Code, where it is `--print`.)
+- Codex `plan` is honestly **the launch half only**: `-s read-only -a untrusted` pins the
+  permissions axis, but the collaboration axis stays unset. It is _not_ launch-time parity
+  with Claude Code's `plan`.
+- Cursor / OpenCode / pi: no permission-mode translation;
+  `harnessSupportsPermissionMode` is `false` and `validateConfig` rejects a
+  `permissionMode` on them.
+
+Vocabulary probed at claude-code 2.1.217 / codex-cli 0.144.5. The rationale for the Codex
+encoding — why `-s`/`-a` and not `-c`, why the guard is a strict superset of what we emit,
+and why the rungs are ordered as they are — lives in
+[`docs/design/permission-argv-parity.md`](../../design/permission-argv-parity.md).
 
 ---
 
