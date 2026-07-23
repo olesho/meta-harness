@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { type IncomingMessage, type ServerResponse } from "node:http";
-import { type ConversationEvent, type InputAnswer, type Options, type Turn } from "../chat/index.ts";
+import { type ConversationEvent, type InputAnswer, type Options, type Store, type Turn } from "../chat/index.ts";
 import type { Snapshot } from "../screen/screen.ts";
 import { Context } from "../internal/async/index.ts";
 import { type InputRequestDTO, type TurnDTO } from "./dto.ts";
@@ -18,8 +18,19 @@ export interface ConversationLike {
     screenSnapshot(): Snapshot;
     close(ctx?: Context): Promise<void>;
 }
-/** Opens a Conversation for a decoded open request. Injectable for tests. */
-export type Opener = (opts: Options) => Promise<ConversationLike>;
+/**
+ * Opens a Conversation for a decoded open request. Injectable for tests.
+ *
+ * `store` is OPTIONAL here, unlike on `Options`: it is the one required field a
+ * JSON-decoding handler can never supply (a live object with no wire shape), and
+ * defaultOpener fills it in. Widening the parameter this way lets openConv pass
+ * its literal WITHOUT an `as Options` cast, which is what keeps TypeScript's
+ * excess-property check alive on that literal — a misspelled or missing option
+ * field is a compile error instead of a silently dropped property.
+ */
+export type Opener = (opts: Omit<Options, "store"> & {
+    store?: Store;
+}) => Promise<ConversationLike>;
 /** Mint an opaque 16-byte hex token (control tokens; matches Go's `newToken`). */
 export declare function newToken(): string;
 /** Typed SSE envelope; discriminated by `type` (Go's eventDTO). */
@@ -67,6 +78,33 @@ export declare class Server {
      * gracefulQuit and returns faster.
      */
     private runTurn;
+    /**
+     * Pre-check `effort` against the wrapper's own predicates. Returns false when
+     * a 400 has been written and the handler must stop.
+     *
+     * Falsy skips, mirroring validateConfig's `if (cfg.effort && cfg.effort !== "")`.
+     * Order is VALUE-then-harness here, matching that same block, so this
+     * pre-check can never contradict the wrapper it fronts. (The permission-mode
+     * guard below is deliberately the other way round, for the same reason.)
+     */
+    private checkEffort;
+    /**
+     * Pre-check `permission_mode` against the wrapper's own predicates. Returns
+     * false when a 400 has been written and the handler must stop.
+     *
+     * Falsy skips: `""` is indistinguishable from omitted, exactly as the wrapper
+     * treats it. Order is HARNESS-then-value, matching the wrapper's permission
+     * validation, so `{"harness":"opencode","permission_mode":"plan"}` reports the
+     * harness problem rather than a confusing value one.
+     *
+     * Both messages are deliberately HARNESS-AGNOSTIC — they never name the
+     * supported set. The wrapper's own errors do name it, because that is where
+     * the vocabulary is defined; restating it under src/gateway/ would re-freeze
+     * the very table this pre-check delegates, and it would go stale silently the
+     * moment a third harness is added. Semantically aligned, textually agnostic —
+     * please do not "fix" this back.
+     */
+    private checkPermissionMode;
     /** POST /v1/conversations — open. Uses a BACKGROUND context (see defaultOpener). */
     private openConv;
     /** GET /v1/conversations — list. */

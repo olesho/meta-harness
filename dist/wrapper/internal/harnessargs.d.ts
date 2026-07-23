@@ -1,4 +1,9 @@
-/** Normalize a harness name for switch matching ("claude-code" → matches "claude"). */
+/**
+ * Trim + lowercase a harness name for switch matching. It performs NO aliasing:
+ * "claude-code" does not fold into "claude". Callers that must accept both
+ * spellings list `case "claude": case "claude-code":` explicitly (see effort.ts
+ * and permission.ts).
+ */
 export declare function normHarness(h: string): string;
 export declare function prependArgs(args: string[], ...prefix: string[]): string[];
 export declare function argsContainFlag(args: string[], flag: string): boolean;
