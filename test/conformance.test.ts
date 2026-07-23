@@ -1746,8 +1746,8 @@ function isolatedCodexHome(rig: Rig): string[] {
  * readyForInput() alone is not that predicate on codex: the recorded
  * boot-window fixture shows the `›` composer painted, readyForInput() true, and
  * the keystroke swallowed anyway. See CODEX_BOOT_MARKER — the marker is required
- * ABSENT here for exactly that reason, on two consecutive polls so the write
- * does not race the repaint that cleared it.
+ * ABSENT here for exactly that reason, and CODEX_SETTLE_POLLS for why the clean
+ * state must HOLD rather than merely occur.
  */
 async function awaitReady(
   conv: Conversation,
@@ -1756,6 +1756,7 @@ async function awaitReady(
   bound: number,
 ): Promise<boolean> {
   const until = Date.now() + bound;
+  const need = harness === "codex" ? CODEX_SETTLE_POLLS : 1;
   let clean = 0;
   for (;;) {
     const frame = conv.screenSnapshot().text;
@@ -1763,7 +1764,7 @@ async function awaitReady(
       readyForInput(harness, frame) &&
       (harness !== "codex" || !frame.includes(CODEX_BOOT_MARKER));
     clean = ok ? clean + 1 : 0;
-    if (clean >= 2) return true;
+    if (clean >= need) return true;
     if (rig.fatal() !== "" || Date.now() >= until) return false;
     await new Promise((r) => setTimeout(r, READY_POLL_INTERVAL));
   }
@@ -1812,6 +1813,20 @@ async function awaitFooterReading(
 const CODEX_BOOT_MARKER = "Booting MCP server";
 
 /**
+ * How many consecutive clean polls a codex session must show before this file
+ * writes into it.
+ *
+ * ONE is not enough, and neither is two: the boot marker appears AFTER Open
+ * returns, not before it. Measured on the same 2026-07-23 run — Open returned at
+ * 1686 ms onto a frame with `readyForInput` FALSE and no boot marker, and the
+ * marker only painted at 1938 ms, staying up to ~4.2 s. A predicate satisfied by
+ * the first frames therefore walks straight into the window it exists to avoid.
+ * Requiring the clean state to HOLD across four polls (≈1 s at
+ * STATUS_POLL_INTERVAL) plus `readyForInput` covers that gap with margin.
+ */
+const CODEX_SETTLE_POLLS = 4;
+
+/**
  * Polls until the codex `/status` box carries a legible `Collaboration mode:`
  * row AND the MCP boot window has closed, the session dies, or `bound` elapses.
  *
@@ -1820,9 +1835,9 @@ const CODEX_BOOT_MARKER = "Booting MCP server";
  * parse land, and `Permissions:` parses two rows ABOVE `Collaboration mode:` in
  * a box that paints top-down. The boot half is CODEX_BOOT_MARKER's.
  *
- * Both are required on TWO CONSECUTIVE polls: the boot marker disappearing is a
- * repaint like any other, and settling on the first clean frame would race the
- * write against it.
+ * All of it — box, composer, closed boot window — must hold across
+ * CODEX_SETTLE_POLLS consecutive polls; see that constant for why one clean
+ * frame is actively misleading here.
  */
 async function awaitCodexBox(
   conv: Conversation,
@@ -1837,10 +1852,11 @@ async function awaitCodexBox(
     const ok =
       frame.includes(CODEX_BANNER) &&
       !frame.includes(CODEX_BOOT_MARKER) &&
+      readyForInput("codex", frame) &&
       reading !== null &&
       reading.collaboration !== "unknown";
     clean = ok ? clean + 1 : 0;
-    if (clean >= 2) return true;
+    if (clean >= CODEX_SETTLE_POLLS) return true;
     if (rig.fatal() !== "" || Date.now() >= until) return false;
     await new Promise((r) => setTimeout(r, STATUS_POLL_INTERVAL));
   }
@@ -2534,6 +2550,17 @@ describe("conformance: codex mid-session switch (CONFORMANCE=1)", () => {
               codexReport(conv, rig, "default -> plan"),
           ).toBe(1);
 
+          // Settle again before the second write. Switching to Plan makes codex
+          // re-announce ("Model changed to … for Plan mode") and repaint the
+          // composer; the same reasoning as CODEX_SETTLE_POLLS applies to every
+          // write, not just the first.
+          expect(
+            await awaitCodexBox(conv, rig, STATUS_PAINT_BOUND),
+            `codex ${version}: the session did not settle back to a quiet, ready composer ` +
+              `after the first toggle, so the second one would be written blind.\n` +
+              codexReport(conv, rig, "settle between toggles"),
+          ).toBe(true);
+
           // → Default. The OTHER direction, asserted separately: a driver that
           // could only leave Default would pass a one-way check forever.
           const { ctx: toDefault, cancel: cancelDefault } =
@@ -2883,6 +2910,16 @@ describe("conformance: codex mid-session switch (CONFORMANCE=1)", () => {
           } finally {
             cancel();
           }
+          // Let the refresh's own repaint settle before typing. This does NOT
+          // clear the box — nothing does, and leaving it on screen is the whole
+          // point of the case — it only stops the prompt racing the frame the
+          // `/status` burst is still painting.
+          expect(
+            await awaitCodexBox(conv, rig, STATUS_PAINT_BOUND),
+            `codex ${version}: the session did not settle back to a quiet, ready composer ` +
+              `after the refresh, so the prompt would be typed blind.\n` +
+              codexReport(conv, rig, "settle after refresh"),
+          ).toBe(true);
           // Same control window: the refresh leaves a `/status` box on screen and
           // the very next turn is the one that could scrape it.
           await conv.send(rig.ctx, PROMPT);
