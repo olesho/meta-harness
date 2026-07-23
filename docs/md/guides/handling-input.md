@@ -281,7 +281,7 @@ Do not confuse it with the launch-time
 [`permissionMode`](../modules/wrapper.md#permission-mode) knob, which pins the same posture
 in argv before the harness starts. The two really do interact: answering **this** dialog
 writes the chosen preset to `~/.codex/config.toml` **globally**, for every later session,
-whereas the `-c` overrides and flags the launch knob emits are **per-invocation** — which
+whereas the flags the launch knob emits are **per-invocation** — which
 is exactly why pinning the permissions axis at launch is the deterministic way to get a
 known posture, whatever an earlier session wrote into the global config file.
 
