@@ -89,8 +89,20 @@ and deliberately **not restated here**, so the two docs cannot drift.
 
 ## Auto-accept trust
 
-There is **no `--auto-accept` wrapper flag.** Auto-accept-trust is not an operator toggle
-on this CLI; it is a one-shot **input policy**. The one-shot path installs it automatically
-via `AutoAcceptTrust` ([`src/oneshot/oneshot.ts`](../../../src/oneshot/oneshot.ts)), which
-mirrors Go's `run.go` `AUTO_ACCEPT_TRUST` input policy and is applied in unattended
-contexts (the one-shot loop and the gateway) rather than being flipped per invocation.
+There is **no `--auto-accept` wrapper flag.** That much hasn't changed. But `--permission-mode`
+**is** an operator toggle, so it's worth being precise about how the two relate — they operate
+at different points in the launch and answer different questions:
+
+- `--permission-mode` is a **launch-arg translation**: it picks the rung and is baked into the
+  harness's argv before the PTY ever starts. See [`wrapper` › Permission
+  mode](wrapper.md#permission-mode) for the rung → flag mapping (not restated here).
+- `AutoAcceptTrust` ([`src/oneshot/oneshot.ts`](../../../src/oneshot/oneshot.ts)) is a **runtime
+  input policy**: it answers a `trust_prompt` dialog that appears after the harness is already
+  running, mirroring Go's `run.go` `AUTO_ACCEPT_TRUST` policy. It is applied in unattended
+  contexts (the one-shot loop and the gateway) rather than being flipped per invocation.
+
+These two are coupled: selecting the most permissive rung on claude paints a blocking
+"Bypass Permissions" dialog on a fresh `HOME`, and the launch path installs a default
+`trust_prompt` answer to dismiss it — but **only** when the caller supplied no `trust_prompt`
+disposition of its own. A caller-supplied input policy always wins over that default, the
+same way an explicit one-shot `AutoAcceptTrust` already takes precedence over nothing.

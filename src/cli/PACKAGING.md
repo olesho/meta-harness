@@ -9,7 +9,7 @@ This note documents what the image-build ticket (orchestrator side) must materia
 A thin wrapper around the shared one-shot loop (`meta-harness/oneshot`):
 
 - prompt on **stdin** → clean reply on **stdout**
-- grammar `run [--effort E] [--model M] <name> -- <harness args...>`
+- grammar `run [--effort E] [--model M] [--permission-mode P] <name> -- <harness args...>`
 - exit codes matching the orchestrator's `packages/agent/src/harness/headless.ts` parser:
   `0` ok · `1` errored/fatal/stdin-fail · `2` usage/resolve/empty-prompt ·
   `124` deadline (+ the literal stderr line `harness-wrapper run: context
