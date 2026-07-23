@@ -320,6 +320,7 @@ async function runForeground(
       trace: emitter,
       effort: parsed.effort,
       model: parsed.model,
+      permissionMode: parsed.permissionMode,
     };
 
     let sess: Session;

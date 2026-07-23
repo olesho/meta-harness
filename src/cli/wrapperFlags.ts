@@ -18,6 +18,7 @@ export interface HarnessWrapperArgs {
   traceStderr: boolean;
   effort: string;
   model: string;
+  permissionMode: string;
   /**
    * Requests the wrapper spawn the run inside a detached tmux session named
    * mh-<value> and exit immediately after `tmux new-session -d` succeeds.
@@ -82,6 +83,16 @@ const FLAG_DEFS: readonly FlagDef[] = [
     },
   },
   {
+    name: "permission-mode",
+    type: "string",
+    def: "",
+    usage:
+      "launch-time permission mode for supported harnesses (plan, manual, ask, auto, bypass; mutually exclusive rungs)",
+    set: (a, v) => {
+      a.permissionMode = v;
+    },
+  },
+  {
     name: "tmux-session",
     type: "string",
     def: "",
@@ -119,6 +130,7 @@ function emptyArgs(): HarnessWrapperArgs {
     traceStderr: false,
     effort: "",
     model: "",
+    permissionMode: "",
     tmuxSession: "",
     tmuxChild: "",
     harnessName: "",

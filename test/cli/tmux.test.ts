@@ -14,6 +14,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 
 import {
+  buildReexecArgv,
   requireTmux,
   resolveTracePath,
   runTmuxKill,
@@ -76,6 +77,7 @@ function baseArgs(overrides: Partial<HarnessWrapperArgs>): HarnessWrapperArgs {
     traceStderr: false,
     effort: "",
     model: "",
+    permissionMode: "",
     tmuxSession: "",
     tmuxChild: "",
     harnessName: "claude",
@@ -100,6 +102,82 @@ function captureStdout(run: () => void): string {
   }
   return captured;
 }
+
+// No tmux binary required: buildReexecArgv is the pure argv-construction seam
+// extracted out of runTmuxSpawn precisely so the forwarding contract (every
+// launch-time knob survives the detached re-exec) is testable hermetically.
+describe("buildReexecArgv", () => {
+  const TRACE = "/tmp/t.ndjson";
+
+  function argvFor(overrides: Partial<HarnessWrapperArgs>): string[] {
+    return buildReexecArgv(
+      baseArgs({ tmuxSession: "sess", ...overrides }),
+      TRACE,
+    );
+  }
+
+  test("baseline shape: --tmux-child, --trace-file, harness name, -- , harness args", () => {
+    expect(argvFor({ harnessArgs: ["-p", "hi"] })).toEqual([
+      process.execPath,
+      process.argv[1] ?? "",
+      "--tmux-child",
+      "sess",
+      "--trace-file",
+      TRACE,
+      "claude",
+      "--",
+      "-p",
+      "hi",
+    ]);
+  });
+
+  test("forwards --permission-mode as an adjacent pair, before the harness name", () => {
+    const argv = argvFor({ permissionMode: "plan" });
+    const i = argv.indexOf("--permission-mode");
+    expect(i).toBeGreaterThan(-1);
+    expect(argv[i + 1]).toBe("plan");
+    expect(i).toBeLessThan(argv.indexOf("claude"));
+  });
+
+  test("omits --permission-mode entirely when empty", () => {
+    expect(argvFor({})).not.toContain("--permission-mode");
+  });
+
+  test("forwards effort, model and permission mode together, all before the harness name", () => {
+    const argv = argvFor({
+      effort: "high",
+      model: "opus",
+      permissionMode: "bypass",
+      harnessArgs: ["-p", "hi"],
+    });
+    expect(argv).toEqual([
+      process.execPath,
+      process.argv[1] ?? "",
+      "--tmux-child",
+      "sess",
+      "--trace-file",
+      TRACE,
+      "--effort",
+      "high",
+      "--model",
+      "opus",
+      "--permission-mode",
+      "bypass",
+      "claude",
+      "--",
+      "-p",
+      "hi",
+    ]);
+  });
+
+  test("a flag-shaped harness arg after -- is not mistaken for a forwarded wrapper flag", () => {
+    const argv = argvFor({ harnessArgs: ["--permission-mode", "nope"] });
+    // The only --permission-mode present is the harness's own, after the separator.
+    expect(argv.indexOf("--permission-mode")).toBeGreaterThan(
+      argv.indexOf("--"),
+    );
+  });
+});
 
 describe("runTmuxSpawn — --tmux-session validation", () => {
   test("rejects an invalid session name (exit 2) before ever invoking tmux or writing a trace-file path", () => {

@@ -1,5 +1,6 @@
 --effort <string> = "" : reasoning effort for supported harnesses (low, medium, high, xhigh, max)
 --model <string> = "" : model id for supported harnesses (claude --model, codex -c model)
+--permission-mode <string> = "" : launch-time permission mode for supported harnesses (plan, manual, ask, auto, bypass; mutually exclusive rungs)
 --tmux-child <string> = "" : internal: in-pane re-exec marker; do not set manually
 --tmux-session <string> = "" : spawn the run inside a detached tmux session named mh-<value> and exit immediately
 --trace-file <string> = "" : path to write trace events as NDJSON (default: trace events are dropped)

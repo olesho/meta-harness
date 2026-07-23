@@ -83,12 +83,32 @@ describe("parseHarnessWrapperArgs", () => {
     const { result, err } = parseHarnessWrapperArgs([
       "--effort=low",
       "--model=x",
+      "--permission-mode=plan",
       "claude",
       "--",
     ]);
     expect(err).toBeNull();
     expect(result?.effort).toBe("low");
     expect(result?.model).toBe("x");
+    expect(result?.permissionMode).toBe("plan");
+  });
+
+  test("--permission-mode in the separated form", () => {
+    const { result, err } = parseHarnessWrapperArgs([
+      "--permission-mode",
+      "bypass",
+      "claude",
+      "--",
+    ]);
+    expect(err).toBeNull();
+    expect(result?.permissionMode).toBe("bypass");
+    expect(result?.harnessName).toBe("claude");
+  });
+
+  test("permissionMode defaults to the empty string", () => {
+    const { result, err } = parseHarnessWrapperArgs(["claude", "--"]);
+    expect(err).toBeNull();
+    expect(result?.permissionMode).toBe("");
   });
 
   test("--trace-stderr boolean flag", () => {

@@ -77,6 +77,35 @@ export function resolveTracePath(
 }
 
 /**
+ * Builds the pane command tmux re-execs: this same entry point in --tmux-child
+ * mode, carrying the resolved trace path plus every launch-time knob the parent
+ * parsed. Any wrapper flag that shapes the run MUST be forwarded here or a
+ * `--tmux-session` invocation silently loses it. Mirrors Go's reexec argv shape
+ * (tmux.go:66-90); process.execPath + process.argv[1] stand in for Go's
+ * single-binary os.Executable(). Pure and exported so the argv contract is
+ * testable without a tmux binary.
+ */
+export function buildReexecArgv(
+  args: HarnessWrapperArgs,
+  tracePath: string,
+): string[] {
+  const reexec = [
+    process.execPath,
+    process.argv[1] ?? "",
+    "--tmux-child",
+    args.tmuxSession,
+    "--trace-file",
+    tracePath,
+  ];
+  if (args.effort !== "") reexec.push("--effort", args.effort);
+  if (args.model !== "") reexec.push("--model", args.model);
+  if (args.permissionMode !== "")
+    reexec.push("--permission-mode", args.permissionMode);
+  reexec.push(args.harnessName, "--", ...args.harnessArgs);
+  return reexec;
+}
+
+/**
  * Parent half of `meta-harness-wrapper --tmux-session <name> -- <harness> ...`:
  * resolves the trace path, re-execs this same binary with --tmux-child set
  * inside a detached tmux session, and exits. binPath is not needed here — the
@@ -116,20 +145,8 @@ export function runTmuxSpawn(args: HarnessWrapperArgs): number {
   }
 
   // Re-exec: same entry point (node + this script), --tmux-child mode with
-  // the resolved trace path. tmux runs this as the pane command. Mirrors Go's
-  // reexec argv shape (tmux.go:66-90); process.execPath + process.argv[1]
-  // stand in for Go's single-binary os.Executable().
-  const reexec = [
-    process.execPath,
-    process.argv[1] ?? "",
-    "--tmux-child",
-    args.tmuxSession,
-    "--trace-file",
-    tracePath,
-  ];
-  if (args.effort !== "") reexec.push("--effort", args.effort);
-  if (args.model !== "") reexec.push("--model", args.model);
-  reexec.push(args.harnessName, "--", ...args.harnessArgs);
+  // the resolved trace path. tmux runs this as the pane command.
+  const reexec = buildReexecArgv(args, tracePath);
 
   const spawnResult = spawnSync(
     "tmux",
