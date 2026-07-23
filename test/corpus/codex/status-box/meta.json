@@ -1,0 +1,38 @@
+{
+  "harness": "codex",
+  "binary_version": "0.144.5",
+  "recorded_at": "2026-07-23T09:17:37Z",
+  "cols": 120,
+  "rows": 40,
+  "hand_recorded": true,
+  "recorder": "test/corpus/tools/record-pty.ts (probe mode, --prompt /status --submit csi13u)",
+  "launch_flags": [],
+  "keystrokes": ["1.054s prompt /status", "1.956s submit \\x1b[13u"],
+  "row_labels": [
+    "Model:",
+    "Directory:",
+    "Permissions:",
+    "Agents.md:",
+    "Account:",
+    "Collaboration mode:",
+    "Session:",
+    "Weekly limit:"
+  ],
+  "permissions_value": "Workspace (Ask for approval)",
+  "collaboration_value": "Default",
+  "widest_status_row_cols": 83,
+  "status_box_outer_cols": 84,
+  "intrinsic_row_cols": {
+    "Model:": 69,
+    "Directory:": 61,
+    "Permissions:": 54,
+    "Agents.md:": 32,
+    "Account:": 49,
+    "Collaboration mode:": 33,
+    "Session:": 62,
+    "Weekly limit:": 83
+  },
+  "codex_home": "isolated mkdtemp CODEX_HOME; ~/.codex/auth.json copied in, ~/.codex/config.toml NOT copied. A minimal config.toml holding ONLY [projects.\"<tmp cwd>\"] trust_level = \"trusted\" was written into the ISOLATED home so the recorder (which has no trust-dialog answering seam, unlike Conversation.Open + AutoAcceptTrust) could reach a ready composer. It carries no approval/sandbox keys, so the reading below still reflects codex's own defaults.",
+  "redacted": "The live 'Account:' row carried the recording operator's ChatGPT login. It is replaced byte-for-byte with 'user@example.com' (16 chars in, 16 chars out), so every column of the box renders exactly as captured. This is the ONLY edit to bytes.raw. bytes.raw contains no alt-screen enter/exit (codex 0.144.5 renders inline) and no credential material.",
+  "notes": "FIRST FLAGLESS /status capture in the corpus, and the deliverable of the META-HARNESS-155 pre-flight probe (probed 2026-07-23 against live codex-cli 0.144.5). OWNERSHIP: this fixture belongs to META-HARNESS-155, not META-HARNESS-102 — the parent ticket's text was ambiguous about which subtask owed the first /status capture, and it is hereby assigned here. It complements the META-HARNESS-110 set (status-default / status-manual / status-auto / status-bypass / status-readonly-*), every one of which passes EXPLICIT -s/-a flags; this one passes NONE, so it freezes what codex renders when nothing is requested. FINDING — the epic's premise is REFUTED: the row labels actually rendered, top to bottom, are 'Model:', 'Directory:', 'Permissions:', 'Agents.md:', 'Account:', 'Collaboration mode:', 'Session:', 'Weekly limit:'. 'Permissions:' IS present, and is present under BOTH launches the probe drove — flagless (this recording) AND '-s workspace-write -a on-request', both rendering the identical value 'Workspace (Ask for approval)'. Identical because that pair IS codex's default posture, so it does not discriminate; a third probe launch, '-s read-only -a never', rendered 'Read Only (never)' (parsed rung 'plan'), proving the row DOES track launch posture. The ground-truth row label run scanned out of the native binary ('Model provider · Account · Thread name · Session · Forked from · Collaboration mode · Token usage · Context window') does NOT describe the 0.144.5 /status box — those strings live in the binary but are not this box's labels. 'Collaboration mode:' renders exactly 'Default' for a flagless launch. Two rows are NOT stable across runs and must never be anchored on: the last row is 'Weekly limit: [████...] N% left (resets …)' once codex has limits data but 'Limits: refresh requested; run /status again shortly.' on a cold session (both were observed on 2026-07-23), and 'Directory:' is cwd-dependent. Two prose lines ('Visit https://chatgpt.com/codex/settings/usage …') sit above the rows inside the box; they are indented by ONE space after the opening bar while every real row is indented by TWO, which is why the '│ +label' row regexes in src/chat/permission.ts do not trip on them. Widths measured from the rendered 120x40 screen: intrinsic_row_cols is 26 + the rendered value's width (opening bar + 2 spaces + the 19-col label column set by the widest label 'Collaboration mode:' + 3 spaces + value + closing bar), and status_box_outer_cols is the widest intrinsic + 1. 'Session:' needs 62 cols here too, again above CODEX_STATUS_MIN_COLS = 60 — same documented follow-up the META-HARNESS-110 fixtures raise, unchanged by this probe. PRIME OUTCOME: driving this through the production seam (chat.Open, whose primeSessionID writes CodexAdapter.primeSessionIDKeys() = '/status' + CSI 13u before Open returns) recorded primeOutcome 'captured' on all three launches. But the prime-time cached reading came back {observed, raw, collaboration: 'unknown'} every time: Conversation.captureModeFromScreen latches on the FIRST frame whose 'Permissions:' row parses, and the box paints top-down, so 'Collaboration mode:' (two rows below) has not landed yet. Replaying THIS fixture's completed frame parses collaboration 'default' — so the 'unknown' is a latch-timing artifact of the live prime, not a rendering fact. Any live /status conformance assertion must anchor on the Permissions: value and must NOT assert collaboration off a freshly-opened Conversation.permissionMode()."
+}

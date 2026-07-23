@@ -1,6 +1,6 @@
 // Deterministic tests for the pure permission-mode parser: synthetic footer /
 // `/status` fixtures, a replay of the recorded claude `auto` corpus, and a
-// replay of the eight recorded codex `/status` boxes (test/corpus/codex/
+// replay of the nine recorded codex `/status` boxes (test/corpus/codex/
 // status-*, live codex-cli 0.144.5) that freeze the Permissions: mapping table.
 // No live CLI, no PTY, no Conversation.
 
@@ -347,6 +347,16 @@ describe("parsePermissionMode: codex /status corpus replay", () => {
     observed: string;
     collaboration: string;
   }[] = [
+    {
+      // The FLAGLESS launch (META-HARNESS-155). Same rendering as status-default
+      // because `-s workspace-write -a on-request` IS codex's own default — which
+      // is exactly why a live check driven only at the default posture proves
+      // nothing about the forward map. See docs/design/codex-status-preflight-probe.md.
+      scenario: "status-box",
+      raw: "Workspace (Ask for approval)",
+      observed: "acceptEdits",
+      collaboration: "default",
+    },
     {
       scenario: "status-default",
       raw: "Workspace (Ask for approval)",

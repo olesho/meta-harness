@@ -145,6 +145,7 @@ describe("codex session id", () => {
 // 0.144.5 recordings, so they are the fixtures that would catch one.
 describe("codex session id: recorded /status corpus", () => {
   const scenarios = [
+    "status-box", // flagless launch (META-HARNESS-155); narrower box (84 cols)
     "status-default", // Default collaboration
     "status-plan", // Plan collaboration
     "status-manual",
