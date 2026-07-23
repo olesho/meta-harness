@@ -286,6 +286,14 @@ describe("wire corpus — StructuredTurnResult goldens", () => {
     usage: (v) => typeof v === "object" && v !== null,
     reason: (v) => typeof v === "string",
     transcript_error: (v) => typeof v === "string",
+    // Landed AHEAD of its fixture (META-HARNESS-129 Half C). This map is OURS,
+    // not vendored, while structured/permission-mode has to originate in
+    // HARNESS_WRAPPER_REPO and arrive via `scripts/sync-corpus.sh wire` — so the
+    // sync stays a pure vendor operation. An entry with no fixture is inert;
+    // MISSING one is not, because TYPE_OF[k] would be undefined and TYPE_OF[k](…)
+    // below THROWS instead of failing cleanly. `string`, never an enum: a newer
+    // producer's value must cross opaquely rather than be mapped onto a rung.
+    permission_mode: (v) => typeof v === "string",
   };
 
   for (const f of bySurface("structuredResult")) {
