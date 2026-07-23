@@ -13,6 +13,7 @@ import { claudecode, codex } from "../../src/turns/index.ts";
 import { Context } from "../../src/internal/async/index.ts";
 import { ErrInputPending } from "../../src/chat/errors.ts";
 import { type Session } from "../../src/chat/types.ts";
+import { New, openFake } from "./fakeharness.ts";
 
 const READY = "Codex\r\n\r\n› \r\n";
 
@@ -267,6 +268,34 @@ describe("codex: the box capture is decoupled from the id capture", () => {
     // Initial write + the ONE-SHOT halfway resend. Never a third.
     expect(statusCount(sent)).toBe(2);
     expect(c.permissionMode().source).toBe("written_uncaptured");
+  });
+
+  test("end-to-end Open(): a resume-hint-only fake returns within the bound and does not hang", async () => {
+    // The fake's codex Idle frame paints `codex resume <uuid>` and NEVER a
+    // /status box — exactly the shape that used to end the prime loop the
+    // instant the id landed. Two AwaitSubmit/Idle pairs absorb the initial
+    // /status and the one-shot halfway resend.
+    const bound = 300;
+    const script = New("codex")
+      .Idle()
+      .AwaitSubmit()
+      .Idle()
+      .AwaitSubmit()
+      .Idle()
+      .Build();
+    const t0 = performance.now();
+    const conv = await openFake(script, { primeBound: bound });
+    const elapsed = performance.now() - t0;
+    try {
+      expect(conv.session.harnessSessionID).not.toBe("");
+      // Bounded by primeBoundDur() — the accepted startup regression, not a hang.
+      expect(elapsed).toBeLessThan(bound * 12);
+      const r = conv.permissionMode();
+      expect(r.observed).toBe("unknown");
+      expect(r.source).toBe("written_uncaptured");
+    } finally {
+      await conv.close();
+    }
   });
 
   test("primeOutcome stays `captured` through the tail classification (fallback disarmed)", async () => {
