@@ -127,12 +127,19 @@ describe("codex locateSessionID adapter", () => {
 
     const adapter = codex.New(); // sessionsRoot stays "" — the production shape
     const savedHome = process.env.HOME;
+    // CODEX_HOME outranks homedir() in resolveRoot(); clear it so an AMBIENT
+    // isolated home in the developer's shell can't send this assertion to a
+    // different root. Restored with HOME below.
+    const savedCodexHome = process.env.CODEX_HOME;
     try {
       process.env.HOME = home;
+      delete process.env.CODEX_HOME;
       expect(adapter.locateSessionID(cwd)).toEqual([uuid, true]);
     } finally {
       if (savedHome === undefined) delete process.env.HOME;
       else process.env.HOME = savedHome;
+      if (savedCodexHome === undefined) delete process.env.CODEX_HOME;
+      else process.env.CODEX_HOME = savedCodexHome;
     }
   });
 });
