@@ -52,6 +52,7 @@
 import {
   argsContainAnyFlag,
   argsContainConfigKey,
+  flagValue,
   normHarness,
   prependArgs,
 } from "./harnessargs.ts";
@@ -238,6 +239,80 @@ export function argsWithHarnessPermissionMode(
     }
     default:
       return args;
+  }
+}
+
+/**
+ * How a GIVEN args slice pins the permission axis for `harness` — the SHAPE of
+ * the pin only, deliberately NOT its canonical rung (that is
+ * effectiveLaunchRung's job, and duplicating it here would fork the vocabulary).
+ *
+ *	"none"   nothing in args pins permissions, so argsWithHarnessPermissionMode
+ *	         WOULD inject — the all-or-nothing precedence's complement;
+ *	"native" pinned by a single --permission-mode flag whose operand is readable
+ *	         and non-empty, but which names no canonical rung (claude's dontAsk
+ *	         at 2.1.217, or a spelling a newer claude added). `value` is that
+ *	         operand VERBATIM — the caller reports it rather than erasing a
+ *	         precisely-known posture behind a sentinel;
+ *	"opaque" pinned, but no single token names the result: a valueless or
+ *	         empty-valued --permission-mode, a bypass-enabling flag alongside
+ *	         another pin, or any codex pin (two orthogonal axes, plus -p/--profile
+ *	         and the -c sandbox_mode= / approval_policy= keys, whose forward map
+ *	         has no inverse).
+ *
+ * Reads the SAME guarded sets as argsWithHarnessPermissionMode, so the two can
+ * never disagree about what counts as a pin. Note "native" is claude-only by
+ * construction: codex has no single-token permission spelling other than
+ * CodexBypassFlag, which effectiveLaunchRung already resolves to a rung.
+ */
+export type ArgvPermissionPin =
+  { kind: "none" } | { kind: "native"; value: string } | { kind: "opaque" };
+
+/**
+ * argvPermissionPin classifies how args pins permissions for harness.
+ *
+ * The intended use is as effectiveLaunchRung's DISAMBIGUATOR: that function
+ * collapses "argv says nothing" and "argv pins something unnameable" onto the
+ * same "" return, and a telemetry field must tell those apart — absent means
+ * nothing was requested or injected, never "pinned, posture unknown". Call it
+ * only on the "" branch; a resolved rung needs no classification.
+ *
+ * Pass the COMPOSED argv (any harness-generated injection plus the caller's
+ * own tail), the same slice argsWithHarnessPermissionMode would see.
+ */
+export function argvPermissionPin(
+  harness: string,
+  args: string[],
+): ArgvPermissionPin {
+  switch (normHarness(harness)) {
+    case "claude":
+    case "claude-code": {
+      if (!argsContainAnyFlag(args, claudeGuardFlags)) return { kind: "none" };
+      // A bypass-enabling flag is never a lone native spelling: it pins the
+      // axis by itself, so anything else in argv can only muddy the result.
+      if (argsContainAnyFlag(args, ClaudeSkipPermissionsFlags)) {
+        return { kind: "opaque" };
+      }
+      const [value, ok] = flagValue(args, "--permission-mode");
+      // Present-but-unreadable (trailing flag, `--permission-mode=`) is pinned
+      // with nothing to report — NEVER {native, ""}, which would put "" on the
+      // wire and collide with "unset".
+      if (!ok || value === "") return { kind: "opaque" };
+      return { kind: "native", value };
+    }
+    case "codex": {
+      if (
+        argsContainAnyFlag(args, codexGuardFlags) ||
+        argsContainConfigKey(args, codexSandboxConfigKey) ||
+        argsContainConfigKey(args, codexApprovalConfigKey)
+      ) {
+        return { kind: "opaque" };
+      }
+      return { kind: "none" };
+    }
+    default:
+      // No launch-time permission axis: nothing in argv is ours to interpret.
+      return { kind: "none" };
   }
 }
 
