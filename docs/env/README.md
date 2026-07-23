@@ -274,10 +274,10 @@ runStructuredTurn(ctx: Context, ws: Workspace, cfg: TurnConfig): Promise<Structu
 
 1. Writes the prompt to a temp file (never argv or shell-interpolated).
 2. Calls `ws.exec()` with `meta-harness-structured-run --prompt-file <path> … [--sandbox-defaults] <harness> -- <args>` (`--sandbox-defaults` opts into `IS_SANDBOX=1` + the claude-code permission bypass; off by default — argv/env forwarded verbatim).
-3. Parses the last stdout line as JSON (the structured result).
+3. Parses the last stdout line as JSON (the structured result). Its optional `permission_mode` reports the rung the guest runner **launched** the harness at — telemetry only, never an authorization signal, and never a readback of the live mode. When the runner emits no JSON at all, the result derived here from exit code + stderr leaves the key **absent**: no turn ran, so there is no launch rung, and the host never synthesises one from its own `cfg.permissionMode`.
 4. Optionally retrieves the on-disk transcript to a host path.
 
-**Protocol:** Frozen schema shared between producer (`src/cli/structured-runner.ts`) and this client. Exit codes: 0 = completed, 1 = errored, 2 = usage, 124 = deadline.
+**Protocol:** Frozen schema shared between producer (`src/cli/structured-runner.ts`) and this client — five required keys plus four optionals (`usage`, `reason`, `transcript_error`, `permission_mode`), each absent rather than empty when unset. Exit codes: 0 = completed, 1 = errored, 2 = usage, 124 = deadline.
 
 ## Testing Tiers
 
