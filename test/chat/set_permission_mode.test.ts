@@ -1,6 +1,7 @@
 // Conversation.setPermissionMode() — the write side of the permission story:
 // gating, held()-not-acquire() locking, the per-press settle loop, lap detection
-// and the claude Shift+Tab ring (META-HARNESS-117).
+// and the claude Shift+Tab ring (META-HARNESS-117) — plus the codex
+// collaboration 2-cycle and refreshPermissionMode (META-HARNESS-118).
 //
 // Named set_permission_mode rather than permission_mode because
 // test/chat/permission_mode.test.ts is already taken by the LAUNCH-arg forward
@@ -38,6 +39,7 @@ import type {
   PermissionRung,
 } from "../../src/chat/permission.ts";
 import { RoleAssistant, TurnStatePending } from "../../src/chat/types.ts";
+import { permissionModeResponse } from "../../src/gateway/dto.ts";
 import { Context } from "../../src/internal/async/index.ts";
 import { newScreen, type Screen } from "../../src/screen/index.ts";
 import {
@@ -209,6 +211,146 @@ async function armed(
 ): Promise<() => void> {
   await r.screen.write(rungFrame(start));
   return r.conv.acquireControl(Context.background());
+}
+
+// ── the synthetic codex driver ───────────────────────────────────────────────
+//
+// codex's collaboration axis is NOT repainted on its own: it is legible only
+// from a `/status` box, which is printed once when `/status` is submitted and
+// then just sits there. So this driver answers a `/status` burst with a box
+// carrying the CURRENT collaboration value, and answers a Shift+Tab by flipping
+// that value and painting NOTHING — which is what makes the stale box left over
+// from the previous probe the default hazard rather than an exotic one.
+
+/** The exact burst CodexAdapter.primeSessionIDKeys() writes: `/status` + CSI 13u. */
+const CodexStatusBurst = dec.decode(codex.New().primeSessionIDKeys());
+
+const codexUUID = "019f4118-0000-7013-a43a-000000000118";
+
+/** The box's inner width — wide enough that every row renders unwrapped. */
+const codexBoxInner = 93;
+
+/** A settled, ready codex composer with NO `/status` box on screen. */
+const codexReadyFrame = paint(
+  "Codex",
+  "",
+  "› ",
+  "",
+  "  codex resume " + codexUUID,
+);
+
+/**
+ * A `/status` box reporting `collaboration`, with the `Permissions:` row FIXED:
+ * the two axes move independently, and a codex press must never be confirmed off
+ * the permissions row.
+ */
+function codexStatusFrame(collaboration: "Default" | "Plan"): string {
+  const row = (t: string): string =>
+    "│" + t.padEnd(codexBoxInner, " ").slice(0, codexBoxInner) + "│";
+  const rule = "─".repeat(codexBoxInner);
+  return paint(
+    ">_ OpenAI Codex (v0.144.5)",
+    "",
+    "╭" + rule + "╮",
+    row("  Permissions:          Workspace (Ask for approval)"),
+    row("  Collaboration mode:   " + collaboration),
+    row("  Session:              " + codexUUID),
+    "╰" + rule + "╯",
+    "",
+    "› ",
+    "",
+  );
+}
+
+interface CodexRingOptions {
+  /** The collaboration mode the live box reports before any press. */
+  start?: "Default" | "Plan";
+  /** Withhold the box for the first N `/status` bursts (drives the resend). */
+  withhold?: number;
+  /** Extra Conversation options (cols, primeBound, permissionMode, …). */
+  opts?: Record<string, unknown>;
+}
+
+interface CodexRing {
+  conv: Conversation;
+  rec: KeyRecorder;
+  screen: Screen;
+  /** `/status` bursts written so far. */
+  bursts(): number;
+  /** Cycle keystrokes written so far. */
+  presses(): number;
+  /** Bytes recorded so far — snapshot one before a call to assert a DELTA. */
+  bytes(): number;
+}
+
+function newCodexRing(o: CodexRingOptions = {}): CodexRing {
+  const screen = newScreen(120, 40);
+  const rec = new KeyRecorder();
+  const withhold = o.withhold ?? 0;
+  let collaboration: "Default" | "Plan" = o.start ?? "Default";
+  let bursts = 0;
+  let presses = 0;
+
+  const sink = (p: Uint8Array): void => {
+    rec.write(p);
+    const s = dec.decode(p);
+    if (s === PermissionCycleCSI) {
+      presses++;
+      // The session-local 2-cycle. Nothing repaints: the box already on screen
+      // keeps reporting the PRE-press value until the next probe replaces it.
+      collaboration = collaboration === "Default" ? "Plan" : "Default";
+      return;
+    }
+    if (s !== CodexStatusBurst) return;
+    const n = ++bursts;
+    void (async () => {
+      if (n <= withhold) return;
+      await screen.write(codexStatusFrame(collaboration));
+    })();
+  };
+
+  const conv = newTestConv(
+    {
+      harness: "codex",
+      cols: 120,
+      rows: 40,
+      // The probe bound (and so the halfway resend mark), kept short.
+      primeBound: 400,
+      ...o.opts,
+    },
+    rec,
+    {
+      screen,
+      adapter: codex.New(),
+      eventCh: new EventBus(8),
+      writeStdin: sink,
+    },
+  );
+
+  return {
+    conv,
+    rec,
+    screen,
+    bursts: () => bursts,
+    presses: () => presses,
+    bytes: () => rec.data.length,
+  };
+}
+
+/** Paints the ready composer and takes the control token, as a caller would. */
+async function armedCodex(r: CodexRing): Promise<() => void> {
+  await r.screen.write(codexReadyFrame);
+  return r.conv.acquireControl(Context.background());
+}
+
+/** The reading 102 caches at prime time, seeded directly for the staleness tests. */
+function seedPrimeReading(
+  conv: Conversation,
+  reading: PermissionModeReading,
+): void {
+  (
+    conv as unknown as { primeModeReading?: PermissionModeReading }
+  ).primeModeReading = reading;
 }
 
 // ── the axis accessor ────────────────────────────────────────────────────────
@@ -945,6 +1087,31 @@ describe("setPermissionMode: unsupported", () => {
     });
   }
 
+  // A LADDER RUNG on codex is launch-flag territory (`-s` / `-a`): the axis this
+  // method drives there is the collaboration 2-cycle, and nothing else.
+  for (const target of ["manual", "acceptEdits", "auto", "bypass"] as const) {
+    test(`\`${target}\` on codex is Unreachable and names the collaboration axis`, async () => {
+      const r = newCodexRing();
+      const release = await armedCodex(r);
+      try {
+        const before = r.bytes();
+        const err = await caught(
+          r.conv.setPermissionMode(Context.background(), target),
+        );
+        expect(isSentinel(err, ErrPermissionModeUnreachable)).toBe(true);
+        expect(String(err)).toContain("collaboration");
+        expect(String(err)).toContain("default | plan");
+        // Not even the `/status` probe: the legality check is a pure fact about
+        // the harness and runs before anything is written.
+        expect(r.bytes() - before).toBe(0);
+        expect(r.bursts()).toBe(0);
+        expect(r.presses()).toBe(0);
+      } finally {
+        release();
+      }
+    });
+  }
+
   // "default" is the codex COLLABORATION axis, not a ladder rung: the rule is
   // "Default when permissionMode is unset: inject nothing", and claude's actual
   // default is `manual`.
@@ -959,6 +1126,358 @@ describe("setPermissionMode: unsupported", () => {
       expect(isSentinel(err, ErrPermissionModeUnreachable)).toBe(true);
       expect(String(err)).toContain("permissions ladder");
       expect(r.bytes() - before).toBe(0);
+    } finally {
+      release();
+    }
+  });
+});
+
+// ── codex: the collaboration 2-cycle ─────────────────────────────────────────
+
+describe("setPermissionMode: the codex collaboration axis", () => {
+  // THE AXIS-COLLAPSE REGRESSION. 102's reading carries two axes that do not
+  // collapse: watching `observed` (the permissions ladder) instead of
+  // `collaboration` would make EVERY codex call end in ErrPermissionModeStalled
+  // after the backstop, because the permissions row never moves.
+  test("a toggle terminates on `collaboration` while `observed` stays put", async () => {
+    const r = newCodexRing({ start: "Default" });
+    const release = await armedCodex(r);
+    try {
+      const got = await r.conv.setPermissionMode(Context.background(), "plan");
+      expect(got.collaboration).toBe("plan");
+      expect(got.source).toBe("status");
+      // The permissions axis is LAUNCH-flag territory and is unmoved: a
+      // successful collaboration flip does NOT claim the epic's `plan` rung
+      // (that also needs `-s read-only -a untrusted`).
+      expect(got.observed).toBe("acceptEdits");
+      expect(got.raw).toBe("Workspace (Ask for approval)");
+      expect(r.presses()).toBe(1);
+    } finally {
+      release();
+    }
+  });
+
+  for (const [start, target, want] of [
+    ["Default", "plan", "plan"],
+    ["Plan", "default", "default"],
+  ] as const) {
+    test(`${start} -> ${target}: one press, two /status probes`, async () => {
+      const r = newCodexRing({ start });
+      const release = await armedCodex(r);
+      try {
+        const before = r.bytes();
+        const got = await r.conv.setPermissionMode(
+          Context.background(),
+          target,
+        );
+        expect(got.collaboration).toBe(want);
+        expect(r.presses()).toBe(1);
+        expect(r.bursts()).toBe(2);
+        // The BOUNDED COST, asserted as the recorder's DELTA across the call:
+        // probe, press, probe — and nothing else. Never a total: KeyRecorder is
+        // the whole writeStdin sink and also records the auto-dismiss pump.
+        expect(dec.decode(r.rec.data.slice(before))).toBe(
+          CodexStatusBurst + PermissionCycleCSI + CodexStatusBurst,
+        );
+      } finally {
+        release();
+      }
+    });
+  }
+
+  // The no-op has to be decided from a FRESH probe, never from the prime-time
+  // cache: that cache is unbounded-stale (and `not_primed` outright on a resumed
+  // session). A session already in Default whose cache says Plan would otherwise
+  // be pressed into Plan and back — the silent-wrong-mode window this closes.
+  test("codex `default` start: the probe runs BEFORE the first press", async () => {
+    const r = newCodexRing({ start: "Default" });
+    seedPrimeReading(r.conv, {
+      observed: "acceptEdits",
+      raw: "Workspace (Ask for approval)",
+      collaboration: "plan", // STALE, and the opposite of the live box
+      source: "status",
+      generation: 1,
+      observedAt: new Date(0),
+    });
+    const release = await armedCodex(r);
+    try {
+      const before = r.bytes();
+      const got = await r.conv.setPermissionMode(
+        Context.background(),
+        "default",
+      );
+      expect(got.collaboration).toBe("default");
+      // ZERO cycle keystrokes; exactly ONE /status burst, and those bytes are
+      // the adapter's capability verbatim.
+      expect(r.presses()).toBe(0);
+      expect(r.bursts()).toBe(1);
+      expect(dec.decode(r.rec.data.slice(before))).toBe(CodexStatusBurst);
+      // The stale cache was REPLACED, not merely bypassed.
+      expect(r.conv.permissionMode().collaboration).toBe("default");
+      expect(r.conv.permissionMode().generation).toBe(got.generation);
+      expect(got.generation).toBeGreaterThan(1);
+    } finally {
+      release();
+    }
+  });
+
+  // The /status write is flaky enough that the primer already re-sent once at
+  // the halfway mark; the refresh path inherits the same treatment through the
+  // shared helper. At most ONE resend — the latch is consumed either way.
+  test("the box withheld past the half mark: exactly one resend, then success", async () => {
+    const r = newCodexRing({ withhold: 1, opts: { primeBound: 300 } });
+    const release = await armedCodex(r);
+    try {
+      const before = r.bytes();
+      const got = await r.conv.setPermissionMode(
+        Context.background(),
+        "default",
+      );
+      expect(got.collaboration).toBe("default");
+      expect(r.bursts()).toBe(2);
+      expect(r.presses()).toBe(0);
+      expect(dec.decode(r.rec.data.slice(before))).toBe(
+        CodexStatusBurst.repeat(2),
+      );
+    } finally {
+      release();
+    }
+  });
+
+  // A box that never renders is a stall, not a blind press.
+  test("a box that never renders is Stalled with zero cycle keystrokes", async () => {
+    const r = newCodexRing({ withhold: 99, opts: { primeBound: 150 } });
+    const release = await armedCodex(r);
+    try {
+      const err = await caught(
+        r.conv.setPermissionMode(Context.background(), "plan"),
+      );
+      expect(isSentinel(err, ErrPermissionModeStalled)).toBe(true);
+      expect(String(err)).toContain("could not read the permission axis");
+      expect(r.presses()).toBe(0);
+    } finally {
+      release();
+    }
+  });
+
+  // A press that does not take: the box comes back reporting the SAME
+  // collaboration value, so the confirm refuses it rather than accepting the
+  // stale reading as a success.
+  test("a press that does not take is Stalled, never confirmed off the stale box", async () => {
+    const r = newCodexRing({ start: "Default", opts: { primeBound: 200 } });
+    // Neutralize the flip: every probe now paints Default, forever.
+    const conv = r.conv;
+    const sink = conv.writeStdin!;
+    conv.writeStdin = (p: Uint8Array): void => {
+      if (dec.decode(p) === PermissionCycleCSI) {
+        r.rec.write(p); // recorded, but the harness ignores it
+        return;
+      }
+      sink(p);
+    };
+    const release = await armedCodex(r);
+    try {
+      const err = await caught(
+        r.conv.setPermissionMode(Context.background(), "plan"),
+      );
+      expect(isSentinel(err, ErrPermissionModeStalled)).toBe(true);
+      expect(String(err)).toContain("did not change");
+      expect(r.conv.permissionMode().collaboration).toBe("default");
+    } finally {
+      release();
+    }
+  });
+
+  test("a too-narrow CONFIGURED width is Stalled before anything is written", async () => {
+    // The width guard reads opts.cols — the CONFIGURED width, not a live
+    // measurement. That is exactly what source "too_narrow" means.
+    const r = newCodexRing({ opts: { cols: 40 } });
+    const release = await armedCodex(r);
+    try {
+      const before = r.bytes();
+      const err = await caught(
+        r.conv.setPermissionMode(Context.background(), "plan"),
+      );
+      expect(isSentinel(err, ErrPermissionModeStalled)).toBe(true);
+      expect(String(err)).toContain("CODEX_STATUS_MIN_COLS");
+      expect(r.bytes() - before).toBe(0);
+      expect(r.bursts()).toBe(0);
+    } finally {
+      release();
+    }
+  });
+});
+
+// ── refreshPermissionMode ────────────────────────────────────────────────────
+
+describe("refreshPermissionMode", () => {
+  // The write-back is the whole point: 102's permissionMode() on codex is a pure
+  // read of the cached prime-time reading, and so is the gateway's GET route. A
+  // refresh that returned a fresh value without writing it back would leave the
+  // two disagreeing.
+  test("codex: re-probes, WRITES BACK, and the pure GET read agrees", async () => {
+    const r = newCodexRing({ start: "Plan" });
+    const release = await armedCodex(r);
+    try {
+      // The permanently-unobserved state every resumed/reopened codex session
+      // is in: the primer never ran, so there is nothing cached to read.
+      expect(r.conv.permissionMode().source).toBe("not_primed");
+      expect(r.conv.permissionMode().collaboration).toBe("unknown");
+
+      const before = r.bytes();
+      const got = await r.conv.refreshPermissionMode(Context.background());
+      expect(got.collaboration).toBe("plan");
+      expect(got.source).toBe("status");
+      expect(dec.decode(r.rec.data.slice(before))).toBe(CodexStatusBurst);
+      expect(r.presses()).toBe(0);
+
+      const snap = r.conv.screenSnapshot();
+      const dto = permissionModeResponse(
+        r.conv.permissionMode(snap),
+        snap.generation,
+      );
+      expect(dto.collaboration).toBe("plan");
+      expect(dto.source).toBe("status");
+      expect(dto.generation).toBe(got.generation);
+      expect(dto.stale).toBe(false);
+    } finally {
+      release();
+    }
+  });
+
+  // THE DEADLOCK CARVE-OUT. The shared probe must NOT acquire the queue: the
+  // gateway mints the control token by HOLDING the non-reentrant ControlQueue,
+  // so an acquire here would park an HTTP caller behind its own token.
+  test("never calls queue.acquire, and completes while the caller holds the token", async () => {
+    const r = newCodexRing();
+    const q = r.conv.queue;
+    const real = q.acquire.bind(q);
+    let acquires = 0;
+    (q as unknown as { acquire: typeof q.acquire }).acquire = (ctx) => {
+      acquires++;
+      return real(ctx);
+    };
+    const release = await armedCodex(r); // the CALLER's acquire
+    const baseline = acquires;
+    try {
+      expect(r.conv.queue.held()).toBe(true);
+      const raced = await Promise.race([
+        r.conv.refreshPermissionMode(Context.background()),
+        new Promise<"blocked">((res) => {
+          setTimeout(() => {
+            res("blocked");
+          }, 3000);
+        }),
+      ]);
+      expect(raced).not.toBe("blocked");
+      expect((raced as PermissionModeReading).collaboration).toBe("default");
+      expect(acquires - baseline).toBe(0);
+      // Still held: the method never took (nor released) the token itself.
+      expect(r.conv.queue.held()).toBe(true);
+    } finally {
+      release();
+    }
+  });
+
+  test("codex: a box that never renders is Stalled, leaving the cache untouched", async () => {
+    const r = newCodexRing({ withhold: 99, opts: { primeBound: 150 } });
+    seedPrimeReading(r.conv, {
+      observed: "bypass",
+      raw: "Full Access",
+      collaboration: "default",
+      source: "status",
+      generation: 7,
+      observedAt: new Date(0),
+    });
+    const release = await armedCodex(r);
+    try {
+      const err = await caught(
+        r.conv.refreshPermissionMode(Context.background()),
+      );
+      expect(isSentinel(err, ErrPermissionModeStalled)).toBe(true);
+      expect(String(err)).toContain("refreshPermissionMode");
+      const still = r.conv.permissionMode();
+      expect(still.collaboration).toBe("default");
+      expect(still.generation).toBe(7);
+    } finally {
+      release();
+    }
+  });
+
+  // On claude 102's read is a strict LIVE per-call footer parse that caches
+  // nothing, so there is nothing to re-probe — for EVERY rung, `manual`
+  // included. A plain alias, and it writes not one byte.
+  for (const rung of ["manual", "plan", "acceptEdits", "auto"] as const) {
+    test(`claude: a plain alias for permissionMode() on \`${rung}\``, async () => {
+      const r = newRing();
+      const release = await armed(r, rung);
+      try {
+        const before = r.bytes();
+        const got = await r.conv.refreshPermissionMode(Context.background());
+        expect(got.observed).toBe(rung);
+        expect(got.source).toBe("footer");
+        expect(got.observed).toBe(r.conv.permissionMode().observed);
+        expect(r.bytes() - before).toBe(0);
+      } finally {
+        release();
+      }
+    });
+  }
+
+  test("the same gates as setPermissionMode: closed, token, turn, pending input", async () => {
+    const closedRec = new KeyRecorder();
+    const closedConv = newTestConv({ harness: "codex" }, closedRec, {
+      adapter: codex.New(),
+      closed: true,
+    });
+    expect(
+      isSentinel(
+        await caught(closedConv.refreshPermissionMode(Context.background())),
+        ErrClosed,
+      ),
+    ).toBe(true);
+    expect(closedRec.data.length).toBe(0);
+
+    const r = newCodexRing();
+    await r.screen.write(codexReadyFrame);
+    expect(
+      isSentinel(
+        await caught(r.conv.refreshPermissionMode(Context.background())),
+        ErrNoControl,
+      ),
+    ).toBe(true);
+    expect(r.bursts()).toBe(0);
+
+    const release = await armedCodex(r);
+    try {
+      r.conv.currentTurn = {
+        id: "t-1",
+        sessionID: "s-1",
+        role: RoleAssistant,
+        state: TurnStatePending,
+        text: "",
+        reason: "",
+        startedAt: new Date(),
+        completedAt: new Date(0),
+        httpCode: 0,
+        retryAfter: 0,
+      };
+      expect(
+        isSentinel(
+          await caught(r.conv.refreshPermissionMode(Context.background())),
+          ErrTurnInFlight,
+        ),
+      ).toBe(true);
+      r.conv.currentTurn = null;
+
+      r.conv.handleInputRequested(trustRequest());
+      expect(
+        isSentinel(
+          await caught(r.conv.refreshPermissionMode(Context.background())),
+          ErrInputPending,
+        ),
+      ).toBe(true);
+      expect(r.bursts()).toBe(0);
     } finally {
       release();
     }
