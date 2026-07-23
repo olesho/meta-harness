@@ -243,7 +243,14 @@ describe("run CLI subprocess", () => {
     const sentinel = "CLI-CODEX-9";
     const script = New("codex")
       .Idle()
-      // Absorb the startup /status prime, then drive the real turn.
+      // Absorb the startup /status prime. This fixture's Idle() frame is a
+      // bare resume hint with no Permissions: box (META-HARNESS-111 decoupled
+      // the id capture from the box capture), so the id lands but the box
+      // never does — the prime loop's one-shot halfway resend then fires a
+      // SECOND /status write before giving up at the full bound. Absorb both
+      // before driving the real turn.
+      .AwaitSubmit()
+      .Idle()
       .AwaitSubmit()
       .Idle()
       .AwaitSubmit()

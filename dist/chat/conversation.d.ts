@@ -12,6 +12,7 @@ import { type YieldControl } from "../acquisition/internal/yield.ts";
 import { type StreamVersionPredicate } from "../acquisition/internal/planAcquisition.ts";
 import { HookDrain } from "./hookDrain.ts";
 import type { ParsedEvent, Turn as TranscriptTurn } from "../transcript/event.ts";
+import { type PermissionModeReading } from "./permission.ts";
 /** Options configures a single Conversation. Mirrors chat.Options. */
 export interface Options {
     /** Per-harness adapter name. Required. */
@@ -253,6 +254,22 @@ export declare class Conversation {
      * was never primed, or is still viable. See extractSessionID.
      */
     private primeOutcome?;
+    /**
+     * Codex-only: the `/status` permission box parsed at PRIME time, stamped with
+     * the generation/timestamp of the frame it was read from — or undefined when
+     * the box was never observed.
+     *
+     * It has to be cached because Snapshot is viewport-only (src/screen/screen.ts):
+     * the box scrolls off after the first turn, so there is no later frame to
+     * re-read. Deliberately SEPARATE from primeOutcome, which describes the ID
+     * capture: this subtask decoupled the two, so `primeOutcome === "captured"`
+     * with the box never seen is a reachable state. Never set on claude — the
+     * claude footer is repainted every frame and is read live, caching nothing.
+     *
+     * Staleness is UNBOUNDED: codex's `/permissions` rewrites ~/.codex/config.toml
+     * globally mid-session, so a caller must weigh `generation`/`observedAt`.
+     */
+    private primeModeReading?;
     eventCh: EventBus;
     currentTurn: Turn | null;
     endMarkerSeen: boolean;
@@ -294,6 +311,42 @@ export declare class Conversation {
     getAdapter(): Adapter;
     /** A coherent point-in-time view of the rendered terminal. */
     screenSnapshot(): Snapshot;
+    /**
+     * Reads the live permission mode. PURE: parses `snap` (defaulting to
+     * `screenSnapshot()`) plus the prime-time cached codex reading, writes
+     * nothing.
+     *
+     * Pass `snap` when you also need the CURRENT generation for a staleness
+     * comparison, so both come from one frame. Safe to call after close(): it
+     * returns the last frame's parse with a frozen `generation`.
+     *
+     * It NEVER touches the PTY — no `/status` write, no keystrokes, no store
+     * mutation. A getter that writes is a trap: on codex it would mutate the
+     * session, and `/status` mid-turn is refused anyway. An explicit re-probe
+     * belongs behind a control-token-gated refreshPermissionMode().
+     *
+     * Per harness:
+     *  - `claude-code` — a STRICT LIVE read of `snap`. The footer is repainted
+     *    every frame, so this is cheap and always current, and it is the only
+     *    semantics that cannot hand back a stale value dressed as a live one.
+     *    Nothing is cached; when the footer is absent (claude's blocking trust /
+     *    bypass dialogs, or a mid-render frame) it reports `observed: "unknown"`
+     *    with `source: "no_footer"` — come back next frame.
+     *  - `codex` — the `/status` box cached at prime time (Snapshot is
+     *    viewport-only, so the box is gone after the first turn). Staleness is
+     *    UNBOUNDED: `/permissions` rewrites ~/.codex/config.toml globally
+     *    mid-session, so weigh `generation`/`observedAt`. When the box was never
+     *    observed, `source` says why, derived from the prime outcome.
+     *  - everything else — no screen reader exists, so `observed: "unknown"` with
+     *    `source: "launch"`; only `requested`/`requestedRaw` carry information.
+     *
+     * KNOWN HOLE (reported honestly, never guessed): a resumed/reopened codex
+     * conversation never renders a `/status` box at all — openWithSession gates
+     * the prime on `!opts.resume` and primeSessionID returns early once
+     * harnessSessionID is seeded — so its reading is permanently
+     * `source: "not_primed"` until an explicit refresh lands.
+     */
+    permissionMode(snap?: Snapshot): PermissionModeReading;
     /** The channel of turn-state transitions (async-iterable). */
     events(): EventBus;
     /** Block until granted the exclusive control token. FIFO. */
@@ -413,6 +466,40 @@ export declare class Conversation {
     /** Extract the id from the current screen and first-write it. True once set. */
     private captureFromScreen;
     private primeBoundDur;
+    /**
+     * Write-once-after-"captured" setter for primeOutcome.
+     *
+     * primeOutcome is LOAD-BEARING, not diagnostic: maybeExtractSessionID's
+     * first-write branch passes `primeOutcome === "written_uncaptured"` as
+     * extractSessionID's allowDiskFallback, so a stray downgrade would arm the
+     * disk-locate backstop on a session whose id was already scraped. Until the
+     * mode capture was decoupled from the id capture, an early id `return`ed out
+     * of the prime loop and no later assignment could land; now the loop stays
+     * alive for the box, so BOTH the tail classification and the ErrInputPending
+     * catch can run after a capture. One guarded setter, not two ad-hoc `if`s.
+     */
+    private setPrimeOutcome;
+    /**
+     * Parses the codex `/status` permission box off the CURRENT frame into
+     * primeModeReading. Returns true once the box has been captured (idempotent:
+     * a later frame never overwrites the first observation).
+     *
+     * "Captured" means a `Permissions:` row actually matched — i.e. `raw` is set.
+     * The row regexes require their closing │ on the same physical line, so a
+     * wrapped/truncated box fails CLOSED and we keep polling rather than caching a
+     * half-read value. Called only from the prime loop, which runs under the
+     * control token; the read itself writes nothing.
+     */
+    private captureModeFromScreen;
+    /**
+     * Why the codex `/status` box was never observed — a TOTAL function of the
+     * prime outcome, reusing primeOutcome's vocabulary rather than paralleling it.
+     *
+     * `"written_uncaptured"` is literally accurate for the `"captured"` row: the
+     * id landed (possibly from a `codex resume` hint that carries no box at all),
+     * `/status` WAS written, and the box was NOT captured.
+     */
+    private codexUnobservedSource;
     /**
      * Primes the harness session id at first idle by writing the adapter's
      * primeSessionIDKeys (Codex: `/status`), which renders the id on screen, then
