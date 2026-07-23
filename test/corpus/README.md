@@ -65,6 +65,29 @@ Scripted refreshes go through `make rebake-corpus` — see
 > skipped with a logged line). The Go command above is the interim reference for
 > the recorder's argument shape.
 
+### Hand-recorded scenarios (outside `SCENARIOS`)
+
+Some scenarios cannot be driven by the scripted recorder and are captured by
+hand, then checked in. They live in the same `<harness>/<scenario>/` layout and
+are inert to `rebake` (which only iterates `SCENARIOS`) and to `screenbench`
+(which skips any dir with no `expected.txt`).
+
+| Scenario | Why it is hand-recorded |
+| --- | --- |
+| `claude-code/model-picker` | needs the `/model` picker open |
+| `claude-code/permission-mode-{manual,accept-edits,plan,bypass}` | needs Shift+Tab keystrokes; `src/cli/screenbench-record.ts` has no scripted-keystroke seam (same gap that excludes codex interrupt) |
+
+The permission-mode set gives `src/chat/permission.ts` corpus coverage for the
+four rungs the `auto` recordings cannot reach. Each `meta.json` records the live
+binary version, the keystrokes used, and the **hex codepoints of the footer's
+glyph run**, so a future VS16 (`U+FE0F`) change in claude's rendering lands as a
+fixture diff rather than a silent `unknown`. Promoting them to `SCENARIOS` is
+gated on `screenbench-record` growing a `--keys` path.
+
+> When hand-recording, cut `bytes.raw` **before** the harness's teardown: a
+> stream that ends with the alt-screen restore (`ESC[?1049l`) replays into a
+> blank screen.
+
 ## Privacy
 
 Recordings may contain whatever you typed and whatever the model said. Treat scenarios as **public**
