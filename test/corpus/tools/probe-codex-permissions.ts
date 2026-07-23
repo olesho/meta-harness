@@ -128,7 +128,7 @@ const extraArgs = dashDash >= 0 ? argv.slice(dashDash + 1) : [];
 
 // Phases that can land an Enter on a menu row must never run against the real
 // ~/.codex — that is the global write this whole ticket exists to contain.
-const COMMITTING = new Set(["permissions", "update-notice", "approval", "commit"]);
+const COMMITTING = new Set(["permissions", "update-notice", "approval", "commit", "fixture"]);
 if (COMMITTING.has(phase) && homeMode === "real") {
   throw new Error(
     `phase ${phase} presses Enter on menu rows and would write the real ~/.codex/config.toml; ` +
@@ -140,10 +140,11 @@ const resolved = resolveBinary(bin);
 if (!resolved) throw new Error(`binary not found: ${bin}`);
 let binaryVersion = "unknown";
 try {
-  binaryVersion =
-    execFileSync(resolved, ["--version"], { encoding: "utf8" })
-      .trim()
-      .split("\n")[0] ?? "unknown";
+  // codex prints "codex-cli 0.144.5"; the corpus meta.json convention is the
+  // bare semver ("0.144.5", as test/corpus/codex/permissions-dialog records),
+  // so pull the version token out rather than the whole line.
+  const raw = execFileSync(resolved, ["--version"], { encoding: "utf8" }).trim();
+  binaryVersion = /\d+\.\d+\.\d+\S*/.exec(raw)?.[0] ?? raw.split("\n")[0];
 } catch {
   /* leave "unknown" */
 }
@@ -702,6 +703,15 @@ async function main(): Promise<void> {
     }
 
     case "composer-clear": {
+      // An EMPTY codex composer does NOT render as a bare "›": it renders the
+      // "›" plus a greyed rotating placeholder hint ("Explain this codebase",
+      // "Find and fix a bug in @filename", …). So composerRowRE's capture group
+      // is never "" on an idle composer, and "cleared" has to mean "the typed
+      // text is gone", not "the row is empty". Baseline it against the row as it
+      // stood at ready, before anything was typed.
+      const emptyRow = composerRow(dump("screen-04-empty-composer.txt"));
+      note({ phase: "empty-composer", row: emptyRow });
+
       for (const cand of CLEAR_CANDIDATES) {
         // Literal text in the composer, deliberately NOT submitted.
         writeKeys("/permissions", `type-${cand.id}`);
@@ -718,11 +728,13 @@ async function main(): Promise<void> {
           write_count: cand.writes.length,
           typed_row: typedRow,
           cleared_row: clearedRow,
-          cleared: clearedRow === "",
+          empty_row_baseline: emptyRow,
+          cleared: clearedRow !== null && !clearedRow.includes("/permissions"),
+          back_to_placeholder: clearedRow === emptyRow,
           // A slash command opens an autocomplete popup; note whether it closed.
           popup_gone: !after.includes(PERMISSIONS_ANCHOR),
         });
-        if (clearedRow !== "") {
+        if (clearedRow !== null && clearedRow.includes("/permissions")) {
           // Force a clean composer for the next candidate.
           writeKeys("\x1b", `esc-${cand.id}`);
           await sleep(300);
@@ -761,9 +773,13 @@ async function main(): Promise<void> {
         saw_confirmation: done,
       });
 
-      // Read the posture back through the shipped surface.
-      writeKeys("/status\x1b[13u", "status");
-      await waitFor((t) => t.includes('Permissions:'), 15_000);
+      // Read the posture back through the shipped surface. Typed and submitted
+      // as TWO writes for the same reason /permissions is: the slash-command
+      // autocomplete popup eats an Enter that arrives in the same burst.
+      writeKeys("/status", "status-type");
+      await sleep(settle);
+      writeKeys("\x1b[13u", "status-submit");
+      await waitFor((t) => t.includes("Permissions:"), 15_000);
       await sleep(settle);
       const status = dump("screen-12-status.txt");
       note({
@@ -789,6 +805,47 @@ async function main(): Promise<void> {
       writeKeys("\x1b", "final-backout");
       await sleep(settle);
       dump("screen-14-after-backout.txt");
+      break;
+    }
+
+    case "fixture": {
+      // Deliverable 3: record test/corpus/codex/permissions-approve-current —
+      // the ALREADY-CURRENT dialog state, "› 2. Approve for me (current)".
+      //
+      // Corpus fixtures are replayed by writing bytes.raw into a 120x40 Screen
+      // and snapshotting the FINAL frame (test/turns/codex/input.test.ts:13-19),
+      // so this phase deliberately ENDS with the dialog on screen: no backout,
+      // no /status box, nothing after it. The recording is stopped before
+      // teardown by the `recording` flag, so the alt-screen restore never lands.
+      const opened = await openPermissions("fixture");
+      note({ phase: "fixture-open", opened, state: menuState(text()) });
+      if (!opened) break;
+
+      // Digit + bare CR, one burst — the bytes parseMenuOptions already emits.
+      writeKeys("2\r", "commit-approve-for-me");
+      const done = await waitFor((t) => /Permissions updated/i.test(t), 15_000);
+      await sleep(settle);
+      note({
+        phase: "fixture-commit",
+        saw_confirmation: done,
+        confirmation_line: lastUpdateLine(text()),
+      });
+      if (!done) break;
+
+      // Ctrl-U so the re-open types into an empty composer.
+      writeKeys("\x15", "clear-composer");
+      await sleep(500);
+      const reopened = await openPermissions("already-current");
+      await sleep(settle * 2);
+      const fixture = dump("screen-20-approve-current.txt");
+      const state = menuState(fixture);
+      note({
+        phase: "fixture-final",
+        reopened,
+        state,
+        // The whole point of the fixture: row 2 is BOTH highlighted and current.
+        is_approve_for_me_current: state.current?.startsWith("2. Approve for me"),
+      });
       break;
     }
 
