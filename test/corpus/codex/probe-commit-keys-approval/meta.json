@@ -1,0 +1,153 @@
+{
+  "harness": "codex",
+  "binary_version": "0.144.5",
+  "recorded_at": "2026-07-23T14:52:28.888Z",
+  "cols": 120,
+  "rows": 40,
+  "phase": "approval",
+  "extra_args": [],
+  "ready": true,
+  "notes": "Live codex-cli 0.144.5 PROBE (META-HARNESS-122, probe 1 / commit-key matrix, approval_prompt family): the same 2x2 commit matrix as probe-commit-keys-permissions and probe-commit-keys-update-notice, run against a real command-approval dialog instead.\n\nPROVOKING THE DIALOG. The default policy in a config-less isolated home is 'Ask for approval', but that does NOT mean every shell command prompts: an initial probe run asking codex to `echo probe-approval-marker` ran the command with NO approval prompt at all (codex's own safety classification treats plain echo as already-safe) -- a finding worth recording since it means 'default policy' alone does not guarantee a live dialog to test. The prompt was changed to `curl -sS https://example.com`, which matches the dialog's own stated carve-out ('Approval is required to access the internet') and reliably produced: 'Would you like to run the following command? ... Reason: Allow curl to access example.com outside the restricted network sandbox?' with rows '1. Yes, proceed (y)', '2. Yes, and don't ask again for commands that start with `curl` (p)', '3. No, and tell Codex what to do differently (esc)' (see screen-approval-dialog.txt). Every cell targets digit '3' (the DENY row) so a working encoding is proven without this probe ever actually approving a live command -- and incidentally, this test environment has no outbound DNS ('curl: (6) Could not resolve host'), so the command could not have succeeded even if approved.\n\nEach cell ran in ITS OWN fresh isolated-home process (unlike permissions_prompt): denying the dialog ends that turn, so there is no live dialog left in-process for the next cell. This session's bytes.raw/stdin.log/screens cover boot + cell 'cr-burst-d3' (the SECOND attempt at this cell, using the curl prompt -- the first attempt, using the echo prompt, is not the one committed here since no dialog appeared to press anything against); cells 2-4 contribute only their stdin.log (stdin-cell-*.log).\n\nRESULT -- ALL FOUR CELLS DISMISSED (denied) THE DIALOG, including the bare-CR burst:\n  * cr-burst-d3     '3\\r'                 ONE write  -> dialog_dismissed=true\n  * cr-split-d3     '3' then '\\r'          TWO writes -> dialog_dismissed=true\n  * csi13u-burst-d3 '3\\x1b[13u'            ONE write  -> dialog_dismissed=true\n  * csi13u-split-d3 '3' then '\\x1b[13u'    TWO writes -> dialog_dismissed=true\n\nNOTE ON THE TOOL'S 'committed' FLAG: it reads false for every cell in this family by construction -- approval dialogs never render a '(current)' label, so the generic before/after '(current)' comparison the driver shares across all three families is always null==null here. The authoritative signal for this family is dialog_dismissed (derived from the dialog's own footer/menu vanishing) plus the composer_row read-back (each cell ends on the idle placeholder-backed composer, confirming codex returned to a normal ready state after the denial).\n\nVERDICT -- ALL THREE FAMILIES AGREE. permissions_prompt, update_notice, and approval_prompt each committed/dismissed on all four cells, including plain 'digit + bare CR' as a SINGLE pty write -- the exact bytes parseMenuOptions (codex.ts:597) already emits. The theorized kitty-protocol concern (ready.ts's submitKeyForHarness, conversation.ts's writeMessageAndSubmit docstring) does NOT reproduce for menu-row selection on any of the three parseMenuOptions-driven families on this binary; it is specific to the free-text composer message-submission path (a different input handler, and the one those docstrings actually describe). Per the parent ticket's explicit instruction, this means the fix is GLOBAL scope in principle -- but since all three families already work with the EXISTING bytes, there is nothing to change in parseMenuOptions, detectPermissions, or AutoDismissKeys: no kind-local override and no global encoding change are needed. See the parent ticket report for the full verdict.\n\nCONTAINMENT: no approval was ever granted (every cell denied), so no config.toml write was expected or observed from this family; real ~/.codex/config.toml and ~/.codex/auth.json were both sha256-identical before and after in every one of the four processes (see containment block for this session; the other three processes' containment blocks are in their own meta.json, not committed here, but all four printed real_home_unchanged=true). stdin.log / stdin-cell-*.log record every keystroke escape-encoded and ARE the byte pin for this probe.",
+  "containment": {
+    "codex_home": "/var/folders/_p/kgsjzrc91g57sggc0v8gfnch0000gn/T/probe-codex-home-1vKGwx/home",
+    "isolated_home_files": [
+      ".personality_migration",
+      "auth.json",
+      "cache",
+      "config.toml",
+      "goals_1.sqlite",
+      "goals_1.sqlite-shm",
+      "goals_1.sqlite-wal",
+      "history.jsonl",
+      "installation_id",
+      "logs_2.sqlite",
+      "logs_2.sqlite-shm",
+      "logs_2.sqlite-wal",
+      "memories_1.sqlite",
+      "memories_1.sqlite-shm",
+      "memories_1.sqlite-wal",
+      "models_cache.json",
+      "sessions",
+      "shell_snapshots",
+      "skills",
+      "state_5.sqlite",
+      "state_5.sqlite-shm",
+      "state_5.sqlite-wal",
+      "tmp"
+    ],
+    "isolated_config_written": true,
+    "isolated_config_has_approvals_reviewer": false,
+    "isolated_config_has_granular": false,
+    "real_home_before": {
+      "config.toml": "6b30f8db25c9e07b708f33bf930cff7a78e892a73f533f9214221454f37baad0",
+      "auth.json": "da2407c017149c61fc8e496c1a3d6e0015be3234c2585fb7c520b6ba1ea0394a"
+    },
+    "real_home_after": {
+      "config.toml": "6b30f8db25c9e07b708f33bf930cff7a78e892a73f533f9214221454f37baad0",
+      "auth.json": "da2407c017149c61fc8e496c1a3d6e0015be3234c2585fb7c520b6ba1ea0394a"
+    },
+    "real_home_unchanged": true,
+    "real_config_unchanged": true,
+    "real_auth_unchanged": true
+  },
+  "log": [
+    {
+      "phase": "boot-screen",
+      "update_notice": false,
+      "press_enter_to_continue": true,
+      "folder_trust": true,
+      "signin_wall": false,
+      "menu": {
+        "highlighted": "1. Yes, continue",
+        "current": null
+      }
+    },
+    {
+      "phase": "interstitial-dismiss",
+      "round": 0,
+      "encoding": "bare-cr",
+      "keys": "\\r",
+      "screen_changed": false,
+      "dismissed": false
+    },
+    {
+      "phase": "interstitial-dismiss",
+      "round": 0,
+      "encoding": "csi13u",
+      "keys": "\\x1b[13u",
+      "screen_changed": false,
+      "dismissed": false
+    },
+    {
+      "phase": "ready",
+      "ready": true,
+      "exited": false,
+      "at_ms": 4905
+    },
+    {
+      "phase": "approval-dialog",
+      "appeared": true
+    },
+    {
+      "phase": "cell",
+      "family": "approval_prompt",
+      "cell": "cr-burst-d3",
+      "writes": [
+        "3\\r"
+      ],
+      "burst": true,
+      "before_highlight": "1. Yes, proceed (y)",
+      "after_highlight": null,
+      "before_current": null,
+      "after_current": null,
+      "selection_moved": true,
+      "dialog_dismissed": true,
+      "committed": false,
+      "confirmation_before": null,
+      "confirmation_after": null,
+      "composer_row": "Find and fix a bug in @filename",
+      "screen_changed": true
+    },
+    {
+      "note": "cells 2-4 below ran in SEPARATE fresh isolated-home processes (stdin-cell-*.log), each re-provoking its own approval dialog, because denying the dialog ends that turn -- there is no live dialog left in-process for a second cell to test against (same reason as the update_notice family)."
+    },
+    {
+      "phase": "cell",
+      "family": "approval_prompt",
+      "cell": "cr-split-d3",
+      "writes": [
+        "3",
+        "\\r"
+      ],
+      "burst": false,
+      "before_highlight": "1. Yes, proceed (y)",
+      "dialog_dismissed": true,
+      "note": "denied the curl-network approval; see stdin-cell-cr-split-d3.log"
+    },
+    {
+      "phase": "cell",
+      "family": "approval_prompt",
+      "cell": "csi13u-burst-d3",
+      "writes": [
+        "3\\x1b[13u"
+      ],
+      "burst": true,
+      "before_highlight": "1. Yes, proceed (y)",
+      "dialog_dismissed": true,
+      "note": "denied the curl-network approval; see stdin-cell-csi13u-burst-d3.log"
+    },
+    {
+      "phase": "cell",
+      "family": "approval_prompt",
+      "cell": "csi13u-split-d3",
+      "writes": [
+        "3",
+        "\\x1b[13u"
+      ],
+      "burst": false,
+      "before_highlight": "1. Yes, proceed (y)",
+      "dialog_dismissed": true,
+      "note": "denied the curl-network approval; see stdin-cell-csi13u-split-d3.log"
+    }
+  ]
+}

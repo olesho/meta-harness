@@ -1,0 +1,3 @@
+   6.994s  commit-csi13u-burst-d2#0 2\x1b[13u
+   7.902s  backout-after-csi13u-burst-d2 \x1b
+   8.803s  clear-after-csi13u-burst-d2 \x15

@@ -1,0 +1,139 @@
+{
+  "harness": "codex",
+  "binary_version": "0.144.5",
+  "recorded_at": "2026-07-23T14:42:00.319Z",
+  "cols": 120,
+  "rows": 40,
+  "phase": "update-notice",
+  "extra_args": [],
+  "ready": false,
+  "notes": "Live codex-cli 0.144.5 PROBE (META-HARNESS-122, probe 1 / commit-key matrix, update_notice family): the same 2x2 commit matrix as probe-commit-keys-permissions, run against the 'Update available!' notice instead. This notice is only rendered on the FIRST screen of a boot whose $CODEX_HOME/version.json advertises a newer release than the running binary -- seeded here via --seed-update-notice (a deliberately fictional 'latest_version', so this probe never has a real newer release to actually install). It renders ONCE per boot and is gone for good after the first committed selection, so each of the four cells below required its OWN fresh isolated, seeded CODEX_HOME and its own codex process -- unlike permissions_prompt, whose dialog reopens on demand within one process. This session's bytes.raw/stdin.log cover boot + cell 'cr-burst-d2' only; cells 2-4 ran as separate processes, each contributing only its stdin.log (stdin-cell-*.log) since their bytes.raw/screens are redundant with this one's boot sequence.\n\nSAFETY: the notice's row 1 is '1. Update now (runs `npm install -g @openai/codex`)', which shells out and replaces the GLOBAL codex binary -- observed happening unintentionally in an earlier, unrelated exploration of this same driver (codex silently upgraded 0.144.5 -> 0.145.0 out from under the run when a bare '\\r' committed the wrong row). Every cell below therefore targets digit '2' (the 'Skip' row, per screen-00-boot.txt), matching the row the shipped AutoDismissKeys KindUpdateNotice branch (codex.ts:536-540) already picks -- no cell here ever risks the update path.\n\nRESULT -- ALL FOUR CELLS DISMISSED THE NOTICE (moved past it into the folder-trust interstitial that follows on a fresh isolated home), including the bare-CR burst:\n  * cr-burst-d2     '2\\r'                 ONE write  -> dismissed (next screen: folder-trust)\n  * cr-split-d2     '2' then '\\r'          TWO writes -> dismissed (next screen: folder-trust)\n  * csi13u-burst-d2 '2\\x1b[13u'            ONE write  -> dismissed (next screen: folder-trust)\n  * csi13u-split-d2 '2' then '\\x1b[13u'    TWO writes -> dismissed (next screen: folder-trust)\n\nNOTE ON THE TOOL'S 'committed' FLAG: the driver's generic post-cell check (dialog_dismissed via modalGone) reads false for these cells because the folder-trust screen it lands on ALSO matches the 'has Press-enter-to-continue footer / has a numbered menu' shape the check is written against -- it is not a negative result, it is the check's heuristic overlapping with the next interstitial. The authoritative signal is the direct before/after screen diff (screen-update_notice-cr-burst-d2-*.txt) and the after_highlight moving to the folder-trust menu's own row 1, which only happens if the notice was actually dismissed.\n\nTOGETHER WITH probe-commit-keys-permissions: both families agree that digit + bare CR, as a SINGLE pty write, already commits/dismisses reliably -- contradicting the theorized kitty-protocol concern for THIS input path (menu-row selection), which appears specific to the free-text composer message-submission path instead. See probe-commit-keys-approval and the parent ticket report for the third family and the final global-vs-kind-local verdict.\n\nCONTAINMENT: this session's isolated CODEX_HOME never had approvals_reviewer written (no preset was ever committed -- Skip only dismisses the notice); real ~/.codex/config.toml and ~/.codex/auth.json were both sha256-identical before and after (see containment block). stdin.log / stdin-cell-*.log record every keystroke escape-encoded and ARE the byte pin for this probe.",
+  "containment": {
+    "codex_home": "/var/folders/_p/kgsjzrc91g57sggc0v8gfnch0000gn/T/probe-codex-home-OiVHee/home",
+    "isolated_home_files": [
+      ".personality_migration",
+      "auth.json",
+      "config.toml",
+      "goals_1.sqlite",
+      "goals_1.sqlite-shm",
+      "goals_1.sqlite-wal",
+      "installation_id",
+      "logs_2.sqlite",
+      "logs_2.sqlite-shm",
+      "logs_2.sqlite-wal",
+      "memories_1.sqlite",
+      "memories_1.sqlite-shm",
+      "memories_1.sqlite-wal",
+      "models_cache.json",
+      "skills",
+      "state_5.sqlite",
+      "state_5.sqlite-shm",
+      "state_5.sqlite-wal",
+      "tmp",
+      "version.json"
+    ],
+    "isolated_config_written": true,
+    "isolated_config_has_approvals_reviewer": false,
+    "isolated_config_has_granular": false,
+    "real_home_before": {
+      "config.toml": "6b30f8db25c9e07b708f33bf930cff7a78e892a73f533f9214221454f37baad0",
+      "auth.json": "da2407c017149c61fc8e496c1a3d6e0015be3234c2585fb7c520b6ba1ea0394a"
+    },
+    "real_home_after": {
+      "config.toml": "6b30f8db25c9e07b708f33bf930cff7a78e892a73f533f9214221454f37baad0",
+      "auth.json": "da2407c017149c61fc8e496c1a3d6e0015be3234c2585fb7c520b6ba1ea0394a"
+    },
+    "real_home_unchanged": true,
+    "real_config_unchanged": true,
+    "real_auth_unchanged": true
+  },
+  "log": [
+    {
+      "phase": "boot-screen",
+      "update_notice": true,
+      "press_enter_to_continue": true,
+      "folder_trust": false,
+      "signin_wall": false,
+      "menu": {
+        "highlighted": "1. Update now (runs `npm install -g @openai/codex`)",
+        "current": null
+      }
+    },
+    {
+      "phase": "ready",
+      "ready": false,
+      "exited": false,
+      "at_ms": 61000
+    },
+    {
+      "phase": "cell",
+      "family": "update_notice",
+      "cell": "cr-burst-d2",
+      "writes": [
+        "2\\r"
+      ],
+      "burst": true,
+      "before_highlight": "1. Update now (runs `npm install -g @openai/codex`)",
+      "after_highlight": "1. Yes, continue",
+      "before_current": null,
+      "after_current": null,
+      "selection_moved": true,
+      "dialog_dismissed": false,
+      "committed": false,
+      "confirmation_before": null,
+      "confirmation_after": null,
+      "composer_row": "1. Yes, continue",
+      "screen_changed": true
+    },
+    {
+      "phase": "cell",
+      "family": "update_notice",
+      "cell": "cr-split-d2",
+      "error": "no live update notice on screen"
+    },
+    {
+      "note": "cells 2-4 below ran in SEPARATE fresh isolated-home processes (stdin-cell-*.log), not appended to this session's stdin.log/bytes.raw, because the update-notice family renders its notice only ONCE per boot: cell 1 already consumed it (see this session's cell entry above, which moved past the notice into the folder-trust interstitial), so cells 2-4 needed a fresh seeded home each to have a live notice to test against."
+    },
+    {
+      "phase": "cell",
+      "family": "update_notice",
+      "cell": "cr-split-d2",
+      "writes": [
+        "2",
+        "\\r"
+      ],
+      "burst": false,
+      "before_highlight": "1. Update now (runs `npm install -g @openai/codex`)",
+      "after_highlight": "1. Yes, continue",
+      "dismissed": true,
+      "note": "moved past the update notice into the folder-trust interstitial; see stdin-cell-cr-split-d2.log"
+    },
+    {
+      "phase": "cell",
+      "family": "update_notice",
+      "cell": "csi13u-burst-d2",
+      "writes": [
+        "2\\x1b[13u"
+      ],
+      "burst": true,
+      "before_highlight": "1. Update now (runs `npm install -g @openai/codex`)",
+      "after_highlight": "1. Yes, continue",
+      "dismissed": true,
+      "note": "moved past the update notice into the folder-trust interstitial; see stdin-cell-csi13u-burst-d2.log"
+    },
+    {
+      "phase": "cell",
+      "family": "update_notice",
+      "cell": "csi13u-split-d2",
+      "writes": [
+        "2",
+        "\\x1b[13u"
+      ],
+      "burst": false,
+      "before_highlight": "1. Update now (runs `npm install -g @openai/codex`)",
+      "after_highlight": "1. Yes, continue",
+      "dismissed": true,
+      "note": "moved past the update notice into the folder-trust interstitial; see stdin-cell-csi13u-split-d2.log"
+    }
+  ]
+}

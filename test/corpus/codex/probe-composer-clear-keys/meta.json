@@ -1,0 +1,156 @@
+{
+  "harness": "codex",
+  "binary_version": "0.144.5",
+  "recorded_at": "2026-07-23T14:40:35.431Z",
+  "cols": 120,
+  "rows": 40,
+  "phase": "composer-clear",
+  "extra_args": [],
+  "ready": true,
+  "notes": "Live codex-cli 0.144.5 PROBE (META-HARNESS-122, probe 2 / composerClearKeys): which byte sequence empties a codex composer that already holds LITERAL, unsubmitted text.\n\nRecorded by test/corpus/tools/probe-codex-permissions.ts --phase composer-clear --open-shape split, under an isolated CODEX_HOME (auth.json only, no config.toml). At idle the composer's last '\\u203a' row is NOT blank \u2014 it carries a greyed rotating placeholder hint (baseline captured as screen-04-empty-composer.txt, hint text 'Explain this codebase'), so 'cleared' is defined as 'the typed text is gone', matched against that baseline, not against a literally empty row.\n\nProcedure per candidate: type '/permissions' WITHOUT submitting (opens the slash-command autocomplete popup), confirm the composer row reads '/permissions', apply the candidate, then re-read the composer row and confirm it is back to the idle-placeholder baseline AND the autocomplete popup is gone.\n\nRESULT: all three candidates cleared the composer back to the exact idle-placeholder baseline and closed the autocomplete popup \u2014 Ctrl-U '\\x15' (1 write), Ctrl-A+Ctrl-K '\\x01'+'\\x0b' (2 writes), and a 24x backspace run '\\x7f'*24 (24 writes, more than the 12 characters of '/permissions' \u2014 the bound was chosen generously and 24 was not needed in practice but was not tested down to the exact minimum). composerClearKeys() should be Ctrl-U: '\\x15' (single byte 0x15) \u2014 the shortest reliable encoding, one write regardless of how much text is in the composer, unlike the backspace-run candidate whose write count must scale with the typed text's length.\n\nCONTAINMENT: real ~/.codex/config.toml and ~/.codex/auth.json were both sha256-identical before and after (see containment block). stdin.log records every keystroke escape-encoded and IS the byte pin for this session.",
+  "containment": {
+    "codex_home": "/var/folders/_p/kgsjzrc91g57sggc0v8gfnch0000gn/T/probe-codex-home-mxV404/home",
+    "isolated_home_files": [
+      ".personality_migration",
+      "auth.json",
+      "cache",
+      "config.toml",
+      "goals_1.sqlite",
+      "goals_1.sqlite-shm",
+      "goals_1.sqlite-wal",
+      "installation_id",
+      "logs_2.sqlite",
+      "logs_2.sqlite-shm",
+      "logs_2.sqlite-wal",
+      "memories_1.sqlite",
+      "memories_1.sqlite-shm",
+      "memories_1.sqlite-wal",
+      "models_cache.json",
+      "shell_snapshots",
+      "skills",
+      "state_5.sqlite",
+      "state_5.sqlite-shm",
+      "state_5.sqlite-wal",
+      "tmp"
+    ],
+    "isolated_config_written": true,
+    "isolated_config_has_approvals_reviewer": false,
+    "isolated_config_has_granular": false,
+    "real_home_before": {
+      "config.toml": "6b30f8db25c9e07b708f33bf930cff7a78e892a73f533f9214221454f37baad0",
+      "auth.json": "da2407c017149c61fc8e496c1a3d6e0015be3234c2585fb7c520b6ba1ea0394a"
+    },
+    "real_home_after": {
+      "config.toml": "6b30f8db25c9e07b708f33bf930cff7a78e892a73f533f9214221454f37baad0",
+      "auth.json": "da2407c017149c61fc8e496c1a3d6e0015be3234c2585fb7c520b6ba1ea0394a"
+    },
+    "real_home_unchanged": true,
+    "real_config_unchanged": true,
+    "real_auth_unchanged": true
+  },
+  "log": [
+    {
+      "phase": "boot-screen",
+      "update_notice": false,
+      "press_enter_to_continue": true,
+      "folder_trust": true,
+      "signin_wall": false,
+      "menu": {
+        "highlighted": "1. Yes, continue",
+        "current": null
+      }
+    },
+    {
+      "phase": "interstitial-dismiss",
+      "round": 0,
+      "encoding": "bare-cr",
+      "keys": "\\r",
+      "screen_changed": false,
+      "dismissed": false
+    },
+    {
+      "phase": "interstitial-dismiss",
+      "round": 0,
+      "encoding": "csi13u",
+      "keys": "\\x1b[13u",
+      "screen_changed": true,
+      "dismissed": true
+    },
+    {
+      "phase": "ready",
+      "ready": true,
+      "exited": false,
+      "at_ms": 4121
+    },
+    {
+      "phase": "empty-composer",
+      "row": "Explain this codebase"
+    },
+    {
+      "phase": "composer-clear",
+      "cand": "ctrl-u",
+      "writes": [
+        "\\x15"
+      ],
+      "write_count": 1,
+      "typed_row": "/permissions",
+      "cleared_row": "Explain this codebase",
+      "empty_row_baseline": "Explain this codebase",
+      "cleared": true,
+      "back_to_placeholder": true,
+      "popup_gone": true
+    },
+    {
+      "phase": "composer-clear",
+      "cand": "ctrl-a-ctrl-k",
+      "writes": [
+        "\\x01",
+        "\\x0b"
+      ],
+      "write_count": 2,
+      "typed_row": "/permissions",
+      "cleared_row": "Explain this codebase",
+      "empty_row_baseline": "Explain this codebase",
+      "cleared": true,
+      "back_to_placeholder": true,
+      "popup_gone": true
+    },
+    {
+      "phase": "composer-clear",
+      "cand": "backspace-run",
+      "writes": [
+        "\\x7f",
+        "\\x7f",
+        "\\x7f",
+        "\\x7f",
+        "\\x7f",
+        "\\x7f",
+        "\\x7f",
+        "\\x7f",
+        "\\x7f",
+        "\\x7f",
+        "\\x7f",
+        "\\x7f",
+        "\\x7f",
+        "\\x7f",
+        "\\x7f",
+        "\\x7f",
+        "\\x7f",
+        "\\x7f",
+        "\\x7f",
+        "\\x7f",
+        "\\x7f",
+        "\\x7f",
+        "\\x7f",
+        "\\x7f"
+      ],
+      "write_count": 24,
+      "typed_row": "/permissions",
+      "cleared_row": "Explain this codebase",
+      "empty_row_baseline": "Explain this codebase",
+      "cleared": true,
+      "back_to_placeholder": true,
+      "popup_gone": true
+    }
+  ]
+}

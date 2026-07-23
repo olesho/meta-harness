@@ -53,6 +53,17 @@ const SKIP_DIRS = new Set(["corpus", "node_modules", "dist", "__snapshots__"]);
 // This file names every forbidden symbol in order to search for it.
 const SELF = relative(root, fileURLToPath(import.meta.url));
 
+// The containment bar this file's own docstring carves out: "code that
+// legitimately must [name config.toml] — isolated CODEX_HOME, or snapshot-
+// and-restore — belongs to META-HARNESS-103 and is neither weakened nor
+// inherited here." seedIsolatedCodexHome (META-HARNESS-122, a 103 subtask) is
+// exactly that code — it asserts a config.toml path is ABSENT from a seeded
+// isolated home, which is the point of the helper, not a scope violation.
+const EXEMPT = new Set([
+  "test/helpers/codex_home.ts",
+  "test/helpers/codex_home.test.ts",
+]);
+
 function walk(dir: string, out: string[] = []): string[] {
   for (const e of readdirSync(dir, { withFileTypes: true })) {
     if (e.isDirectory()) {
@@ -76,7 +87,8 @@ const SOURCES: [string, string][] = [
         string,
       ],
   )
-  .filter(([rel]) => rel !== SELF.split(sep).join("/"));
+  .filter(([rel]) => rel !== SELF.split(sep).join("/"))
+  .filter(([rel]) => !EXEMPT.has(rel));
 
 /** Repo-relative paths of every file whose source matches `re`. */
 function hits(re: RegExp): string[] {

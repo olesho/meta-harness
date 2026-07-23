@@ -1,0 +1,5 @@
+[projects."/private/var/folders/_p/kgsjzrc91g57sggc0v8gfnch0000gn/T/probe-codex-cwd-6kd465"]
+trust_level = "trusted"
+
+[tui.model_availability_nux]
+"gpt-5.6-sol" = 1

@@ -1,0 +1,101 @@
+{
+  "harness": "codex",
+  "binary_version": "0.144.5",
+  "recorded_at": "2026-07-23T14:30:42.133Z",
+  "cols": 120,
+  "rows": 40,
+  "phase": "fixture",
+  "ready": true,
+  "notes": "Live codex-cli 0.144.5 /permissions dialog in its ALREADY-CURRENT state: the menu reads\n\"> 2. Approve for me (current)\" — row 2 is BOTH the highlight and the \"(current)\" preset.\nCompanion to test/corpus/codex/permissions-dialog, which recorded the other starting state\n(\"> 1. Ask for approval (current)\"). Replayed through the shipped parser this yields\nkind=permissions_prompt, three rows, row 2 highlighted, keys \"2\\\\r\"; readyForInput(\"codex\") is\nfalse and AutoDismissKeys returns [null,false], exactly as for the first fixture.\n\nHOW TO REPRODUCE THIS STARTING STATE (probe recording: META-HARNESS-122).\nRecorded by test/corpus/tools/probe-codex-permissions.ts --phase fixture --open-shape split,\nunder an ISOLATED CODEX_HOME seeded by test/helpers/codex_home.ts:\n  * the home was seeded with a 0600 copy of ~/.codex/auth.json AND NOTHING ELSE — in\n    particular it carried NO config.toml. A bare empty CODEX_HOME is not usable: codex lands\n    on the first-run sign-in wall, which signinWallRE excludes from DetectInput and\n    onboardingWall holds as not-ready, so readyForInput never fires. Omitting config.toml is\n    what makes the run deterministic: codex renders its DEFAULTS, so the dialog opens on\n    \"> 1. Ask for approval (current)\" every time. Copying a real config.toml would import\n    whatever approvals_reviewer the developer already carries.\n  * codex was then driven: open /permissions, commit row 2, clear the composer, re-open\n    /permissions. The recording deliberately ENDS with the dialog on screen (no ESC backout,\n    no /status box) because corpus fixtures replay bytes.raw into a 120x40 Screen and\n    snapshot the FINAL frame.\n\nEXTRA FIRST-RUN INTERSTITIAL (finding). A fresh CODEX_HOME renders a FOLDER-TRUST prompt\nbefore the composer: \"Do you trust the contents of this directory?\" with \"> 1. Yes, continue\"\n/ \"2. No, quit\" and the \"Press enter to continue\" footer (see screen-00-boot.txt). It is\nalready covered by the shipped ladder — codexBlockingInterstitial matches the footer and holds\nnot-ready, and a KindNotice auto-dismiss (bare CR) clears it, which this recording confirms\nlive. NOT rendered here but rendered on the SECOND launch of a home: the \"Update available!\"\nnotice, which appears once $CODEX_HOME/version.json advertises a newer release.\n\nCONTAINMENT (probe 3). CODEX_HOME IS honoured for config.toml on 0.144.5. Committing\n\"Approve for me\" wrote approvals_reviewer = \"auto_review\" into the ISOLATED\n<CODEX_HOME>/config.toml (captured verbatim as isolated-config.toml alongside this file), and\nthe real ~/.codex/config.toml AND ~/.codex/auth.json were both sha256-identical before and\nafter the session — see the containment block below. Note the persisted marker is\napprovals_reviewer = \"auto_review\"; no literal granular key is written to config.toml.\n\nstdin.log records every keystroke escape-encoded and IS the byte pin for this session.",
+  "containment": {
+    "codex_home": "/var/folders/_p/kgsjzrc91g57sggc0v8gfnch0000gn/T/probe-codex-home-GiRdUy/home",
+    "isolated_home_files": [
+      ".personality_migration",
+      "auth.json",
+      "cache",
+      "config.toml",
+      "goals_1.sqlite",
+      "goals_1.sqlite-shm",
+      "goals_1.sqlite-wal",
+      "installation_id",
+      "logs_2.sqlite",
+      "logs_2.sqlite-shm",
+      "logs_2.sqlite-wal",
+      "memories_1.sqlite",
+      "memories_1.sqlite-shm",
+      "memories_1.sqlite-wal",
+      "models_cache.json",
+      "plugins",
+      "shell_snapshots",
+      "skills",
+      "state_5.sqlite",
+      "state_5.sqlite-shm",
+      "state_5.sqlite-wal",
+      "tmp",
+      "version.json"
+    ],
+    "isolated_config_written": true,
+    "isolated_config_has_approvals_reviewer": true,
+    "isolated_config_has_granular": false,
+    "real_home_before": {
+      "config.toml": "6b30f8db25c9e07b708f33bf930cff7a78e892a73f533f9214221454f37baad0",
+      "auth.json": "da2407c017149c61fc8e496c1a3d6e0015be3234c2585fb7c520b6ba1ea0394a"
+    },
+    "real_home_after": {
+      "config.toml": "6b30f8db25c9e07b708f33bf930cff7a78e892a73f533f9214221454f37baad0",
+      "auth.json": "da2407c017149c61fc8e496c1a3d6e0015be3234c2585fb7c520b6ba1ea0394a"
+    },
+    "real_home_unchanged": true,
+    "real_config_unchanged": true,
+    "real_auth_unchanged": true
+  },
+  "log": [
+    {
+      "phase": "boot-screen",
+      "update_notice": false,
+      "press_enter_to_continue": true,
+      "folder_trust": true,
+      "signin_wall": false,
+      "menu": {
+        "highlighted": "1. Yes, continue",
+        "current": null
+      }
+    },
+    {
+      "phase": "interstitial-dismiss",
+      "round": 0,
+      "encoding": "bare-cr",
+      "keys": "\\r",
+      "screen_changed": true,
+      "dismissed": true
+    },
+    {
+      "phase": "ready",
+      "ready": true,
+      "exited": false,
+      "at_ms": 3217
+    },
+    {
+      "phase": "fixture-open",
+      "opened": true,
+      "state": {
+        "highlighted": "1. Ask for approval (current)",
+        "current": "1. Ask for approval (current)"
+      }
+    },
+    {
+      "phase": "fixture-commit",
+      "saw_confirmation": true,
+      "confirmation_line": "Approve for me"
+    },
+    {
+      "phase": "fixture-final",
+      "reopened": true,
+      "state": {
+        "highlighted": "2. Approve for me (current)",
+        "current": "2. Approve for me (current)"
+      },
+      "is_approve_for_me_current": true
+    }
+  ]
+}

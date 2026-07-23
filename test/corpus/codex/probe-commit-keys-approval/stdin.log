@@ -1,0 +1,6 @@
+   1.430s  dismiss-bare-cr    \r
+   2.342s  dismiss-csi13u     \x1b[13u
+   7.909s  approval-prompt    Run the shell command `curl -sS https://example.com` for me. Do not explain, just run it directly with the shell tool.
+   8.811s  approval-submit    \x1b[13u
+  30.906s  commit-cr-burst-d3#0 3\r
+  31.814s  clear-after-cr-burst-d3 \x15

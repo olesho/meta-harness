@@ -1,0 +1,4 @@
+   7.008s  commit-csi13u-split-d2#0 2
+   7.191s  commit-csi13u-split-d2#1 \x1b[13u
+   8.289s  backout-after-csi13u-split-d2 \x1b
+   9.192s  clear-after-csi13u-split-d2 \x15
