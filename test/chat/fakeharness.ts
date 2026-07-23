@@ -56,6 +56,38 @@ export const SubmitCSI13u = "\x1b[13u";
 export const SubmitCR = "\r";
 
 /**
+ * PermissionsCommandText — the literal command setCodexPermissionPreset
+ * (META-HARNESS-103) types to open codex's /permissions dialog, submitted with
+ * SubmitCSI13u exactly like any other codex send (writeMessageAndSubmit,
+ * src/chat/conversation.ts:1829) — that CSI 13 u is what actually opens the
+ * dialog live, per the probed byte pin (META-HARNESS-122 probe-backout-keys
+ * stdin.log: "open-type-bare-esc /permissions" / "open-submit-bare-esc
+ * \x1b[13u"). AwaitPermissionsOpen matches the two as one accumulated burst.
+ */
+export const PermissionsCommandText = "/permissions";
+
+/**
+ * BackoutESC — the bytes dialogBackoutKeys() (META-HARNESS-103) writes to
+ * dismiss the /permissions dialog without committing a preset: a bare ESC,
+ * single byte 0x1b. Probed live against codex-cli 0.144.5 (META-HARNESS-122
+ * probe-backout-keys): CSI 27 u ('\x1b[27u') dismissed equally well in the same
+ * session, but bare ESC is the simpler encoding and the one a human hitting the
+ * physical Esc key sends, so it is the one pinned here.
+ */
+export const BackoutESC = "\x1b";
+
+/**
+ * ComposerClearCtrlU — the bytes composerClearKeys() (META-HARNESS-103) writes
+ * to empty a composer that still holds literal, unsubmitted text: Ctrl-U,
+ * single byte 0x15. Probed live against codex-cli 0.144.5 (META-HARNESS-122
+ * probe-composer-clear-keys) alongside Ctrl-A+Ctrl-K and a backspace run — all
+ * three cleared the composer back to the idle-placeholder baseline, but Ctrl-U
+ * is the shortest: one write regardless of how much text is in the composer,
+ * unlike the backspace run whose write count must scale with the text's length.
+ */
+export const ComposerClearCtrlU = "\x15";
+
+/**
  * PermissionCycleCSI — the bytes the wrapper writes to advance the
  * permission-mode ring by exactly one rung: ESC [ Z, legacy back-tab
  * (Shift+Tab). Scenarios wait for it via AwaitPermissionCycle, pinning the
@@ -260,6 +292,51 @@ export class Builder {
       quoteMeta(PermissionCycleCSI),
       false,
       "permission-cycle",
+    );
+  }
+
+  /**
+   * Blocks until the wrapper writes the /permissions open burst: the literal
+   * command text (PermissionsCommandText) followed by the CSI 13u submit key
+   * (SubmitCSI13u) — the same two byte groups writeMessageAndSubmit emits for
+   * any codex send. Matched as ONE accumulated pattern rather than two chained
+   * waitInput calls: readUntil (fakeharness.mjs) matches over the growing
+   * accumulated stdin buffer regardless of how many separate PTY writes make it
+   * up, so this fires the same whether the driver bursts both in one write or
+   * splits them with an echo wait in between (conversation.ts's split for
+   * prompt-readiness harnesses).
+   */
+  AwaitPermissionsOpen(): this {
+    return this.waitInput(
+      quoteMeta(PermissionsCommandText + SubmitCSI13u),
+      false,
+      "permissions-open",
+    );
+  }
+
+  /**
+   * Blocks until the wrapper writes the /permissions backout key: a bare ESC
+   * (BackoutESC).
+   *
+   * CRITICAL: this must NOT also match CSI 13u ('\x1b[13u', SubmitCSI13u) or
+   * CSI 27u ('\x1b[27u') — both are byte-for-byte prefixed by the exact same
+   * 0x1b BackoutESC is, so a naive /\x1b/ matcher would fire on the first byte
+   * of either and make every backout assertion pass on a submit it was supposed
+   * to be distinguishing from (probed and documented live, META-HARNESS-122
+   * probe-backout-keys meta.json's "NON-OVERLAP NOTE"). The fix: require the
+   * 0x1b NOT be immediately followed by '[' — true for a solitary ESC, false
+   * for either CSI encoding.
+   */
+  AwaitBackout(): this {
+    return this.waitInput("\x1b(?!\\[)", false, "backout");
+  }
+
+  /** Blocks until the wrapper writes the composer-clear key (ComposerClearCtrlU). */
+  AwaitComposerClear(): this {
+    return this.waitInput(
+      quoteMeta(ComposerClearCtrlU),
+      false,
+      "composer-clear",
     );
   }
 
@@ -636,6 +713,117 @@ export class Builder {
         this.resumeHint(),
       ),
       true,
+    );
+  }
+
+  /**
+   * codexPermissionsRows — the "Update Model Permissions" menu body for each
+   * paintable `current` selection, captured VERBATIM from the live 0.144.5
+   * corpus recordings (test/corpus/codex/permissions-dialog for `1`,
+   * test/corpus/codex/permissions-approve-current for `2`) so the painted
+   * screen is exactly what detectPermissions (src/turns/harness/codex.ts:504)
+   * parses off the real dialog — not a paraphrase of it.
+   *
+   * Reused verbatim rather than computed: the double-space column gutter
+   * cleanLabel (codex.ts:604) splits on shifts with the widest rendered label
+   * (the "(current)" suffix lengthens whichever row carries it), which is why
+   * the gutter position and the second column's word-wrap differ between the
+   * two states below — a generative approach would have to reimplement that
+   * layout to stay faithful, so the recorded rows are pinned as data instead.
+   */
+  private static readonly codexPermissionsRows: Readonly<
+    Record<1 | 2, readonly string[]>
+  > = {
+    1: [
+      "› 1. Ask for approval (current)  Codex can read and edit files in the current workspace, and run commands. Approval is",
+      "                                 required to access the internet or edit other files.",
+      "  2. Approve for me              Only ask for actions detected as potentially unsafe.",
+      "  3. Full Access                 Codex can edit files outside this workspace and access the internet without asking",
+      "                                 for approval. Exercise caution when using.",
+    ],
+    2: [
+      "  1. Ask for approval          Codex can read and edit files in the current workspace, and run commands. Approval is",
+      "                               required to access the internet or edit other files.",
+      "› 2. Approve for me (current)  Only ask for actions detected as potentially unsafe.",
+      "  3. Full Access               Codex can edit files outside this workspace and access the internet without asking for",
+      "                               approval. Exercise caution when using.",
+    ],
+  };
+
+  /**
+   * Paints codex's "Update Model Permissions" dialog (opened by /permissions),
+   * with `current` selecting which preset row carries the live "›" highlight
+   * AND the "(current)" suffix — both fixture states from the corpus are
+   * paintable this way: `1` is test/corpus/codex/permissions-dialog (a fresh
+   * config, "Ask for approval" in effect); `2` is
+   * test/corpus/codex/permissions-approve-current (the already-current state a
+   * scenario needs to exercise the "target preset already current" backout
+   * path). The header is the anchor detectPermissions keys on
+   * (permissionsAnchor, codex.ts:384); the footer is NOT — it is assembled
+   * upstream from template fragments codex-side and is painted only for visual
+   * fidelity.
+   */
+  CodexPermissionsDialog(delayMs: number, current: 1 | 2): this {
+    return this.frame(
+      delayMs,
+      this.ccScreen(
+        "  Update Model Permissions",
+        "",
+        ...Builder.codexPermissionsRows[current],
+        "",
+        "  Press enter to confirm or esc to go back",
+      ),
+      false,
+    );
+  }
+
+  /**
+   * Paints codex's "Update Model Permissions" dialog as it renders with the
+   * `guardian_approval` feature flag off: "Approve for me" is gone, replaced by
+   * a "Read Only" / "Default" / "Custom permissions" ladder (the row set
+   * ErrPermissionPresetUnavailable's rows list names, test/chat/
+   * codex_permissions_errors.test.ts). No live corpus recording backs this
+   * shape (the flag was on for every META-HARNESS-122 probe session), so the
+   * rows are hand-written rather than reused verbatim — unlike
+   * CodexPermissionsDialog, still following the same double-space gutter
+   * convention detectPermissions/cleanLabel depend on. "Read Only" is painted
+   * highlighted+current (a fresh install's default rung), matching how both
+   * corpus states above put the highlight on the in-effect preset.
+   */
+  CodexPermissionsDialogFlagOff(delayMs: number): this {
+    return this.frame(
+      delayMs,
+      this.ccScreen(
+        "  Update Model Permissions",
+        "",
+        "› 1. Read Only (current)  Codex can read files but cannot edit them or run commands.",
+        "  2. Default               Codex can read and edit files in the current workspace, and run commands.",
+        "  3. Custom permissions    Configure a custom permission profile.",
+        "",
+        "  Press enter to confirm or esc to go back",
+      ),
+      false,
+    );
+  }
+
+  /**
+   * Paints a "›"-prefixed composer row still carrying `text`, unsubmitted — the
+   * live 0.142.5 paste-swallow shape (writeMessageAndSubmit's docstring,
+   * src/chat/conversation.ts:1815-1827): a text+Enter burst consumed as a paste
+   * renders the Enter as a newline and leaves the prompt sitting in the
+   * composer instead of opening the dialog. composerRowRE (codex.ts:396)
+   * captures everything after the "›" glyph on the last such row, so a
+   * non-empty `text` here is exactly what makes that capture non-empty — the
+   * signal the swallowed-write detection has to key on, and the reason
+   * codexPromptRE (ready.ts:58) is not enough by itself: it matches this row
+   * just as happily as the idle "› " one, which is why readyForInput reports
+   * this screen ready even though the write was never actually submitted.
+   */
+  CodexDirtyComposer(delayMs: number, text: string): this {
+    return this.frame(
+      delayMs,
+      this.ccScreen("Codex", "", "› " + text, "", this.resumeHint()),
+      false,
     );
   }
 
