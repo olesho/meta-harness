@@ -40,7 +40,10 @@ import {
 // from src/wrapper/api.ts, deliberately — a public re-export would move
 // test/testdata/ts_surface.golden, and src/cli/** is outside both barrel guards.
 // Precedent: src/cli/screenbench-record.ts imports ../wrapper/internal/pty.ts.
-import { argvPermissionPin } from "../wrapper/internal/permission.ts";
+import {
+  argvPermissionPin,
+  isSupportedPermissionMode,
+} from "../wrapper/internal/permission.ts";
 import { effectiveLaunchRung } from "../wrapper/internal/permissionrungs.ts";
 
 // Exit codes + DeadlineLine come from the ONE shared protocol module
@@ -350,8 +353,14 @@ export function reportedPermissionRung(
   if (pin.kind === "native") return pin.value;
   if (pin.kind === "opaque") return "override";
   // Nothing in argv. A requested mode this harness has no canonical rung for
-  // (again dontAsk) was still injected verbatim, so report it verbatim.
-  if (requested !== "") return requested;
+  // (again dontAsk) was still injected verbatim, so report it verbatim — but
+  // ONLY when the injector would in fact have injected it. isSupportedPermission
+  // Mode is that exact predicate: a harness with no permission axis, or a
+  // spelling this harness does not accept, leaves argv untouched, so reporting
+  // the request would name a rung nothing ever launched at.
+  if (requested !== "" && isSupportedPermissionMode(harness, requested)) {
+    return requested;
+  }
   // Nothing requested, nothing injected. Key ABSENT — never "" and never
   // "default".
   return undefined;

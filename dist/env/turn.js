@@ -136,6 +136,15 @@ export async function runStructuredTurn(ctx, ws, cfg) {
         else if (exec.code !== 0) {
             // No JSON on a non-zero exit (usage / prompt-read failure / fatal): derive
             // a coherent result from exit code + stderr rather than assume a payload.
+            //
+            // permission_mode is DELIBERATELY absent, and must stay absent even when
+            // cfg.permissionMode is set. No turn ran, so there is no launch rung to
+            // report, and synthesising a guest report from the host's own request
+            // would be fabrication: it would make "the guest binary predates the
+            // field" indistinguishable from "the guest confirmed the flag survived".
+            // A host that needs that distinction compares its request against this
+            // key's absence — see StructuredTurnResult.permission_mode. Not an
+            // omission; do not "fix" it by copying cfg.permissionMode in.
             result = {
                 status: statusForExit(exec.code),
                 reply: "",

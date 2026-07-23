@@ -82,6 +82,24 @@ describe("runStructuredTurn — happy path & transport", () => {
     expect(res.harnessSessionID).toBe("sess-1");
   });
 
+  test("a result line with NO permission_mode still parses (every pre-field producer)", async () => {
+    const ws = new TurnFakeWorkspace({ code: 0, stdout: okLine(), stderr: "" });
+    const res = await runStructuredTurn(ctx, ws, cfg());
+    expect(res.status).toBe("completed");
+    expect(res.permission_mode).toBeUndefined();
+    // ...and a producer that DOES send it is returned verbatim, unvalidated:
+    // the field is `string`, so an unrecognised value crosses opaquely rather
+    // than being mapped onto a rung.
+    const ws2 = new TurnFakeWorkspace({
+      code: 0,
+      stdout: okLine({ permission_mode: "override" }),
+      stderr: "",
+    });
+    expect((await runStructuredTurn(ctx, ws2, cfg())).permission_mode).toBe(
+      "override",
+    );
+  });
+
   test("prompt crosses via temp-file upload, NEVER argv", async () => {
     const ws = new TurnFakeWorkspace({ code: 0, stdout: okLine(), stderr: "" });
     await runStructuredTurn(ctx, ws, cfg({ prompt: "secret prompt body" }));
@@ -242,6 +260,25 @@ describe("runStructuredTurn — no-JSON exit paths (never assume a payload)", ()
     expect(res.status).toBe("startup_error");
     expect(res.reply).toBe("");
     expect(res.reason).toContain("unknown harness");
+  });
+
+  test("the derived result NEVER carries permission_mode — not even when requested", async () => {
+    // No turn ran, so there is no launch rung to report. Synthesising one from
+    // the host's own cfg.permissionMode would fabricate a guest report and make
+    // "the guest binary predates the field" indistinguishable from "the guest
+    // confirmed the flag survived" — the diagnostic the absence exists to give.
+    const ws = new TurnFakeWorkspace({
+      code: 2,
+      stdout: "",
+      stderr: "structured-runner: unknown harness: bogus\n",
+    });
+    const res = await runStructuredTurn(
+      ctx,
+      ws,
+      cfg({ permissionMode: "plan" }),
+    );
+    expect(res.status).toBe("startup_error");
+    expect("permission_mode" in res).toBe(false);
   });
 
   test("exit 1 (prompt-read failure) with no JSON → errored", async () => {

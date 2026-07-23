@@ -12,6 +12,7 @@ import {
   main,
   parseStructuredArgs,
   buildGuestEnv,
+  reportedPermissionRung,
   resolveTimeoutMs,
   ExitOK,
   ExitDeadline,
@@ -226,6 +227,192 @@ describe("parseStructuredArgs (safe-transport grammar)", () => {
   });
 });
 
+describe("reportedPermissionRung (StructuredTurnResult.permission_mode)", () => {
+  // The function is pure argv arithmetic, so the whole table is driven directly
+  // rather than through a real-pty turn — the two end-to-end freezes below only
+  // prove the value reaches the wire.
+  const rung = (
+    harness: string,
+    args: Partial<Omit<Parameters<typeof reportedPermissionRung>[1], "">> = {},
+  ) => reportedPermissionRung(harness, { harnessArgs: [], ...args });
+
+  test('nothing requested, nothing injected → key ABSENT (never "", never "default")', () => {
+    expect(rung("claude-code")).toBeUndefined();
+    expect(rung("codex")).toBeUndefined();
+    // A tail that says nothing about permissions is still absent.
+    expect(rung("claude-code", { harnessArgs: ["--verbose"] })).toBeUndefined();
+    expect(rung("codex", { harnessArgs: ["--verbose"] })).toBeUndefined();
+  });
+
+  test("--sandbox-defaults: claude reports bypass; codex reports ABSENT", () => {
+    // This is the single most safety-relevant configuration this path can be
+    // in, and it is chosen INSIDE the guest — the caller never spelled it out.
+    expect(rung("claude-code", { sandboxDefaults: true })).toBe("bypass");
+    // metaHarnessArgs("codex", true) is [] (codex gets env-only treatment), so
+    // there is no argv pin and no carve-out is needed here. The asymmetry lives
+    // in metaHarnessArgs alone.
+    expect(rung("codex", { sandboxDefaults: true })).toBeUndefined();
+  });
+
+  test("a caller-tail claude bypass flag reports bypass, in both spellings", () => {
+    expect(
+      rung("claude-code", { harnessArgs: ["--dangerously-skip-permissions"] }),
+    ).toBe("bypass");
+    expect(
+      rung("claude-code", {
+        harnessArgs: ["--allow-dangerously-skip-permissions"],
+      }),
+    ).toBe("bypass");
+  });
+
+  test("injection + an agreeing tail collapses to the rung, not a sentinel", () => {
+    expect(
+      rung("claude-code", {
+        sandboxDefaults: true,
+        harnessArgs: ["--dangerously-skip-permissions"],
+      }),
+    ).toBe("bypass");
+  });
+
+  test("a bypass flag BEATS a restrictive --permission-mode in the same argv", () => {
+    // The permissive-direction lie this field exists to prevent: the composed
+    // argv is [--dangerously-skip-permissions, --permission-mode, plan] and the
+    // harness launches unrestricted, so "plan" would be a lie. effectiveLaunchRung
+    // resolves the dominance (live-probed in permissionrungs.ts) — reporting the
+    // MORE permissive rung, never the restrictive one, and never hiding a bypass
+    // behind "override".
+    expect(
+      rung("claude-code", {
+        sandboxDefaults: true,
+        harnessArgs: ["--permission-mode", "plan"],
+      }),
+    ).toBe("bypass");
+    // Same shape via the knob rather than --sandbox-defaults (P1 beats P2).
+    expect(
+      rung("claude-code", {
+        permissionMode: "plan",
+        harnessArgs: ["--dangerously-skip-permissions"],
+      }),
+    ).toBe("bypass");
+  });
+
+  test("a claude tail --permission-mode resolves to its canonical rung", () => {
+    expect(
+      rung("claude-code", { harnessArgs: ["--permission-mode", "plan"] }),
+    ).toBe("plan");
+    expect(
+      rung("claude-code", { harnessArgs: ["--permission-mode=plan"] }),
+    ).toBe("plan");
+    // Native spellings normalize; no second normalizer lives in this module.
+    expect(
+      rung("claude-code", {
+        harnessArgs: ["--permission-mode", "bypassPermissions"],
+      }),
+    ).toBe("bypass");
+    expect(
+      rung("claude-code", {
+        harnessArgs: ["--permission-mode", "acceptEdits"],
+      }),
+    ).toBe("ask");
+  });
+
+  test('claude dontAsk passes through VERBATIM — never "normalised" away', () => {
+    // The one off-ladder native spelling at 2.1.217. The runner knows the rung
+    // precisely; a sentinel would erase that, and absence would conflate it with
+    // "unset". Frozen so nobody folds it into ask/auto later.
+    expect(
+      rung("claude-code", { harnessArgs: ["--permission-mode", "dontAsk"] }),
+    ).toBe("dontAsk");
+    expect(rung("claude-code", { permissionMode: "dontAsk" })).toBe("dontAsk");
+  });
+
+  test('a valueless or empty --permission-mode is "override" — never "" and never absent', () => {
+    // parseStructuredArgs forwards everything after `--` verbatim, so both
+    // shapes are reachable. The argv IS pinned; reporting absence would say
+    // "nothing was requested", and "" would collide with unset on the wire.
+    expect(rung("claude-code", { harnessArgs: ["--permission-mode"] })).toBe(
+      "override",
+    );
+    expect(rung("claude-code", { harnessArgs: ["--permission-mode="] })).toBe(
+      "override",
+    );
+  });
+
+  test("codex single-token bypass reports bypass — a bypass is never erased", () => {
+    expect(
+      rung("codex", {
+        harnessArgs: ["--dangerously-bypass-approvals-and-sandbox"],
+      }),
+    ).toBe("bypass");
+    // Proof-of-unrestricted also holds through the -s axis and the -c key.
+    expect(rung("codex", { harnessArgs: ["-s", "danger-full-access"] })).toBe(
+      "bypass",
+    );
+    expect(rung("codex", { harnessArgs: ["-sdanger-full-access"] })).toBe(
+      "bypass",
+    );
+    expect(
+      rung("codex", { harnessArgs: ["--sandbox=danger-full-access"] }),
+    ).toBe("bypass");
+    expect(
+      rung("codex", { harnessArgs: ["-c", "sandbox_mode=danger-full-access"] }),
+    ).toBe("bypass");
+  });
+
+  test('a codex posture no rung emits is "override"', () => {
+    // Two orthogonal axes whose forward map has no inverse: a lone approval
+    // axis, a profile, or a non-danger config key.
+    expect(rung("codex", { harnessArgs: ["-a", "never"] })).toBe("override");
+    expect(
+      rung("codex", { harnessArgs: ["--ask-for-approval", "never"] }),
+    ).toBe("override");
+    expect(rung("codex", { harnessArgs: ["-p", "wide"] })).toBe("override");
+    expect(
+      rung("codex", { harnessArgs: ["-c", "approval_policy=never"] }),
+    ).toBe("override");
+    expect(rung("codex", { harnessArgs: ["-s"] })).toBe("override");
+  });
+
+  test("a codex sandbox axis that names a posture resolves to its ceiling rung", () => {
+    // Not "override": the single-axis ceiling table names these precisely.
+    expect(rung("codex", { harnessArgs: ["-s", "read-only"] })).toBe("manual");
+    expect(rung("codex", { harnessArgs: ["-s", "workspace-write"] })).toBe(
+      "auto",
+    );
+    expect(
+      rung("codex", {
+        harnessArgs: ["-s", "workspace-write", "-a", "on-request"],
+      }),
+    ).toBe("ask");
+    // --sandbox-defaults injects nothing on codex, so the tail is the only pin.
+    expect(
+      rung("codex", {
+        sandboxDefaults: true,
+        harnessArgs: ["-s", "read-only"],
+      }),
+    ).toBe("manual");
+  });
+
+  test("nothing in argv: the requested rung is reported (the injection complement)", () => {
+    // Neither source pins ⇒ the wrapper's all-or-nothing injector DID inject the
+    // requested rung, so this is the complement of the argv branch rather than a
+    // guess about what happened.
+    expect(rung("claude-code", { permissionMode: "bypassPermissions" })).toBe(
+      "bypass",
+    );
+    expect(rung("claude-code", { permissionMode: "plan" })).toBe("plan");
+    // codex has no plan-shaped launch posture: `plan` emits (read-only,
+    // untrusted), which replays as manual. Reporting "plan" would name a rung
+    // the argv contradicts.
+    expect(rung("codex", { permissionMode: "plan" })).toBe("manual");
+    expect(rung("codex", { permissionMode: "auto" })).toBe("auto");
+  });
+
+  test("a harness with no permission axis reports ABSENT", () => {
+    expect(rung("gemini", { permissionMode: "plan" })).toBeUndefined();
+  });
+});
+
 describe("buildGuestEnv (frozen sandbox-defaults env semantics)", () => {
   const isSandbox = (env: string[]) =>
     env.filter((e) => e.startsWith("IS_SANDBOX="));
@@ -416,6 +603,33 @@ describe("structured-runner main() — one-turn JSON contract (real pty + fake h
     expect(code).toBe(ExitOK);
     const argv: string[] = JSON.parse(readFileSync(argvOut, "utf8"));
     expect(argv).not.toContain("--dangerously-skip-permissions");
+  }, 25000);
+
+  // The wire corpus never exercises the emitter and parseLastJSONLine is a blind
+  // cast, so these two are the ONLY thing freezing that the value reaches the
+  // wire. Deliberately no exact Object.keys() assertion — see the comment above
+  // on harnessSessionID/transcript_error timing.
+  test("--sandbox-defaults: permission_mode is bypass on the emitted line", async () => {
+    const { promptPath } = stageTurn();
+    const { code, payload } = await captureMain([
+      "--prompt-file",
+      promptPath,
+      "--sandbox-defaults",
+      "claude",
+    ]);
+    expect(code).toBe(ExitOK);
+    expect(payload.permission_mode).toBe("bypass");
+  }, 25000);
+
+  test("no flags: the permission_mode key is ABSENT — no empty-string default", async () => {
+    const { promptPath } = stageTurn();
+    const { code, payload } = await captureMain([
+      "--prompt-file",
+      promptPath,
+      "claude",
+    ]);
+    expect(code).toBe(ExitOK);
+    expect("permission_mode" in payload).toBe(false);
   }, 25000);
 
   test("--sandbox-defaults + --permission-mode: ExitUsage, stderr message, NO JSON on stdout", async () => {

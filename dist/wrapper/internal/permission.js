@@ -48,7 +48,7 @@
 // a CALLER may pass verbatim (which suppresses injection, see below), never
 // what we emit. Rationale mirrored in docs/design/permission-argv-parity.md §2.
 // codex's `--full-auto` is NOT used: removed in 0.144.5, now a hard error.
-import { argsContainAnyFlag, argsContainConfigKey, normHarness, prependArgs, } from "./harnessargs.js";
+import { argsContainAnyFlag, argsContainConfigKey, flagValue, normHarness, prependArgs, } from "./harnessargs.js";
 import { ClaudeModeAcceptEdits, ClaudeModeBypassPermissions, ClaudeModeDontAsk, ClaudeSkipPermissionsFlags, CodexApprovalNever, CodexApprovalOnRequest, CodexApprovalUntrusted, CodexBypassFlag, CodexSandboxDangerFullAccess, CodexSandboxReadOnly, CodexSandboxWorkspaceWrite, PermissionModeAsk, PermissionModeAuto, PermissionModeBypass, PermissionModeManual, PermissionModePlan, } from "./permissionrungs.js";
 /**
  * claude flags that pin the permission axis out of band. Any of them in argv
@@ -209,6 +209,50 @@ export function argsWithHarnessPermissionMode(harness, args, mode) {
         }
         default:
             return args;
+    }
+}
+/**
+ * argvPermissionPin classifies how args pins permissions for harness.
+ *
+ * The intended use is as effectiveLaunchRung's DISAMBIGUATOR: that function
+ * collapses "argv says nothing" and "argv pins something unnameable" onto the
+ * same "" return, and a telemetry field must tell those apart — absent means
+ * nothing was requested or injected, never "pinned, posture unknown". Call it
+ * only on the "" branch; a resolved rung needs no classification.
+ *
+ * Pass the COMPOSED argv (any harness-generated injection plus the caller's
+ * own tail), the same slice argsWithHarnessPermissionMode would see.
+ */
+export function argvPermissionPin(harness, args) {
+    switch (normHarness(harness)) {
+        case "claude":
+        case "claude-code": {
+            if (!argsContainAnyFlag(args, claudeGuardFlags))
+                return { kind: "none" };
+            // A bypass-enabling flag is never a lone native spelling: it pins the
+            // axis by itself, so anything else in argv can only muddy the result.
+            if (argsContainAnyFlag(args, ClaudeSkipPermissionsFlags)) {
+                return { kind: "opaque" };
+            }
+            const [value, ok] = flagValue(args, "--permission-mode");
+            // Present-but-unreadable (trailing flag, `--permission-mode=`) is pinned
+            // with nothing to report — NEVER {native, ""}, which would put "" on the
+            // wire and collide with "unset".
+            if (!ok || value === "")
+                return { kind: "opaque" };
+            return { kind: "native", value };
+        }
+        case "codex": {
+            if (argsContainAnyFlag(args, codexGuardFlags) ||
+                argsContainConfigKey(args, codexSandboxConfigKey) ||
+                argsContainConfigKey(args, codexApprovalConfigKey)) {
+                return { kind: "opaque" };
+            }
+            return { kind: "none" };
+        }
+        default:
+            // No launch-time permission axis: nothing in argv is ours to interpret.
+            return { kind: "none" };
     }
 }
 /**
