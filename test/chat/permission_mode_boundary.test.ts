@@ -59,9 +59,17 @@ const SELF = relative(root, fileURLToPath(import.meta.url));
 // inherited here." seedIsolatedCodexHome (META-HARNESS-122, a 103 subtask) is
 // exactly that code — it asserts a config.toml path is ABSENT from a seeded
 // isolated home, which is the point of the helper, not a scope violation.
+//
+// fakeharness.ts's PermissionsCommandText and the test that exercises it
+// (META-HARNESS-126, also a 103 subtask) are the "/permissions" analogue: the
+// fake-harness scaffolding for setCodexPermissionPreset's driver has to type
+// the literal command to give that driver something deterministic to script
+// against. Test-only scaffolding, not a 106 code path.
 const EXEMPT = new Set([
   "test/helpers/codex_home.ts",
   "test/helpers/codex_home.test.ts",
+  "test/chat/fakeharness.ts",
+  "test/chat/fakeharness_permissions.test.ts",
 ]);
 
 function walk(dir: string, out: string[] = []): string[] {
