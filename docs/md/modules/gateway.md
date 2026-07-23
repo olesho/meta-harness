@@ -263,7 +263,7 @@ keystroke, no store write). Unknown id → `404 not_found`.
 
 `requested`, `requested_raw`, `raw` and `collaboration` are **omitted when empty**.
 That omission carries meaning: `observed: "unknown"` **with** a `raw` means the session
-is in a state *outside* the 5-rung ladder (a renamed mode, `Workspace (Approve for me)`),
+is in a state _outside_ the 5-rung ladder (a renamed mode, `Workspace (Approve for me)`),
 while `observed: "unknown"` with **no** `raw` means "we could not see" — and `source`
 says why (`no_footer`, `unparsed_footer`, `too_narrow`, `not_primed`, `not_written`,
 `written_uncaptured`, or `launch` for a harness with no screen reader at all).
@@ -279,7 +279,7 @@ prime-outcome vocabulary verbatim (`"written_uncaptured"`, snake_case).
 
 > `stale` is `current_generation !== generation` — **a generation comparison, not a
 > liveness claim.** A live claude read is always `false`; a startup-cached codex
-> `/status` box flips to `true` as soon as anything has been drawn since. A *closed*
+> `/status` box flips to `true` as soon as anything has been drawn since. A _closed_
 > conversation would also report `false` (nothing writes after close, so the frozen
 > frame matches itself), but that case cannot arise here: `DELETE /v1/conversations/{id}`
 > removes the entry from the registry synchronously, so the route `404`s instead.

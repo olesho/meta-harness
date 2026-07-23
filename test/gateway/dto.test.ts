@@ -263,7 +263,7 @@ describe("permissionModeResponse", () => {
     }
   });
 
-  test("empty-string raw / requestedRaw are omitted, not emitted as \"\"", () => {
+  test('empty-string raw / requestedRaw are omitted, not emitted as ""', () => {
     const out = permissionModeResponse(
       { ...base, raw: "", requestedRaw: "", collaboration: undefined },
       12,
