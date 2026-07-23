@@ -5,6 +5,8 @@
 // plus the cause-chain sentinels callers test with isSentinel.
 import { defineSentinel, isSentinel, wrap, } from "../../internal/async/errors.js";
 import { harnessSupportsEffort, isSupportedEffort } from "./effort.js";
+import { normHarness } from "./harnessargs.js";
+import { harnessSupportsPermissionMode, isSupportedPermissionMode, } from "./permission.js";
 /**
  * Wrapper-level sentinel errors. Callers use isSentinel(err, X) to distinguish
  * wrapper failures from harness outcomes — the cause-chain analogue of Go's
@@ -38,6 +40,24 @@ export function validateConfig(cfg) {
         }
         if (!harnessSupportsEffort(cfg.harness ?? "")) {
             return wrap("wrapper: invalid config: Effort is only supported for claude and codex harnesses", ErrInvalidConfig);
+        }
+    }
+    if (cfg.permissionMode && cfg.permissionMode !== "") {
+        // Order is load-bearing and deliberately INVERTS the effort block above:
+        // the HARNESS is checked first, then the value. The accepted vocabulary is
+        // per-harness, so checking the value first would report a confusing value
+        // error for `opencode` + `plan` instead of "harness not supported". Each
+        // message names the harness, so a codex caller is never advised to reach
+        // for a claude-only spelling.
+        const harness = cfg.harness ?? "";
+        if (!harnessSupportsPermissionMode(harness)) {
+            return wrap("wrapper: invalid config: PermissionMode is only supported for claude and codex harnesses", ErrInvalidConfig);
+        }
+        if (!isSupportedPermissionMode(harness, cfg.permissionMode)) {
+            if (normHarness(harness) === "codex") {
+                return wrap("wrapper: invalid config: PermissionMode for codex must be one of plan, manual, ask, auto, bypass (or a native codex sandbox value: read-only, workspace-write, danger-full-access, which sets the -s axis only)", ErrInvalidConfig);
+            }
+            return wrap("wrapper: invalid config: PermissionMode for claude must be one of plan, manual, ask, auto, bypass (or a native --permission-mode value: acceptEdits, auto, bypassPermissions, manual, dontAsk, plan)", ErrInvalidConfig);
         }
     }
     return null;

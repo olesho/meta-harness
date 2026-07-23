@@ -7,6 +7,7 @@ import { isSentinel } from "../../internal/async/errors.js";
 import { ErrBinaryNotFound, validateConfig } from "./config.js";
 import { argsWithHarnessEffort } from "./effort.js";
 import { argsWithHarnessModel } from "./model.js";
+import { argsWithHarnessPermissionMode } from "./permission.js";
 import { binaryNotFoundError, PtyProcess } from "./pty.js";
 import { resolvePath } from "../../discovery/discovery.js";
 import { applyDefaults, startSession, } from "./session.js";
@@ -41,6 +42,10 @@ export async function start(ctx, cfg) {
     let args = cfg.args ?? [];
     args = argsWithHarnessEffort(cfg.harness ?? "", args, cfg.effort ?? "");
     args = argsWithHarnessModel(cfg.harness ?? "", args, cfg.model ?? "");
+    // codex `plan` pins the PERMISSIONS axis only (-s read-only -a untrusted);
+    // the collaboration-axis `/plan` write lands with META-HARNESS-106, so this
+    // is not launch-time parity with claude's plan.
+    args = argsWithHarnessPermissionMode(cfg.harness ?? "", args, cfg.permissionMode ?? "");
     const env = cfg.env ?? [];
     const envRecord = envToRecord(env);
     // Preflight the binary: node-pty only surfaces a missing harness as an opaque

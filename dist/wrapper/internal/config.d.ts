@@ -24,6 +24,26 @@ export interface Config {
     effort?: string;
     /** Model override. */
     model?: string;
+    /**
+     * Launch-time permission posture. One of the five canonical rungs, least to
+     * most permissive: plan, manual, ask, auto, bypass. (`ask` sits ABOVE
+     * `manual` because it auto-accepts edits.)
+     *
+     * Per-harness NATIVE spellings are also accepted, and only on their own
+     * harness: claude takes acceptEdits, bypassPermissions and dontAsk; codex
+     * takes the sandbox values read-only, workspace-write and danger-full-access,
+     * each of which sets the `-s` axis ONLY, leaving approval at whatever
+     * ~/.codex/config.toml holds. Values are matched case-sensitively.
+     *
+     * codex `plan` is the launch half only: it pins the permissions axis
+     * (-s read-only -a untrusted) and leaves the collaboration axis unset — not
+     * launch-time parity with claude's plan.
+     *
+     * Only claude and codex have a launch-time permission axis. Argv shapes
+     * verified against claude-code >= 2.1.217 and codex-cli >= 0.144.5; see
+     * permission.ts.
+     */
+    permissionMode?: string;
     /** Quiet threshold (ms). */
     idleQuiet?: number;
     /** Classify threshold (ms). */

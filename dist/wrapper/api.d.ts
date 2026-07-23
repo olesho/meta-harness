@@ -5,6 +5,7 @@ export { StatusIdle, StatusFailed, StatusBlockedByCost, StatusRetryLater, Status
 export { ErrInvalidConfig, ErrBinaryNotFound, isBinaryNotFound, validateConfig, type Config, } from "./internal/config.ts";
 export { argsWithHarnessEffort, harnessSupportsEffort, isSupportedEffort, } from "./internal/effort.ts";
 export { argsWithHarnessModel } from "./internal/model.ts";
+export { argsWithHarnessPermissionMode, harnessSupportsPermissionMode, isSupportedPermissionMode, } from "./internal/permission.ts";
 export { effectiveLaunchRung, morePermissive, permissionRungs, } from "./internal/permissionrungs.ts";
 export { start, run, type RunContext } from "./internal/run.ts";
 export { Session, ClassifierFunc, classifyExit, EventChannel, type Result, type Snapshot, type SessionEvent, type StdoutSink, type EventRecv, } from "./internal/session.ts";
