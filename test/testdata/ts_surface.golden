@@ -35,13 +35,16 @@ wrapper/index.ts
   StatusWaitingForInput: string="waiting_for_input"
   argsWithHarnessEffort: function
   argsWithHarnessModel: function
+  argsWithHarnessPermissionMode: function
   classifyExit: function
   classifyOutput: function
   effectiveLaunchRung: function
   errorClassString: function
   harnessSupportsEffort: function
+  harnessSupportsPermissionMode: function
   isBinaryNotFound: function
   isSupportedEffort: function
+  isSupportedPermissionMode: function
   morePermissive: function
   permissionRungs: function
   run: function
