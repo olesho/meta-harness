@@ -71,6 +71,14 @@
 // `/permissions` dialog is never driven (selecting a preset there writes
 // ~/.codex/config.toml globally).
 //
+// CHECK 5 (also META-HARNESS-131) is check 4's claude counterpart and the
+// SILENT-RENAME catcher of the set: it LAUNCHES claude once per permission rung
+// — plus once with no permission flag at all — and asserts the live footer reads
+// back through the SHIPPED parsePermissionMode. Where the flag surface degrades
+// loudly (an `unexpected argument` exit), the DETECTION path degrades silently:
+// a renamed footer reports the wrong mode with no error raised anywhere. Also
+// launch-and-scrape only — no prompt is sent, so it costs zero model calls.
+//
 // Every half and every check is cleanly SKIPPED (not failed) when CONFORMANCE is
 // unset or the binary is absent.
 
@@ -90,6 +98,7 @@ import {
   newMemStore,
   normalizePermissionRung,
   parsePermissionMode,
+  readyForInput,
   resolveAdapter,
   type Conversation,
   type PermissionRung,
@@ -1067,4 +1076,473 @@ describe("conformance: codex /status rows (CONFORMANCE=1)", () => {
     },
     TEST_TIMEOUT,
   );
+});
+
+// ── Check 5: claude live permission-mode footers ──────────────────────────────
+//
+// The SILENT-RENAME CATCHER, and the claude counterpart of check 4. Checks 1-2
+// prove claude still ACCEPTS `--permission-mode <value>`; this check proves it
+// still REPORTS the resulting posture in the footer the shipped parser reads.
+//
+// The two failure modes are not symmetric, which is the whole reason this check
+// is separate from checks 1-2:
+//
+//   - The FLAG surface degrades LOUDLY but LATE: a renamed flag makes claude
+//     exit with `error: unexpected argument`, but only once a caller actually
+//     launches with that mode, in production.
+//   - The DETECTION path degrades SILENTLY: a renamed footer means
+//     parsePermissionMode reports `observed: "unknown"` (or, worse, keeps
+//     reporting a stale rung) with no error raised anywhere. A caller comparing
+//     `requested` to `observed` sees permanent unresolvable drift, or none at
+//     all, and nothing says why.
+//
+// And these strings really do move. claude's `manual` footer is the ONLY one
+// lacking the `(shift+tab to cycle)` suffix — a detail that exists in
+// src/chat/permission.ts purely because someone looked; claude flipped its
+// DEFAULT permission mode to Manual; the installed binary moved 2.1.217 →
+// 2.1.218 during this plan's own review. Unit tests over the recorded corpus
+// (test/chat/permission.test.ts, replaying test/corpus/claude-code/
+// permission-mode-*) cannot catch any of that — the fixtures are frozen bytes
+// and keep passing forever after the real CLI has moved on.
+//
+// MECHANICS — launch, poll, close. NOTHING IS SENT. startPumps runs inside Open
+// before it returns, and the trust / "Bypass Permissions mode" dialogs are
+// resolved by handleInputRequested → tryResolveInput from `inputPolicy` with no
+// turn in flight. So each case is launch → poll readyForInput + the footer parse
+// → scrape → close(): six launches, ZERO model calls, zero quota burn. It also
+// sidesteps the "which mode is default" question entirely — five of the six
+// cases NAME the mode they launch at.
+//
+// ONE test() PER MODE, deliberately not one test looping six launches. A shared
+// loop body would let the first failure hide the other five, and six cold claude
+// launches blow any single test budget (fileParallelism: false makes these
+// strictly serial — they are the dominant cost of this file). `manual` in
+// particular MUST stand alone: it is the one footer without the
+// `(shift+tab to cycle)` suffix, so a suffix-requiring regex regression in
+// parsePermissionMode has to fail loudly rather than be masked by a sibling.
+//
+// `dontAsk` is NOT here. It is flag-surface only: claudeRung returns "" for it,
+// it is off the canonical ladder and it paints no footer. Check 1 covers it.
+//
+// SIDE EFFECT. These launches touch ~/.claude.json exactly as half 2 does (a
+// `projects` entry per working dir plus `hasTrustDialogAccepted`, which
+// AutoAcceptTrust exists precisely to answer — i.e. persist). The
+// bypassPermissions launch does the same on a not-yet-accepted machine. HOME
+// isolation is NOT viable: a fresh HOME lands claude on the onboarding wall,
+// where no footer is observable. See this file's header comment.
+
+/** How long to poll for a painted footer after Open returns. */
+const FOOTER_PAINT_BOUND = 60_000;
+const FOOTER_POLL_INTERVAL = 250;
+
+/** Where the claude footer parse lives, for every remediation pointer below. */
+const FOOTER_PARSER = "src/chat/permission.ts";
+
+/**
+ * The recorded fixtures the failure reports tell the next reader to re-record.
+ *
+ * They ALREADY EXIST — hand-recorded against live claude 2.1.218 and replayed by
+ * test/chat/permission.test.ts's "claude-code corpus replay" block — so this
+ * check re-records nothing and points at them instead. Each `meta.json` carries
+ * the keystrokes, the cycle order and the hex codepoints of the footer's glyph
+ * run; test/corpus/README.md's hand-recorded table explains why they are inert
+ * to `npm run rebake-corpus` (screenbench-record has no scripted-keystroke seam
+ * for Shift+Tab).
+ *
+ * Note the naming: `permission-mode-<rung>` (singular, hyphenated), NOT a
+ * `permission-modes/` subdirectory. A pointer at a path that does not exist is
+ * worse than no pointer — the whole value of this report is that the next reader
+ * can act on it without a search.
+ */
+const FOOTER_CORPUS = "test/corpus/claude-code/";
+
+/**
+ * The `auto` rung has NO dedicated fixture: every scripted recording launches on
+ * auto, so the three scenario recordings already carry that footer (the replay
+ * block asserts exactly that). Named here so the auto report still points
+ * somewhere real.
+ */
+const AUTO_FIXTURES = `${FOOTER_CORPUS}{multi-turn,tool-call,interrupted-mid-reply}`;
+
+/**
+ * The five live footer cases, derived from META-HARNESS-99's live-probed table.
+ *
+ * DERIVE, DON'T RETYPE — same discipline as checks 1-2 and 4. The launch
+ * spellings come from the exported constants in permissionrungs.ts (the replay
+ * authority), and the EXPECTED RUNG is computed by running that same spelling
+ * through the shipped normalizePermissionRung rather than being written down
+ * here. A hand-written expectation would drift against the shipped map instead
+ * of against the CLI, which is the opposite of what this check is for.
+ *
+ * `fragment` is the leading footer text. It is used for the FAILURE REPORT and
+ * for nothing else — the load-bearing assertion routes through
+ * parsePermissionMode, so this file carries no second copy of the footer shape.
+ * A test with its own regex would stay green while the shipped parser rotted.
+ */
+const CLAUDE_FOOTER_CASES: readonly {
+  mode: string;
+  fragment: string;
+  fixture: string;
+}[] = [
+  {
+    mode: PermissionModeAuto,
+    fragment: "auto mode on",
+    fixture: AUTO_FIXTURES,
+  },
+  {
+    mode: PermissionModeManual,
+    fragment: "manual mode on",
+    fixture: `${FOOTER_CORPUS}permission-mode-manual`,
+  },
+  {
+    mode: ClaudeModeAcceptEdits,
+    fragment: "accept edits on",
+    fixture: `${FOOTER_CORPUS}permission-mode-accept-edits`,
+  },
+  {
+    mode: PermissionModePlan,
+    fragment: "plan mode on",
+    fixture: `${FOOTER_CORPUS}permission-mode-plan`,
+  },
+  {
+    mode: ClaudeModeBypassPermissions,
+    fragment: "bypass permissions on",
+    fixture: `${FOOTER_CORPUS}permission-mode-bypass`,
+  },
+];
+
+/**
+ * The rung vocabulary the flagless case accepts, derived from the five launch
+ * spellings above through the shipped normalizer — never retyped.
+ *
+ * NOT permissionRungs() (src/wrapper/internal/permissionrungs.ts ~:87-95): that
+ * is the WRAPPER ladder, whose middle rung is spelled `ask`, while the parser
+ * this check asserts through returns the chat-side `PermissionRung`, whose
+ * middle rung is claude's native `acceptEdits`. The two vocabularies are
+ * deliberately distinct (normalizePermissionRung is the bridge), so building the
+ * accepted set out of the wrapper list would reject a perfectly healthy
+ * `accept edits on` default. Deriving it from the normalizer keeps this check
+ * pinned to the vocabulary the parser actually speaks.
+ */
+const CLAUDE_KNOWN_RUNGS: readonly (PermissionRung | undefined)[] =
+  CLAUDE_FOOTER_CASES.map((c) =>
+    normalizePermissionRung(c.mode, "claude-code"),
+  );
+
+/**
+ * glyphLine returns the LAST footer-glyph line on screen, for the FAILURE REPORT
+ * ONLY — never for an assertion.
+ *
+ * Last-wins mirrors parseClaudeFooter's own rule (the footer is the bottom-most
+ * line; scrollback renders above it). The glyph set is copied, not imported:
+ * claudeModeFooterRE / claudeModeGlyphRE are module-private in
+ * src/chat/permission.ts and stay that way — exporting a regex purely so a test
+ * can reach it would widen the parser's surface for no production caller, and
+ * this is a report string, not a check.
+ */
+function glyphLine(text: string): string {
+  let found = "";
+  for (const line of text.split("\n")) {
+    if (/[⏵⏸]/.test(line)) found = line.trim();
+  }
+  return found === "" ? "no glyph line" : found;
+}
+
+/**
+ * redactWelcome masks the LEFT cell of claude's startup box in the screen dump.
+ *
+ * The failure report prints the WHOLE screen, and that cell carries the running
+ * operator's identity verbatim — `Welcome back <name>!`, and a `<model> ·
+ * <subscription> · <full name>` row that WRAPS across two cells. On any red run
+ * that would land in CI logs. Same reasoning, and the same column-preserving
+ * shape, as redactAccount above (check 4) and as the recorded-bytes redaction
+ * test/corpus/codex/status-box/meta.json documents.
+ *
+ * The whole cell is masked rather than the individual values because the wrap
+ * splits a name across rows, so no value-shaped regex can cover it. Nothing in
+ * that cell is load-bearing here: the box header (`Claude Code v…`), the
+ * composer and the footer line all live OUTSIDE it and survive untouched, and no
+ * assertion reads any of this.
+ */
+function redactWelcome(text: string): string {
+  return text.replace(
+    /^(│)([^│\r\n]*)(│[^\r\n]*│)$/gm,
+    (m, open: string, cell: string, tail: string) =>
+      cell.trim() === ""
+        ? m
+        : open +
+          "<redacted>".padEnd(cell.length, " ").slice(0, cell.length) +
+          tail,
+  );
+}
+
+/** What one live launch observed. `text` is the last frame read before close(). */
+interface FooterScrape {
+  text: string;
+  /** Non-empty when the wrapper reported a terminal status — the session died. */
+  fatal: string;
+  /** Whether readyForInput ever went true on this session. */
+  ready: boolean;
+}
+
+/**
+ * launchAndScrape opens claude with `args`, polls the live screen until the
+ * footer parses, then closes. No prompt is ever sent.
+ *
+ * FAIL FAST ON A REJECTED FLAG. Without the onActivity observer a bad flag turns
+ * an `unexpected argument` exit into a 240 s deadline hang with no diagnosis.
+ * The sampled wrapper Snapshot (src/wrapper/internal/session.ts ~:52-57) carries
+ * status + reason, so a terminal status aborts the poll immediately and the
+ * caller's report reads `error: unexpected argument '--permission-mode' found`
+ * instead of "no footer after 240 s".
+ *
+ * screenSnapshot() is read INSIDE the loop, i.e. strictly BEFORE close(): the
+ * Screen object outlives the session but the wrapper snapshot does not — close()
+ * takes the final sample itself (conversation.ts ~:604-607).
+ *
+ * If Open itself throws (claude exiting before the PTY bridge is up), the throw
+ * propagates with the wrapper's own reason attached; there is no screen to
+ * quote in that case because no session was ever established.
+ */
+async function launchAndScrape(
+  info: Info,
+  args: string[],
+): Promise<FooterScrape> {
+  const dir = mkdtempSync(join(tmpdir(), "conformance-claude-footer-"));
+  const { ctx, cancel } = Context.withDeadline(
+    Context.background(),
+    CTX_DEADLINE,
+  );
+
+  let fatal = "";
+  const TERMINAL: string[] = [
+    StatusFailed,
+    StatusBinaryNotFound,
+    StatusInterrupted,
+  ];
+
+  let conv: Conversation | undefined;
+  let captured: string | undefined;
+  let ready = false;
+  try {
+    conv = await Open(ctx, {
+      harness: "claude-code",
+      binaryPath: info.path,
+      workingDir: dir,
+      store: newMemStore(),
+      // Options.args (conversation.ts ~:127) already reaches launch, so this
+      // check needs no new plumbing. It is also not caught by
+      // firstSessionControlConflict: claude's sessionControlFlags() bans
+      // --session-id / --resume / -c, but not --permission-mode.
+      args,
+      // Answers BOTH the folder-trust dialog and the "Bypass Permissions mode"
+      // dialog — both pinned not-ready by claudeBlockingDialog (src/chat/
+      // ready.ts ~:17, ~:25-31), so without a policy the poll below would
+      // deadlock behind them rather than ever seeing a footer.
+      inputPolicy: AutoAcceptTrust,
+      activityInterval: 250,
+      onActivity: (snap) => {
+        if (fatal === "" && TERMINAL.includes(snap.status)) {
+          fatal = `${snap.status}${snap.reason ? `: ${snap.reason}` : ""}`;
+        }
+      },
+    });
+
+    const until = Date.now() + FOOTER_PAINT_BOUND;
+    for (;;) {
+      const frame = conv.screenSnapshot().text;
+      captured = frame;
+      if (readyForInput("claude-code", frame)) ready = true;
+      // Settle on a POSITIVE parse, not merely on a glyph: a renamed footer
+      // keeps painting a glyph line, and breaking on that would race the
+      // assertion against a half-painted frame. A rename therefore costs the
+      // full bound and then reports — the slow path is the rare one.
+      const parsed = parsePermissionMode(frame, "claude-code")?.source;
+      if (
+        (ready && parsed === "footer") ||
+        fatal !== "" ||
+        Date.now() >= until
+      ) {
+        break;
+      }
+      await new Promise((r) => setTimeout(r, FOOTER_POLL_INTERVAL));
+    }
+  } finally {
+    cancel();
+    if (conv) {
+      const { ctx: closeCtx } = Context.withDeadline(
+        Context.background(),
+        3000,
+      );
+      await conv.close(closeCtx).catch(() => undefined);
+    }
+    rmSync(dir, { recursive: true, force: true });
+  }
+  // `captured` is always assigned by the poll loop: the only path that skips it
+  // is Open itself throwing, and that throw propagates past here.
+  return { text: captured ?? "", fatal, ready };
+}
+
+describe("conformance: claude permission-mode footers (CONFORMANCE=1)", () => {
+  const info = infos["claude-code"];
+  const skip = !CONFORMANCE || !info.installed;
+
+  /**
+   * The screen scrape every failure below quotes. This is an ACCEPTANCE
+   * CRITERION of check 5, not a nicety: a bare `expected 'unknown' to be
+   * 'manual'` tells the next reader nothing about WHICH of the footer, the
+   * parser or the launch moved. The report names the mode launched, the rung
+   * expected, what the parser actually returned (observed + source + raw), the
+   * footer line actually on screen, and where to fix and re-record.
+   */
+  function report(
+    args: string[],
+    expected: string,
+    fragment: string,
+    scrape: FooterScrape,
+    fixture: string,
+  ): string {
+    const version = info.detectedVersion || "?";
+    const r = parsePermissionMode(scrape.text, "claude-code");
+    const launch = args.length === 0 ? "(no permission flag)" : args.join(" ");
+    return (
+      `claude ${version} LIVE FOOTER DRIFT.\n` +
+      `  launch flags:   ${launch}\n` +
+      `  expected rung:  ${expected}\n` +
+      `  expected text:  starts with "${fragment}"\n` +
+      `  observed:       ${r ? `"${r.observed}"` : "(parsePermissionMode returned null)"}\n` +
+      `  source:         ${r?.source ?? "n/a"}\n` +
+      `  raw:            ${r?.raw === undefined ? "(none)" : `"${r.raw}"`}\n` +
+      `  footer line:    ${glyphLine(scrape.text)}\n` +
+      `  composer ready: ${scrape.ready ? "yes" : "NO (readyForInput never went true)"}\n` +
+      `  session status: ${scrape.fatal === "" ? "healthy" : scrape.fatal}\n` +
+      `  If the footer was RENAMED: update claudeFooterRungs / claudeModeFooterRE in ` +
+      `${FOOTER_PARSER} and re-record ${fixture}.\n` +
+      `  If the FLAG was renamed: update ${SYMBOLS} and checks 1-2 above.\n` +
+      `  --- screen ---\n${redactWelcome(scrape.text)}\n  --- end screen ---`
+    );
+  }
+
+  /**
+   * assertRung is the shared BODY of the six tests — never a shared test().
+   * Each caller below owns its own test(), so one failing mode cannot hide the
+   * other five and no single test carries six cold launches.
+   *
+   * `expected === undefined` means "any known rung" (the flagless case).
+   */
+  async function assertRung(
+    args: string[],
+    fragment: string,
+    expected: PermissionRung | undefined,
+    fixture: string,
+  ): Promise<void> {
+    const version = info.detectedVersion || "?";
+    const scrape = await launchAndScrape(info, args);
+    const label = expected ?? "any known ladder rung";
+    const rep = report(args, label, fragment, scrape, fixture);
+
+    // A dead session is never a footer-drift finding — say what actually killed
+    // it. The PTY captured claude's own stderr, so a rejected flag reports
+    // `error: unexpected argument '--permission-mode' found` right here rather
+    // than as "no footer after 240 s".
+    expect(
+      scrape.fatal,
+      `claude ${version}: session died before the footer painted.\n${rep}`,
+    ).toBe("");
+
+    const reading = parsePermissionMode(scrape.text, "claude-code");
+    if (reading === null) {
+      // Thrown, not expect()ed, so the narrowing survives below —
+      // parsePermissionMode returning null for "claude-code" means the claude
+      // arm of the parser is GONE, which is drift in its own right.
+      throw new Error(
+        `claude ${version}: parsePermissionMode returned null for harness ` +
+          `"claude-code" — the claude arm of ${FOOTER_PARSER} has been removed.\n${rep}`,
+      );
+    }
+
+    // The reading must come from a live footer parse. `unparsed_footer` is the
+    // precise signature of a RENAME (a glyph line is painted, its fragment did
+    // not map to a rung); `no_footer` means nothing painted at all.
+    expect(
+      reading.source,
+      `claude ${version}: expected the reading's source to be "footer" (a live footer ` +
+        `parse), got "${reading.source}".\n${rep}`,
+    ).toBe("footer");
+
+    // THE LOAD-BEARING ASSERTION — the parser's output, never a test-local
+    // regex over `fragment`.
+    if (expected === undefined) {
+      expect(
+        CLAUDE_KNOWN_RUNGS,
+        `claude ${version}: the FLAGLESS default footer did not parse to any known ladder ` +
+          `rung. This is the footer EVERY caller on main hits today (no caller passes a ` +
+          `permission flag), so its rename breaks detection for everybody.\n${rep}`,
+      ).toContain(reading.observed);
+    } else {
+      expect(
+        reading.observed,
+        `claude ${version}: the footer no longer reads back the launched rung.\n${rep}`,
+      ).toBe(expected);
+    }
+  }
+
+  // ── The flagless default — the case that matters most ──────────────────────
+  //
+  // Every caller on main today passes no permission flag, so the harness DEFAULT
+  // footer is the one whose rename breaks detection for everybody. It asserts
+  // only that the footer parses to SOME known rung, deliberately NOT `manual`:
+  // pinning the default is the brittle version of the same check, and claude has
+  // already changed it once (to Manual). A future flip would then fail this test
+  // for a reason that has nothing to do with the parser.
+  test.skipIf(skip)(
+    "claude-code: flagless launch — the DEFAULT footer parses to a known ladder rung",
+    async () => {
+      // A normalizer that collapsed or dropped rungs would silently widen (or
+      // empty) the accepted set, turning the assertion below into a tautology.
+      // Guard the derivation before relying on it.
+      expect(
+        CLAUDE_KNOWN_RUNGS,
+        `claude: normalizePermissionRung no longer maps every claude launch spelling to a ` +
+          `rung — got [${CLAUDE_KNOWN_RUNGS.map((r) => String(r)).join(", ")}] from ` +
+          `[${CLAUDE_FOOTER_CASES.map((c) => c.mode).join(", ")}] (${FOOTER_PARSER}). The ` +
+          `accepted set this test derives from cannot be formed.`,
+      ).not.toContain(undefined);
+      expect(new Set(CLAUDE_KNOWN_RUNGS).size).toBe(CLAUDE_FOOTER_CASES.length);
+
+      await assertRung(
+        [],
+        CLAUDE_FOOTER_CASES.map((c) => c.fragment).join(" | "),
+        undefined,
+        // Which fixture to re-record depends on which rung claude now defaults
+        // to, so name the whole set rather than guessing one.
+        `${FOOTER_CORPUS}permission-mode-* (whichever rung the default now lands on)`,
+      );
+    },
+    TEST_TIMEOUT,
+  );
+
+  // ── The five named modes, one test() each ──────────────────────────────────
+  for (const { mode, fragment, fixture } of CLAUDE_FOOTER_CASES) {
+    const expected = normalizePermissionRung(mode, "claude-code");
+    const args = [ClaudePermissionModeFlag, mode];
+
+    // `manual` gets its own test() for a reason beyond the per-mode rule: it is
+    // the ONLY footer lacking the "(shift+tab to cycle)" suffix, so a
+    // suffix-requiring regex regression in parsePermissionMode must fail loudly
+    // here rather than be masked by a shared loop body.
+    test.skipIf(skip)(
+      `claude-code: \`${ClaudePermissionModeFlag} ${mode}\` — live footer parses as rung \`${expected ?? "?"}\``,
+      async () => {
+        expect(
+          expected,
+          `claude: normalizePermissionRung no longer maps the launch spelling "${mode}" to ` +
+            `any ladder rung (${FOOTER_PARSER}) — the claude arm of the normalizer has lost ` +
+            `the entry this test derives its expectation from.`,
+        ).not.toBeUndefined();
+        await assertRung(args, fragment, expected, fixture);
+      },
+      TEST_TIMEOUT,
+    );
+  }
 });
