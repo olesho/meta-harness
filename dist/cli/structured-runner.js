@@ -13,7 +13,7 @@
 // stdout line as that result.
 //
 // Grammar:
-//   structured-runner [--prompt-file <path>] [--effort E] [--model M] [--sandbox-defaults] <name> -- <harness args...>
+//   structured-runner [--prompt-file <path>] [--effort E] [--model M] [--permission-mode P] [--sandbox-defaults] <name> -- <harness args...>
 //
 // Exit codes (coarse orchestration signal; the JSON payload is the source of truth):
 //   0   — completed
@@ -79,13 +79,6 @@ export function resolveTimeoutMs(env) {
         return ms;
     return parseTimeoutMs(env.HARNESS_WRAPPER_RUN_TIMEOUT);
 }
-/**
- * parseStructuredArgs — flags (--prompt-file/--effort/--model) precede <name>;
- * <name> is the first non-flag token; a `--` separator forwards the remainder to
- * the harness. The prompt is NEVER an argument (it comes from --prompt-file or
- * stdin), so a prompt with quotes/newlines/leading-dashes can't corrupt the argv
- * or the shell.
- */
 export function parseStructuredArgs(argv) {
     const out = { harnessArgs: [] };
     let i = 0;
@@ -116,13 +109,29 @@ export function parseStructuredArgs(argv) {
             }
             return false;
         };
+        // EXHAUSTIVE switch, deliberately with no assigning catch-all: a bare
+        // `else out.model = v` would make every flag added to valued()'s union
+        // silently land in `model`. The default branch asserts `never` so widening
+        // that union without extending this switch is a COMPILE error.
         const assign = (flag, v) => {
-            if (flag === "--prompt-file")
-                out.promptFile = v;
-            else if (flag === "--effort")
-                out.effort = v;
-            else
-                out.model = v;
+            switch (flag) {
+                case "--prompt-file":
+                    out.promptFile = v;
+                    break;
+                case "--effort":
+                    out.effort = v;
+                    break;
+                case "--model":
+                    out.model = v;
+                    break;
+                case "--permission-mode":
+                    out.permissionMode = v;
+                    break;
+                default: {
+                    const _exhaustive = flag;
+                    void _exhaustive;
+                }
+            }
         };
         if (valued("--prompt-file")) {
             if (out.error)
@@ -135,6 +144,11 @@ export function parseStructuredArgs(argv) {
             continue;
         }
         if (valued("--model")) {
+            if (out.error)
+                return out;
+            continue;
+        }
+        if (valued("--permission-mode")) {
             if (out.error)
                 return out;
             continue;
@@ -156,6 +170,21 @@ export function parseStructuredArgs(argv) {
         out.name = a;
         i++;
         break;
+    }
+    // --sandbox-defaults injects HARNESS-GENERATED argv (--dangerously-skip-
+    // permissions), and under the wrapper's all-or-nothing injection-suppression
+    // rule that generated flag would silently beat the caller's EXPLICIT rung —
+    // `--sandbox-defaults --permission-mode plan claude` would inject nothing at
+    // all. Reject the pair as a usage error instead of letting either side win
+    // silently. Blanket over all harnesses (not just claude-code, the only one
+    // whose argv is actually injected) — deliberate simplicity: one rule to state,
+    // and codex never gains a quietly-different meaning for the same argv pair.
+    // The message is shared VERBATIM with the host-side check in src/env/turn.ts.
+    // "" counts as unset (it injects nothing), matching src/cli/wrapperFlags.ts.
+    if (out.sandboxDefaults === true && (out.permissionMode ?? "") !== "") {
+        out.error =
+            "flags --sandbox-defaults and --permission-mode are mutually exclusive";
+        return out;
     }
     if (out.name === undefined) {
         out.error = "missing <name>";
@@ -220,12 +249,14 @@ async function readStdin() {
 }
 const HELP = `meta-harness structured-runner — one-shot harness turn → JSON result line
 
-usage: structured-runner [--prompt-file <path>] [--effort E] [--model M] [--sandbox-defaults] <name> -- <harness args...>
+usage: structured-runner [--prompt-file <path>] [--effort E] [--model M] [--permission-mode P] [--sandbox-defaults] <name> -- <harness args...>
 
   --prompt-file P     read the prompt from file P (safe transport; falls back to stdin when absent)
   <name>              short alias: claude → claude-code, codex → codex
   --effort E          reasoning effort passed to the harness
   --model M           model passed to the harness
+  --permission-mode P launch-time permission mode (plan, manual, ask, auto, bypass);
+                      mutually exclusive with --sandbox-defaults
   --sandbox-defaults  opt into sandbox defaults: IS_SANDBOX=1 in the guest env
                       (all harnesses) and --dangerously-skip-permissions
                       prepended to the argv (claude-code only). Off by default:
@@ -293,6 +324,7 @@ export async function main(argv) {
             env,
             effort: parsed.effort,
             model: parsed.model,
+            permissionMode: parsed.permissionMode,
         });
     }
     catch (err) {
