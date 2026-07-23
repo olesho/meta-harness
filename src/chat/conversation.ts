@@ -1698,8 +1698,10 @@ export class Conversation {
     if (write) write();
     let outcome: CodexProbeOutcome;
     try {
-      outcome = await this.probeCodexStatus(ctx, this.primeBoundDur(), () =>
-        this.refreshModeFromScreen(before),
+      outcome = await this.probeCodexStatus(
+        ctx,
+        this.primeBoundDur(),
+        (since) => this.refreshModeFromScreen(before, since),
       );
     } catch (err: unknown) {
       if (isSentinel(err, ErrClosed) || isSentinel(err, ErrInputPending))
@@ -2427,17 +2429,25 @@ export class Conversation {
    *    `Permissions:` row: the collaboration axis is what a refresh exists to
    *    re-read, and absence is never a signal (a missing row is "unknown", so it
    *    is rejected and the poll continues).
-   *  - `before` filters out a STALE box. On the confirm probe the box already on
-   *    screen is the previous probe's, painted before the cycle keystroke; a
-   *    probe that accepted it would read the pre-press value and declare the
-   *    press dead. Non-null `before` therefore rejects an equal value; null (the
-   *    entry probe / an explicit refresh) accepts the first positive row.
+   *  - It accepts ONLY a frame NEWER than the probe's own `/status` write
+   *    (`sinceGeneration`, sampled immediately before that write). A box already
+   *    on screen is a PREVIOUS probe's — the primer's, or the one this loop
+   *    printed before the cycle keystroke — and "refresh" that hands back the
+   *    box printed before the write is not a refresh at all: it would report the
+   *    pre-press value and declare the press dead. `before` is the SECOND
+   *    filter, and the one that keeps a press that genuinely did not take
+   *    reporting "did not change" rather than a spurious lap; null (the entry
+   *    probe / an explicit refresh) accepts any value from a new-enough frame.
    *
    * It writes the SAME private field the primer writes, which is what keeps
    * refreshPermissionMode and the pure GET route from disagreeing.
    */
-  private refreshModeFromScreen(before: string | null): boolean {
+  private refreshModeFromScreen(
+    before: string | null,
+    sinceGeneration: number,
+  ): boolean {
     const snap = this.screenSnapshot();
+    if (snap.generation <= sinceGeneration) return false;
     const r = parsePermissionMode(snap.text, this.opts.harness);
     const collab = r?.collaboration;
     if (!r || collab === undefined || collab === "unknown") return false;
@@ -2489,7 +2499,10 @@ export class Conversation {
    *     primer wants the session id AND the box; the refresh wants the
    *     `Collaboration mode:` row re-parsed. This helper owns only the write,
    *     the subscription, the resend latch and the deadline — never what
-   *     "finished" means.
+   *     "finished" means. `done` receives the screen generation sampled
+   *     IMMEDIATELY BEFORE the write, so a caller that must not accept a box
+   *     printed by an EARLIER probe can say so; the primer ignores it (its box
+   *     is by definition the first one).
    *
    * The burst is written with writeKeys(a.primeSessionIDKeys()) — the proven
    * mechanism (`/status` + CSI 13u as ONE burst, src/turns/harness/codex.ts).
@@ -2506,7 +2519,7 @@ export class Conversation {
   private async probeCodexStatus(
     ctx: Context,
     bound: number,
-    done: () => boolean | Promise<boolean>,
+    done: (sinceGeneration: number) => boolean | Promise<boolean>,
   ): Promise<CodexProbeOutcome> {
     const a = this.adapter as unknown as {
       primeSessionIDKeys?: () => Uint8Array;
@@ -2526,6 +2539,10 @@ export class Conversation {
         return "not_written";
       }
 
+      // Sampled IMMEDIATELY before the write — writeKeys is synchronous, so no
+      // frame can land in between — and handed to `done` as the "newer than my
+      // own write" watermark.
+      const writeGeneration = this.screen.snapshot().generation;
       // A writeKeys throw is fatal (writer/PTY dead) and propagates.
       this.writeKeys(a.primeSessionIDKeys());
 
@@ -2534,7 +2551,7 @@ export class Conversation {
       // subscription until done() or the deadline.
       const [notify, unsubscribe] = this.screen.subscribe();
       try {
-        if (await done()) return "done";
+        if (await done(writeGeneration)) return "done";
         let resent = false;
         for (;;) {
           const which = await Promise.race([
@@ -2549,7 +2566,7 @@ export class Conversation {
           if (which === "ctx") throw ctx.err();
           if (which === "closed") throw ErrClosed;
           if (which === "changed") {
-            if (await done()) return "done";
+            if (await done(writeGeneration)) return "done";
             continue;
           }
           if (which === "half") {

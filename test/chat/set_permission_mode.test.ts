@@ -1345,6 +1345,28 @@ describe("refreshPermissionMode", () => {
     }
   });
 
+  // A refresh that handed back the box printed BEFORE its own write would not be
+  // a refresh at all — and on codex a box printed by an earlier probe is the
+  // normal state of the screen, not an exotic one.
+  test("codex: a box already on screen is NOT accepted; the fresh one is", async () => {
+    const r = newCodexRing({ start: "Default" });
+    await r.screen.write(codexReadyFrame);
+    // A STALE box, reporting the opposite of what the harness will answer with.
+    await r.screen.write(codexStatusFrame("Plan"));
+    const release = await r.conv.acquireControl(Context.background());
+    try {
+      const got = await r.conv.refreshPermissionMode(Context.background());
+      expect(got.collaboration).toBe("default");
+      expect(r.bursts()).toBe(1);
+      expect(got.generation).toBeGreaterThan(
+        // Newer than the frame the stale box was painted on.
+        r.screen.snapshot().generation - 1,
+      );
+    } finally {
+      release();
+    }
+  });
+
   // THE DEADLOCK CARVE-OUT. The shared probe must NOT acquire the queue: the
   // gateway mints the control token by HOLDING the non-reentrant ControlQueue,
   // so an acquire here would park an HTTP caller behind its own token.
