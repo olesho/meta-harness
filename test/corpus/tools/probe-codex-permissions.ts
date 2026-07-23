@@ -184,6 +184,27 @@ if (homeMode === "isolated") {
   mkdirSync(codexHome, { recursive: true });
 }
 
+// The "Update available!" notice renders when $CODEX_HOME/version.json advertises
+// a newer release than the running binary. A FRESH home has no version.json, so
+// the notice cannot appear on a first launch — it appears on the SECOND launch of
+// a home, after the background version check has landed. Seeding the file makes
+// the notice deterministic on the first launch instead.
+//
+// The seeded `latest_version` is deliberately a fiction and MUST stay one: this
+// probe never selects the notice's row 1 ("Update now"), which shells out to
+// `npm install -g @openai/codex` and mutates the developer's global binary.
+if (argv.includes("--seed-update-notice")) {
+  if (!codexHome) throw new Error("--seed-update-notice needs an isolated home");
+  writeFileSync(
+    join(codexHome, "version.json"),
+    JSON.stringify({
+      latest_version: flag("--seed-latest-version", "0.145.0"),
+      last_checked_at: new Date().toISOString(),
+      dismissed_version: null,
+    }) + "\n",
+  );
+}
+
 const beforeFingerprint = fingerprintRealHome();
 
 // ── Recording plumbing (mirrors record-pty.ts) ───────────────────────────────
@@ -369,10 +390,29 @@ note({
 // it. This is a free extra cell of probe 1's matrix: the folder-trust screen is
 // a numbered menu parsed by the same parseMenuOptions, and the shipped
 // auto-dismiss for a KindNotice is a bare "\r" (codex.ts AutoDismissKeys).
+//
+// A BARE "\r" IS NEVER SAFE ON THE UPDATE NOTICE. Its highlighted default row
+// is "1. Update now (runs `npm install -g @openai/codex`)", and a bare Enter
+// there upgrades the GLOBAL binary — field-observed during this probe, which
+// silently moved codex 0.144.5 -> 0.145.0 out from under the run. That is
+// exactly why the shipped AutoDismissKeys KindUpdateNotice branch
+// (codex.ts:536-540) returns the "Skip" ROW's keys (digit + CR) instead of a
+// bare CR. This ladder does the same: it resolves the Skip row by label and
+// never presses an unqualified Enter while the update anchor is on screen.
 const DISMISS_LADDER = [
   { id: "bare-cr", keys: "\r" },
   { id: "csi13u", keys: "\x1b[13u" },
 ];
+
+/** The digit of the first menu row whose label matches `re`, or null. */
+function rowDigit(t: string, re: RegExp): string | null {
+  for (const line of t.split("\n")) {
+    const m = /^\s*›?\s*(\d)\.\s+(.*?)(?:\s{2,}.*)?$/.exec(line);
+    if (m && re.test(m[2])) return m[1];
+  }
+  return null;
+}
+
 for (let round = 0; round < 4; round++) {
   const before = text();
   if (
@@ -380,6 +420,36 @@ for (let round = 0; round < 4; round++) {
     !before.includes(UPDATE_ANCHOR)
   )
     break;
+  // The update-notice phase MEASURES this notice — leave it on screen.
+  if (phase === "update-notice" && before.includes(UPDATE_ANCHOR)) break;
+
+  if (before.includes(UPDATE_ANCHOR)) {
+    // Never a bare Enter here — see the block comment above.
+    const skip = rowDigit(before, /^Skip$/);
+    if (skip === null) {
+      note({
+        phase: "interstitial-dismiss",
+        round,
+        error:
+          "update notice on screen with no 'Skip' row — refusing to press Enter " +
+          "(row 1 runs a global npm install -g)",
+      });
+      break;
+    }
+    writeKeys(`${skip}\r`, "dismiss-update-skip");
+    await sleep(settle);
+    const after = text();
+    note({
+      phase: "interstitial-dismiss",
+      round,
+      encoding: "skip-row",
+      keys: printable(enc.encode(`${skip}\r`)),
+      screen_changed: after !== before,
+      dismissed: !after.includes(UPDATE_ANCHOR),
+    });
+    continue;
+  }
+
   let dismissed = false;
   for (const step of DISMISS_LADDER) {
     writeKeys(step.keys, `dismiss-${step.id}`);
@@ -513,10 +583,30 @@ async function main(): Promise<void> {
         if (!got) break;
       }
 
+      // Whether the family's modal is GONE. For permissions the header vanishes
+      // outright; the update notice instead leaves a passive "Update available!"
+      // banner in scrollback after Skip, so its anchor is useless here and the
+      // interactive footer is what actually disappears. The approval dialog is
+      // likewise identified by its footer plus a live menu.
+      const modalGone = (t: string): boolean =>
+        phase === "permissions"
+          ? !t.includes(PERMISSIONS_ANCHOR)
+          : !t.includes("Press enter to continue") &&
+            !/^\s*›?\s*\d\.\s+/m.test(t);
+
       // For permissions, rows 2 ("Approve for me" — the preset this ticket is
       // about) and 3 ("Full Access") alternate so no cell ever re-commits the
-      // row already "(current)". Elsewhere a single non-default row suffices.
-      const allCells = commitCells(phase === "permissions" ? ["2", "3"] : ["2"]);
+      // row already "(current)". For the update notice row 2 is "Skip" — the row
+      // the shipped AutoDismissKeys picks, and never "1. Update now".
+      // On an approval dialog row 3 is "No, and tell Codex what to do
+      // differently" — the DENY row. Every cell picks it, so a working encoding
+      // is proven without this probe ever approving a command.
+      const defaultDigits =
+        phase === "permissions" ? ["2", "3"] : phase === "approval" ? ["3"] : ["2"];
+      const digitsArg = flag("--digits", "");
+      const allCells = commitCells(
+        digitsArg ? digitsArg.split(",") : defaultDigits,
+      );
       const cells = onlyCell
         ? allCells.filter((c) => c.id === onlyCell || c.id.startsWith(onlyCell))
         : allCells;
@@ -533,8 +623,13 @@ async function main(): Promise<void> {
             continue;
           }
         }
-        if (phase === "update-notice" && !text().includes(UPDATE_ANCHOR)) {
-          note({ phase: "cell", family, cell: cell.id, error: "no update notice on screen" });
+        if (phase === "update-notice" && modalGone(text())) {
+          note({
+            phase: "cell",
+            family,
+            cell: cell.id,
+            error: "no live update notice on screen",
+          });
           break;
         }
         const before = text();
@@ -544,9 +639,7 @@ async function main(): Promise<void> {
         const after = text();
         const afterState = menuState(after);
         dump(`screen-${family}-${cell.id}-after.txt`);
-        const dialogGone = !after.includes(
-          phase === "permissions" ? PERMISSIONS_ANCHOR : UPDATE_ANCHOR,
-        );
+        const dialogGone = modalGone(after);
         note({
           phase: "cell",
           family,
