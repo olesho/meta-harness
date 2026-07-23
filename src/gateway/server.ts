@@ -39,9 +39,18 @@ import {
   type InputRequest,
   type Options,
   type Session,
+  type Store,
   type Turn,
 } from "../chat/index.ts";
 import { isSentinel } from "../chat/errors.ts";
+// First src/gateway → src/wrapper edge: pure predicates only (no sentinel).
+// The gateway does not restate either vocabulary; the wrapper owns both.
+import {
+  harnessSupportsEffort,
+  harnessSupportsPermissionMode,
+  isSupportedEffort,
+  isSupportedPermissionMode,
+} from "../wrapper/index.ts";
 import { ErrTurnErrored, RunTurnError, runTurn } from "../harness/index.ts";
 import { AutoAcceptTrust } from "../oneshot/index.ts";
 import type { Snapshot } from "../screen/screen.ts";
@@ -82,8 +91,19 @@ export interface ConversationLike {
   close(ctx?: Context): Promise<void>;
 }
 
-/** Opens a Conversation for a decoded open request. Injectable for tests. */
-export type Opener = (opts: Options) => Promise<ConversationLike>;
+/**
+ * Opens a Conversation for a decoded open request. Injectable for tests.
+ *
+ * `store` is OPTIONAL here, unlike on `Options`: it is the one required field a
+ * JSON-decoding handler can never supply (a live object with no wire shape), and
+ * defaultOpener fills it in. Widening the parameter this way lets openConv pass
+ * its literal WITHOUT an `as Options` cast, which is what keeps TypeScript's
+ * excess-property check alive on that literal — a misspelled or missing option
+ * field is a compile error instead of a silently dropped property.
+ */
+export type Opener = (
+  opts: Omit<Options, "store"> & { store?: Store },
+) => Promise<ConversationLike>;
 
 // The default opener hands `Conversation.Open` a BACKGROUND context — NOT a
 // request-scoped one. Open passes this context to wrapper.Start, which keeps it
@@ -284,6 +304,16 @@ interface OpenRequestBody {
   rows?: number;
   effort?: string;
   model?: string;
+  /**
+   * MH superset — no Go `openRequest` counterpart yet (see the wire-shape note
+   * above). Launch-time permission rung. The gateway does NOT own the
+   * vocabulary: values are validated by isSupportedPermissionMode and
+   * translated to per-harness flags by argsWithHarnessPermissionMode
+   * (src/wrapper/internal/permission.ts). An explicit permission flag already
+   * present in `args` WINS over this field — the wrapper's precedence rule,
+   * which the gateway forwards to rather than forking.
+   */
+  permission_mode?: string;
   disable_codex_auto_dismiss?: boolean;
   auto_skip_codex_update_notice?: boolean;
 }
@@ -312,6 +342,26 @@ interface RunTurnRequestBody {
   rows?: number;
   effort?: string;
   model?: string;
+  /**
+   * MH superset — no Go `runTurnRequest` counterpart yet. Launch-time
+   * permission rung. The gateway does NOT own the vocabulary: values are
+   * validated by isSupportedPermissionMode and translated to per-harness flags
+   * by argsWithHarnessPermissionMode (src/wrapper/internal/permission.ts). An
+   * explicit permission flag already present in `args` WINS over this field —
+   * the wrapper's precedence rule, which the gateway forwards to rather than
+   * forking.
+   *
+   * For codex, `plan` is honoured only in part: it pins the PERMISSIONS axis
+   * (sandbox_mode=read-only, approval_policy=untrusted) and leaves the
+   * collaboration axis unset, which on this route stays permanently unset —
+   * one-shot is unattended by construction. And because that rung sets
+   * approval_policy="untrusted", codex can surface an `approval_prompt` that
+   * NOTHING on this route answers (AutoAcceptTrust covers `trust_prompt` only
+   * and has no default), so the run hangs until the client disconnects. Pass
+   * `timeout_seconds` for a bounded 504, or use POST /v1/conversations where a
+   * client can answer via the /input route.
+   */
+  permission_mode?: string;
   /** Overrides which chat adapter interprets the turn (Go's turn_harness). */
   turn_harness?: string;
   /** One-shot only: defaults to true; false is rejected 400 unsupported. */
@@ -505,6 +555,23 @@ export class Server {
       writeError(res, 400, "invalid_options", "prompt is required");
       return;
     }
+    // The harness these two guards validate against is `turn_harness || harness`
+    // — the SAME SUPPORT CLASS as the string runTurn actually launches under,
+    // not the same string: turnHarnessName (src/harness/internal/runTurn.ts)
+    // maps "claude" → "claude-code" before it becomes the wrapper's
+    // Config.harness. Equivalent only because the wrapper predicates switch on
+    // BOTH spellings.
+    //
+    // Both guards exist because validateConfig (src/wrapper/internal/config.ts)
+    // rejects a bad value with ErrInvalidConfig, which has no CHAT_ERROR_TABLE
+    // row and therefore reaches the client as an opaque 500. Pre-checking here
+    // turns a caller mistake into an honest 400; adding an ErrInvalidConfig row
+    // instead would blanket-400 genuine gateway/chat wiring failures too.
+    let permHarness = body.harness;
+    if (body.turn_harness) permHarness = body.turn_harness;
+    if (!this.checkEffort(res, permHarness, body.effort)) return;
+    if (!this.checkPermissionMode(res, permHarness, body.permission_mode))
+      return;
 
     const { ctx, cleanup } = requestContext(req, res, body.timeout_seconds);
     try {
@@ -517,6 +584,7 @@ export class Server {
         env: body.env,
         effort: body.effort,
         model: body.model,
+        permissionMode: body.permission_mode,
         cols: body.cols,
         rows: body.rows,
         turnHarness: body.turn_harness,
@@ -552,6 +620,85 @@ export class Server {
     }
   }
 
+  /**
+   * Pre-check `effort` against the wrapper's own predicates. Returns false when
+   * a 400 has been written and the handler must stop.
+   *
+   * Falsy skips, mirroring validateConfig's `if (cfg.effort && cfg.effort !== "")`.
+   * Order is VALUE-then-harness here, matching that same block, so this
+   * pre-check can never contradict the wrapper it fronts. (The permission-mode
+   * guard below is deliberately the other way round, for the same reason.)
+   */
+  private checkEffort(
+    res: ServerResponse,
+    harness: string,
+    effort: string | undefined,
+  ): boolean {
+    if (!effort) return true;
+    if (!isSupportedEffort(effort)) {
+      writeError(
+        res,
+        400,
+        "invalid_options",
+        `effort ${effort} is not supported`,
+      );
+      return false;
+    }
+    if (!harnessSupportsEffort(harness)) {
+      writeError(
+        res,
+        400,
+        "invalid_options",
+        `effort is not supported for harness ${harness}`,
+      );
+      return false;
+    }
+    return true;
+  }
+
+  /**
+   * Pre-check `permission_mode` against the wrapper's own predicates. Returns
+   * false when a 400 has been written and the handler must stop.
+   *
+   * Falsy skips: `""` is indistinguishable from omitted, exactly as the wrapper
+   * treats it. Order is HARNESS-then-value, matching the wrapper's permission
+   * validation, so `{"harness":"opencode","permission_mode":"plan"}` reports the
+   * harness problem rather than a confusing value one.
+   *
+   * Both messages are deliberately HARNESS-AGNOSTIC — they never name the
+   * supported set. The wrapper's own errors do name it, because that is where
+   * the vocabulary is defined; restating it under src/gateway/ would re-freeze
+   * the very table this pre-check delegates, and it would go stale silently the
+   * moment a third harness is added. Semantically aligned, textually agnostic —
+   * please do not "fix" this back.
+   */
+  private checkPermissionMode(
+    res: ServerResponse,
+    harness: string,
+    mode: string | undefined,
+  ): boolean {
+    if (!mode) return true;
+    if (!harnessSupportsPermissionMode(harness)) {
+      writeError(
+        res,
+        400,
+        "invalid_options",
+        `permission_mode is not supported for harness ${harness}`,
+      );
+      return false;
+    }
+    if (!isSupportedPermissionMode(harness, mode)) {
+      writeError(
+        res,
+        400,
+        "invalid_options",
+        `permission_mode ${mode} is not supported for harness ${harness}`,
+      );
+      return false;
+    }
+    return true;
+  }
+
   /** POST /v1/conversations — open. Uses a BACKGROUND context (see defaultOpener). */
   private async openConv(
     req: IncomingMessage,
@@ -569,8 +716,27 @@ export class Server {
       );
       return;
     }
+    // Pre-validate the two value-valued knobs so a caller mistake is a 400
+    // rather than the opaque 500 an ErrInvalidConfig from validateConfig
+    // becomes (no CHAT_ERROR_TABLE row → FALLBACK).
+    //
+    // ONE shared skip on an empty harness, covering BOTH guards: an absent
+    // harness does not reach ErrUnknownHarness (resolveAdapter has an explicit
+    // `case "":`), it reaches Open's wrapInvalid("Harness and BinaryPath are
+    // required") → ErrInvalidOptions → 400 invalid_options. Let that honest
+    // presence error win instead of blaming `effort`/`permission_mode` with a
+    // trailing empty harness name.
+    const h = body.harness ?? "";
+    if (h) {
+      if (!this.checkEffort(res, h, body.effort)) return;
+      if (!this.checkPermissionMode(res, h, body.permission_mode)) return;
+    }
+
     let conv: ConversationLike;
     try {
+      // No `as Options` cast: the literal is checked directly, so a property
+      // outside Options — or one child tickets rename — is a compile error
+      // rather than a value silently dropped on the floor.
       conv = await this.opener({
         harness: body.harness ?? "",
         binaryPath: body.binary_path ?? "",
@@ -581,9 +747,10 @@ export class Server {
         rows: body.rows,
         effort: body.effort,
         model: body.model,
+        permissionMode: body.permission_mode,
         disableCodexAutoDismiss: body.disable_codex_auto_dismiss,
         autoSkipCodexUpdateNotice: body.auto_skip_codex_update_notice,
-      } as Options);
+      });
     } catch (err) {
       writeChatError(res, err);
       return;
