@@ -116,6 +116,9 @@ export interface StartConfig {
   harness: string;
   effort?: string;
   model?: string;
+  /** Launch-time permission posture (plan|manual|ask|auto|bypass, plus the
+   * per-harness native spellings). Empty/absent injects nothing. */
+  permissionMode?: string;
   /** Durable, no-drop per-line tap (wired only for RawSessionIDExtractor adapters). */
   onLine?: (line: string) => void;
 }
