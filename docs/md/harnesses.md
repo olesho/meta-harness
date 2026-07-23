@@ -33,7 +33,7 @@ returns the lossy `Turn[]` view directly, not `Event[]` like the other two reade
 
 | Capability                                          |                    Claude Code                    |                    Codex                    |   pi    | OpenCode | generic |
 | --------------------------------------------------- | :-----------------------------------------------: | :-----------------------------------------: | :-----: | :------: | :-----: |
-| Turn-complete from screen                           |                     ✓ marker                      |                 ✓ (legacy)⁵                 |    —    |    —     |    —    |
+| Turn-complete from screen                           |                     ✓ marker                      |                 ✓ (legacy)⁶                 |    —    |    —     |    —    |
 | `BusyDetector`                                      |                         ✓                         |                      —                      |    ✓    |    —     |    —    |
 | `MessageExtractor`                                  |                         ✓                         |                      —                      |    —    |    —     |    —    |
 | `Quitter`                                           |                         ✓                         |                      —                      |    ✓    |    —     |    —    |
@@ -42,22 +42,22 @@ returns the lossy `Turn[]` view directly, not `Event[]` like the other two reade
 | session id: prime (`SessionIDPrimer`)               |                         —                         |                      ✓                      |    —    |    —     |    —    |
 | `SessionInitializer` (mint id at launch)            |                         —                         |                      —                      |    ✓    |    —     |    —    |
 | `SessionResumer` (resume args)                      |                         ✓                         |                      ✓                      |    ✓    |    —     |    —    |
-| `SessionForkResumer`                                |                      no-fork                      |                 ✓ (false)⁶                  | no-fork |    —     |    —    |
+| `SessionForkResumer`                                |                      no-fork                      |                 ✓ (false)⁷                  | no-fork |    —     |    —    |
 | `TranscriptReader`                                  |                         ✓                         |                      ✓                      |    ✓    |    —     |    —    |
-| Startup interstitial auto-dismiss                   |                         —                         |                     ✓⁷                      |    —    |    —     |    —    |
-| Input requests detected                             | ✓ `trust_prompt` · `question` · `question_review` | ✓ `approval_prompt` · `permissions_prompt`⁸ |    —    |    —     |    —    |
+| Startup interstitial auto-dismiss                   |                         —                         |                     ✓⁸                      |    —    |    —     |    —    |
+| Input requests detected                             | ✓ `trust_prompt` · `question` · `question_review` | ✓ `approval_prompt` · `permissions_prompt`⁹ |    —    |    —     |    —    |
 
-⁵ Codex ≤ 0.141 emitted a "Token usage:" footer chat could scrape; 0.142+ has no screen
+⁶ Codex ≤ 0.141 emitted a "Token usage:" footer chat could scrape; 0.142+ has no screen
 signal, so completion falls back to [status-driven mapping](#the-generic-fallback).
-⁶ Codex explicitly reports `resumeForksSessionID() === false` — verified against
-codex-cli 0.142.5, resume continues the _same_ id. ⁷ Codex's "Update available!",
+⁷ Codex explicitly reports `resumeForksSessionID() === false` — verified against
+codex-cli 0.142.5, resume continues the _same_ id. ⁸ Codex's "Update available!",
 model-migration, and "Press enter to continue" interstitials are auto-dismissed at
 startup unless [`disableCodexAutoDismiss`](modules/chat.md#options) is set.
-⁸ Codex's command / apply-patch approval dialogs surface as `approval_prompt`
+⁹ Codex's command / apply-patch approval dialogs surface as `approval_prompt`
 [input requests](guides/handling-input.md#approval-prompts-approval_prompt), and its
 `/permissions` "Update Model Permissions" picker as
 [`permissions_prompt`](guides/handling-input.md#the-permissions-dialog-permissions_prompt);
-neither is ever auto-dismissed. Its startup interstitials (footnote ⁷) are auto-dismissed
+neither is ever auto-dismissed. Its startup interstitials (footnote ⁸) are auto-dismissed
 rather than surfaced.
 
 ---
