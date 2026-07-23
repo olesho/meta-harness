@@ -162,6 +162,9 @@ chat/index.ts
   DispositionDeny: string="deny"
   DispositionKind: type
   ErrClosed: object{code,name}
+  ErrCodexHomeNotIsolated: object{code,name}
+  ErrCodexPermissionsDisabled: object{code,name}
+  ErrCodexPermissionsRaced: object{code,name}
   ErrInputPending: object{code,name}
   ErrInvalidOptions: object{code,name}
   ErrNoControl: object{code,name}
@@ -171,6 +174,8 @@ chat/index.ts
   ErrPermissionModeStalled: object{code,name}
   ErrPermissionModeUnreachable: object{code,name}
   ErrPermissionModeUnsupported: object{code,name}
+  ErrPermissionPresetUnavailable: object{code,name}
+  ErrPermissionsUnsupported: object{code,name}
   ErrQuitUnsupported: object{code,name}
   ErrResumeUnsupported: object{code,name}
   ErrStaleInputRequest: object{code,name}

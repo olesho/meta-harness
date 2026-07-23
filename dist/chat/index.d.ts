@@ -2,7 +2,7 @@ export { type Role, RoleUser, RoleAssistant, RoleSystem, type TurnState, TurnSta
 export type { Store } from "./store.ts";
 export { MemStore, newMemStore } from "./memstore.ts";
 export { cleanHarnessEnv } from "./env.ts";
-export { ErrInvalidOptions, ErrUnknownHarness, ErrNoControl, ErrTurnInFlight, ErrClosed, ErrInputPending, ErrNoInputPending, ErrStaleInputRequest, ErrUnknownOption, ErrNotMultiSelect, ErrQuitUnsupported, ErrPermissionModeUnsupported, ErrPermissionModeUnreachable, ErrPermissionModeStalled, ErrResumeUnsupported, ErrNoHarnessSession, } from "./errors.ts";
+export { ErrInvalidOptions, ErrUnknownHarness, ErrNoControl, ErrTurnInFlight, ErrClosed, ErrInputPending, ErrNoInputPending, ErrStaleInputRequest, ErrUnknownOption, ErrNotMultiSelect, ErrQuitUnsupported, ErrPermissionsUnsupported, ErrCodexPermissionsDisabled, ErrCodexHomeNotIsolated, ErrCodexPermissionsRaced, ErrPermissionPresetUnavailable, ErrPermissionModeUnsupported, ErrPermissionModeUnreachable, ErrPermissionModeStalled, ErrResumeUnsupported, ErrNoHarnessSession, } from "./errors.ts";
 export { type PermissionRung, type PermissionModeSource, type PermissionModeReading, type CollaborationMode, type PermissionModeTarget, parsePermissionMode, normalizePermissionRung, } from "./permission.ts";
 export { submitKeyForHarness, requiresPromptReadiness, readyForInput, authRequired, onboardingWall, } from "./ready.ts";
 export { Conversation, Open, Reopen, resolveAdapter, type Options, type ReopenOptions, } from "./conversation.ts";

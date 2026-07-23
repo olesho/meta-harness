@@ -31,6 +31,61 @@ export declare const ErrNotMultiSelect: Sentinel;
 /** Returned by Quit when the harness adapter exposes no graceful-quit sequence. */
 export declare const ErrQuitUnsupported: Sentinel;
 /**
+ * Returned by setCodexPermissionPreset when the conversation cannot drive a
+ * `/permissions` dialog at all: the harness is not `codex`, or the resolved
+ * adapter exposes no permissions capability, or a caller-supplied
+ * `Options.adapter` is in play alongside the permissions opt-in.
+ *
+ * The static-property counterpart of ErrQuitUnsupported, whose gate probes
+ * `adapterQuitSequence()` and throws when it is absent — codex ships no
+ * `quitSequence`, so that shape is live and exercised, not hypothetical. Here
+ * too: "this conversation has no dialog to drive", decided from the adapter,
+ * never from the live session.
+ */
+export declare const ErrPermissionsUnsupported: Sentinel;
+/**
+ * Returned by setCodexPermissionPreset when `Options.allowCodexPermissionsWrite`
+ * is absent or empty.
+ *
+ * The feature is off by default because selecting a preset persists into the
+ * user's GLOBAL `~/.codex/config.toml` and so affects unrelated later sessions,
+ * not just this conversation. Opting in is the caller stating they accept that
+ * blast radius.
+ */
+export declare const ErrCodexPermissionsDisabled: Sentinel;
+/**
+ * Returned by setCodexPermissionPreset when the containment gate fails: the
+ * adapter was never bound to a launch env, or `CODEX_HOME` is unset in it, or
+ * the bound `CODEX_HOME` does not match the isolated home the caller named, or
+ * it resolves to `join(homedir(), ".codex")`.
+ *
+ * The gate FAILS CLOSED — an unbound adapter is a refusal, not a pass. We
+ * cannot prove the write lands inside an isolated home, so we do not write.
+ */
+export declare const ErrCodexHomeNotIsolated: Sentinel;
+/**
+ * Returned by setCodexPermissionPreset when a caller-supplied `onInputRequest`
+ * answered the `permissions_prompt` first, so another writer already committed
+ * a selection.
+ *
+ * The driver backs out rather than racing a second `answer()` against a dialog
+ * that is already gone.
+ */
+export declare const ErrCodexPermissionsRaced: Sentinel;
+/**
+ * Returned by setCodexPermissionPreset when the requested preset cannot be
+ * selected: this codex build renders no row matching it, or the dialog never
+ * opened at all.
+ *
+ * The first case is the `guardian_approval` feature flag being off or removed,
+ * where the dialog renders e.g. `Read Only` / `Default` / `Custom permissions`
+ * and simply has no "Approve for me" row. Without this sentinel that case would
+ * leak out as ErrUnknownOption, which reads to a caller as "you passed a bad
+ * id" rather than the truth, "this build lacks the preset". Raised via
+ * `wrap(...)` with a message naming the requested preset and the rows observed.
+ */
+export declare const ErrPermissionPresetUnavailable: Sentinel;
+/**
  * Returned by setPermissionMode when the harness adapter implements no
  * permission-mode cycle keystroke at all (`opencode`, `pi`, `generic`).
  *
