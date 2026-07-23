@@ -13,14 +13,14 @@ is the ground truth for "what works with which."
 
 ## Support matrix
 
-| Harness         | name             | binary     | npm package                       | pinned¹      | chat adapter²  | effort / model / permission | transcript history³  |
-| --------------- | ---------------- | ---------- | --------------------------------- | ------------ | -------------- | --------------------------- | -------------------- |
-| **Claude Code** | `claude-code`    | `claude`   | `@anthropic-ai/claude-code`       | 2.1.201      | ✓ full         | ✓ / ✓ / ✓                   | ✓ `ClaudeCodeReader` |
-| **Codex**       | `codex`          | `codex`    | `@openai/codex`                   | 0.142.5      | ✓ full         | ✓ / ✓ / ✓                   | ✓ `CodexReader`      |
-| **pi**          | `pi`             | `pi`       | `@earendil-works/pi-coding-agent` | 0.76.0       | ✓ full         | ✗ / ✗ / ✗                   | ✓ `PiReader`⁴        |
-| **OpenCode**    | `opencode`       | `opencode` | `opencode-ai`                     | _(unpinned)_ | ◑ stub         | ✗ / ✗ / ✗                   | ✗ store only         |
-| **Cursor**      | `cursor`         | —          | —                                 | —            | ✗ wrapper-only | ✗ / ✗ / ✗                   | ✗ n/a                |
-| _(fallback)_    | `generic` / `""` | any        | —                                 | —            | ◑ status-only  | ✗ / ✗ / ✗                   | ✗ store only         |
+| Harness         | name             | binary     | npm package                       | pinned¹      | chat adapter²  | effort / model | permission mode | transcript history³  |
+| --------------- | ---------------- | ---------- | --------------------------------- | ------------ | -------------- | -------------- | --------------- | -------------------- |
+| **Claude Code** | `claude-code`    | `claude`   | `@anthropic-ai/claude-code`       | 2.1.201      | ✓ full         | ✓ / ✓          | ✓ full          | ✓ `ClaudeCodeReader` |
+| **Codex**       | `codex`          | `codex`    | `@openai/codex`                   | 0.142.5      | ✓ full         | ✓ / ✓          | ✓ approx⁵       | ✓ `CodexReader`      |
+| **pi**          | `pi`             | `pi`       | `@earendil-works/pi-coding-agent` | 0.76.0       | ✓ full         | ✗ / ✗          | ✗               | ✓ `PiReader`⁴        |
+| **OpenCode**    | `opencode`       | `opencode` | `opencode-ai`                     | _(unpinned)_ | ◑ stub         | ✗ / ✗          | ✗               | ✗ store only         |
+| **Cursor**      | `cursor`         | —          | —                                 | —            | ✗ wrapper-only | ✗ / ✗          | ✗               | ✗ n/a                |
+| _(fallback)_    | `generic` / `""` | any        | —                                 | —            | ◑ status-only  | ✗ / ✗          | ✗               | ✗ store only         |
 
 ¹ From [`versions.json`](modules/versions.md); the upstream release each adapter is
 verified against. ² Whether [`chat.resolveAdapter`](modules/chat.md#opening-a-conversation) maps the
@@ -28,12 +28,22 @@ name — a "full" adapter implements the session/interaction capabilities below.
 [`historyWithSource()`](guides/reading-history.md) can serve
 [`HistorySourceTranscript`](concepts.md#transcript-vs-store-history). ⁴ `PiReader.read`
 returns the lossy `Turn[]` view directly, not `Event[]` like the other two readers.
+⁵ The rung ladder, least to most permissive, is `plan` / `manual` / `ask` / `auto` /
+`bypass` (`ask` sits _above_ `manual` — it auto-accepts edits). Claude Code is the only
+full-fidelity row: every rung is one native value. Codex has **no native single-token
+spelling**, and reaches each posture by pinning two axes at once — sandbox _and_ approval
+— so the rungs are approximations: `bypass` is good, `manual` / `ask` / `auto` are
+approximate, and `plan` is the **permissions half only** (the collaboration axis stays
+unset, so it is _not_ launch-time parity with Claude Code's `plan`). `✗` means the knob is
+**rejected, not ignored** — `validateConfig` fails a configured `permissionMode` on those
+harnesses with `ErrInvalidConfig`. The per-rung argv lives once, in
+[`wrapper` › Permission mode](modules/wrapper.md#permission-mode).
 
 ### Capability detail (chat adapters)
 
 | Capability                                          |                    Claude Code                    |                    Codex                    |   pi    | OpenCode | generic |
 | --------------------------------------------------- | :-----------------------------------------------: | :-----------------------------------------: | :-----: | :------: | :-----: |
-| Turn-complete from screen                           |                     ✓ marker                      |                 ✓ (legacy)⁵                 |    —    |    —     |    —    |
+| Turn-complete from screen                           |                     ✓ marker                      |                 ✓ (legacy)⁶                 |    —    |    —     |    —    |
 | `BusyDetector`                                      |                         ✓                         |                      —                      |    ✓    |    —     |    —    |
 | `MessageExtractor`                                  |                         ✓                         |                      —                      |    —    |    —     |    —    |
 | `Quitter`                                           |                         ✓                         |                      —                      |    ✓    |    —     |    —    |
@@ -42,23 +52,25 @@ returns the lossy `Turn[]` view directly, not `Event[]` like the other two reade
 | session id: prime (`SessionIDPrimer`)               |                         —                         |                      ✓                      |    —    |    —     |    —    |
 | `SessionInitializer` (mint id at launch)            |                         —                         |                      —                      |    ✓    |    —     |    —    |
 | `SessionResumer` (resume args)                      |                         ✓                         |                      ✓                      |    ✓    |    —     |    —    |
-| `SessionForkResumer`                                |                      no-fork                      |                 ✓ (false)⁶                  | no-fork |    —     |    —    |
+| `SessionForkResumer`                                |                      no-fork                      |                 ✓ (false)⁷                  | no-fork |    —     |    —    |
 | `TranscriptReader`                                  |                         ✓                         |                      ✓                      |    ✓    |    —     |    —    |
-| Startup interstitial auto-dismiss                   |                         —                         |                     ✓⁷                      |    —    |    —     |    —    |
-| Input requests detected                             | ✓ `trust_prompt` · `question` · `question_review` | ✓ `approval_prompt` · `permissions_prompt`⁸ |    —    |    —     |    —    |
+| Startup interstitial auto-dismiss                   |                         —                         |                     ✓⁸                      |    —    |    —     |    —    |
+| Input requests detected                             | ✓ `trust_prompt` · `question` · `question_review` | ✓ `approval_prompt` · `permissions_prompt`⁹ |    —    |    —     |    —    |
 
-⁵ Codex ≤ 0.141 emitted a "Token usage:" footer chat could scrape; 0.142+ has no screen
+⁶ Codex ≤ 0.141 emitted a "Token usage:" footer chat could scrape; 0.142+ has no screen
 signal, so completion falls back to [status-driven mapping](#the-generic-fallback).
-⁶ Codex explicitly reports `resumeForksSessionID() === false` — verified against
-codex-cli 0.142.5, resume continues the _same_ id. ⁷ Codex's "Update available!",
+⁷ Codex explicitly reports `resumeForksSessionID() === false` — verified against
+codex-cli 0.142.5, resume continues the _same_ id. ⁸ Codex's "Update available!",
 model-migration, and "Press enter to continue" interstitials are auto-dismissed at
 startup unless [`disableCodexAutoDismiss`](modules/chat.md#options) is set.
-⁸ Codex's command / apply-patch approval dialogs surface as `approval_prompt`
+⁹ Codex's command / apply-patch approval dialogs surface as `approval_prompt`
 [input requests](guides/handling-input.md#approval-prompts-approval_prompt), and its
 `/permissions` "Update Model Permissions" picker as
 [`permissions_prompt`](guides/handling-input.md#the-permissions-dialog-permissions_prompt);
-neither is ever auto-dismissed. Its startup interstitials (footnote ⁷) are auto-dismissed
-rather than surfaced.
+neither is ever auto-dismissed. Its startup interstitials (footnote ⁸) are auto-dismissed
+rather than surfaced. This mid-turn dialog is **not** the launch-time permission knob:
+`permissions_prompt` is a request Codex raises during a turn, while the `permission mode`
+column above is a rung translated into argv before the harness starts (footnote ⁵).
 
 ---
 
@@ -95,10 +107,10 @@ The most fully-supported harness. Name `claude-code`, binary `claude`.
   banners (`… resets HH:MM (TZ)` → a `resumeAt` instant), plus cost/retry/prompt
   fingerprints.
 - **Effort / model.** `--effort <level>` and `--model <m>`.
-- **Permission mode.** `--permission-mode <value>`: `plan → plan`, `manual → manual`,
-  `ask → acceptEdits`, `auto → auto`, `bypass → bypassPermissions`. The native spellings
-  `acceptEdits`, `bypassPermissions` and `dontAsk` are accepted as input too. Note `-p`
-  here is `--print`, so it is **never** treated as a permission override (unlike Codex).
+- **Permission mode.** All five rungs natively, one value each — the only full-fidelity
+  harness. Note `-p` here is `--print`, so it is **never** treated as a permission
+  override (unlike Codex). See
+  [`wrapper` › Permission mode](modules/wrapper.md#permission-mode).
 
 ---
 
@@ -139,14 +151,11 @@ Name `codex`, binary `codex`.
   cost/retry/prompt. No session-limit banner matcher.
 - **Effort / model.** `-c model_reasoning_effort="…"` (with `max → xhigh`) and
   `-c model="…"`.
-- **Permission mode.** `-s <sandbox> [-a <policy>]` — flags, never `-c sandbox_mode=…`.
-  `plan → -s read-only -a untrusted`, `manual → -s workspace-write -a untrusted`,
-  `ask → -s workspace-write -a on-request`, `auto → -s workspace-write -a never`,
-  `bypass → -s danger-full-access -a never`. The three native **sandbox** values
-  (`read-only`, `workspace-write`, `danger-full-access`) are accepted as a single-axis
-  request and emit `-s <value>` only, leaving approvals to `~/.codex/config.toml`. Codex
-  `plan` pins the permissions axis only — the collaboration axis stays unset, so this is
-  **not** launch-time parity with Claude Code's `plan`.
+- **Permission mode.** All five rungs, but **approximately**: there is no native
+  single-token spelling, so each posture is reached by pinning two axes at once (sandbox
+  _and_ approval), and `plan` is the permissions half only — not launch-time parity with
+  Claude Code's `plan`. See
+  [`wrapper` › Permission mode](modules/wrapper.md#permission-mode).
 
 ---
 
@@ -167,7 +176,9 @@ Name `pi`, binary `pi`. Session control is the strong suit; screen scraping is m
   `<config>/sessions/--<cwd-slug>--/<ts>_<uuid>.jsonl` and returns **`Turn[]`** directly.
 - **Turn detection.** No screen completion marker; `BusyDetector` recognizes
   `Working…`/`Thinking…`. `Quitter` sends `/quit`.
-- **Effort / model / permission mode.** Not supported.
+- **Effort / model.** Not supported.
+- **Permission mode.** Not supported — a configured rung is rejected, not silently
+  dropped. See [`wrapper` › Permission mode](modules/wrapper.md#permission-mode).
 
 ---
 
