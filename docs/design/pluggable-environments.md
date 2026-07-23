@@ -270,7 +270,7 @@ runStructuredTurn(ctx: Context, ws: Workspace, cfg: TurnConfig): Promise<Structu
 ```
 
 1. Write the prompt to a temp file; `ws.upload` it (prompt is **never** argv or shell-interpolated — the `--prompt-file` transport from `structured-runner.ts`).
-2. `ws.exec` `meta-harness-structured-run --prompt-file <path> [--effort E] [--model M] [--sandbox-defaults] <name> -- <harness args…>` with injection-safe argv construction (loomcli Part C's `argvToShell` discipline: strict single-quoting, unit-testable). `--sandbox-defaults` opts into the sandbox defaults (`IS_SANDBOX=1` for all harnesses, `--dangerously-skip-permissions` for claude-code only); without it, argv and env are forwarded verbatim.
+2. `ws.exec` `meta-harness-structured-run --prompt-file <path> [--effort E] [--model M] [--sandbox-defaults] <name> -- <harness args…>` with injection-safe argv construction (loomcli Part C's `argvToShell` discipline: strict single-quoting, unit-testable). `--sandbox-defaults` opts into the sandbox defaults (`IS_SANDBOX=1` for all harnesses, `--dangerously-skip-permissions` for claude-code only); without it, argv and env are forwarded verbatim. When `--permission-mode` is also set it wins for argv; the `IS_SANDBOX=1` half still applies, unconditionally and independently of the resolved mode.
 3. Parse the **last stdout line** as the structured result: `{ status, reply, harnessSessionID, transcript_entries, usage?, reason?, transcript_error?, working_dir }` (`usage?` is additive telemetry, emitted since `structured-runner.ts:302` — it belongs in the frozen golden).
 4. Optional transcript retrieval to a host path (orche's `retrieve()` pattern: download the guest `~/.claude/projects/<encodedCwd>/` JSONL so host-side readers resolve it).
 
