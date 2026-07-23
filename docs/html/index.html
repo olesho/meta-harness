@@ -377,7 +377,7 @@
   table.matrix {
     border-collapse: collapse;
     width: 100%;
-    min-width: 660px;
+    min-width: 760px;
     font-size: 14.5px;
   }
   table.matrix th,
@@ -1400,6 +1400,7 @@
           <th>pinned</th>
           <th>Chat adapter</th>
           <th>Effort / model</th>
+          <th>Permission mode</th>
           <th>Transcript history</th>
         </tr>
       </thead>
@@ -1413,6 +1414,7 @@
           <td class="pin">2.1.201</td>
           <td><span class="chip full">full</span></td>
           <td><span class="chip full">yes / yes</span></td>
+          <td><span class="chip full">full</span></td>
           <td><span class="chip full">ClaudeCodeReader</span></td>
         </tr>
         <tr>
@@ -1424,6 +1426,7 @@
           <td class="pin">0.142.5</td>
           <td><span class="chip full">full</span></td>
           <td><span class="chip full">yes / yes</span></td>
+          <td><span class="chip part">approx</span></td>
           <td><span class="chip full">CodexReader</span></td>
         </tr>
         <tr>
@@ -1435,6 +1438,7 @@
           <td class="pin">0.76.0</td>
           <td><span class="chip full">full</span></td>
           <td><span class="chip none">— / —</span></td>
+          <td><span class="chip none">—</span></td>
           <td><span class="chip full">PiReader · Turn[]</span></td>
         </tr>
         <tr>
@@ -1446,6 +1450,7 @@
           <td class="pin">unpinned</td>
           <td><span class="chip part">stub</span></td>
           <td><span class="chip none">— / —</span></td>
+          <td><span class="chip none">—</span></td>
           <td><span class="chip none">store only</span></td>
         </tr>
         <tr>
@@ -1457,6 +1462,7 @@
           <td class="pin">—</td>
           <td><span class="chip none">wrapper-only</span></td>
           <td><span class="chip none">— / —</span></td>
+          <td><span class="chip none">—</span></td>
           <td><span class="chip none">n/a</span></td>
         </tr>
         <tr>
@@ -1468,6 +1474,7 @@
           <td class="pin">—</td>
           <td><span class="chip part">status-only</span></td>
           <td><span class="chip none">— / —</span></td>
+          <td><span class="chip none">—</span></td>
           <td><span class="chip none">store only</span></td>
         </tr>
       </tbody>
@@ -1484,7 +1491,8 @@
     Input requests: Claude Code surfaces <code>trust_prompt</code> and the
     mid-turn AskUserQuestion dialog (<code>question</code> /
     <code>question_review</code>); Codex surfaces command / apply-patch
-    approvals as <code>approval_prompt</code> (its startup interstitials are
+    approvals as <code>approval_prompt</code> and the <code>/permissions</code>
+    picker as <code>permissions_prompt</code> (its startup interstitials are
     auto-dismissed, never surfaced). Others: none.
   </p>
 </section>

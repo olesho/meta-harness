@@ -189,19 +189,25 @@ control-token lifecycle, the SSE stream contract, and the sentinel → HTTP erro
 
 ## Supported harnesses
 
-| Harness         | name          | binary     | pinned¹ | chat adapter²   | effort / model | transcript history³   |
-| --------------- | ------------- | ---------- | ------- | --------------- | -------------- | --------------------- |
-| **Claude Code** | `claude-code` | `claude`   | 2.1.201 | ✅ full         | ✅ / ✅        | ✅ `ClaudeCodeReader` |
-| **Codex**       | `codex`       | `codex`    | 0.142.5 | ✅ full         | ✅ / ✅        | ✅ `CodexReader`      |
-| **pi**          | `pi`          | `pi`       | 0.76.0  | ✅ full         | ❌ / ❌        | ✅ `PiReader`⁴        |
-| **OpenCode**    | `opencode`    | `opencode` | —       | ◑ stub          | ❌ / ❌        | ❌ store only         |
-| **Cursor**      | `cursor`      | —          | —       | ❌ wrapper-only | ❌ / ❌        | ❌ n/a                |
-| _(fallback)_    | `generic`     | any        | —       | ◑ status-only   | ❌ / ❌        | ❌ store only         |
+| Harness         | name          | binary     | pinned¹ | chat adapter²   | effort / model | permission mode | transcript history³   |
+| --------------- | ------------- | ---------- | ------- | --------------- | -------------- | --------------- | --------------------- |
+| **Claude Code** | `claude-code` | `claude`   | 2.1.201 | ✅ full         | ✅ / ✅        | ✅ full         | ✅ `ClaudeCodeReader` |
+| **Codex**       | `codex`       | `codex`    | 0.142.5 | ✅ full         | ✅ / ✅        | ✅ approx⁵      | ✅ `CodexReader`      |
+| **pi**          | `pi`          | `pi`       | 0.76.0  | ✅ full         | ❌ / ❌        | ❌              | ✅ `PiReader`⁴        |
+| **OpenCode**    | `opencode`    | `opencode` | —       | ◑ stub          | ❌ / ❌        | ❌              | ❌ store only         |
+| **Cursor**      | `cursor`      | —          | —       | ❌ wrapper-only | ❌ / ❌        | ❌              | ❌ n/a                |
+| _(fallback)_    | `generic`     | any        | —       | ◑ status-only   | ❌ / ❌        | ❌              | ❌ store only         |
 
 ¹ From [`versions.json`](src/versions/versions.json) — the upstream release each adapter
 is verified against. ² Whether `chat.resolveAdapter` maps the name. ³ Whether
 `historyWithSource()` can serve transcript-backed history rather than the `Store`.
-⁴ `PiReader.read` returns the lossy `Turn[]` view, not `Event[]`.
+⁴ `PiReader.read` returns the lossy `Turn[]` view, not `Event[]`. ⁵ The rung ladder,
+least to most permissive, is `plan` / `manual` / `ask` / `auto` / `bypass`. Claude Code is
+the only full-fidelity row — every rung is one native value; Codex has no native
+single-token spelling and only approximates the ladder, with `plan` covering the
+permissions half only. `❌` means the knob is **rejected, not ignored** — a configured
+`permissionMode` fails validation there. The per-rung argv lives once, in
+[`wrapper` › Permission mode](docs/md/modules/wrapper.md#permission-mode).
 
 The per-capability detail (busy detection, session-id extraction, resume, input
 requests) is in [Harnesses](docs/md/harnesses.md); the "adding a harness" workflow is in
