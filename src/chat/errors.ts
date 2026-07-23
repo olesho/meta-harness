@@ -89,6 +89,58 @@ export const ErrQuitUnsupported: Sentinel = defineSentinel(
   "chat: harness has no graceful-quit sequence",
 );
 
+/**
+ * Returned by setPermissionMode when the harness adapter implements no
+ * permission-mode cycle keystroke at all (`opencode`, `pi`, `generic`).
+ *
+ * "This harness has no switch to throw" — a static property of the adapter, not
+ * of the live session. Distinct from ErrPermissionModeUnreachable, which means
+ * the switch exists but the requested target cannot be reached from here.
+ */
+export const ErrPermissionModeUnsupported: Sentinel = defineSentinel(
+  "chat/permission-mode-unsupported",
+  "chat: harness has no permission-mode cycle",
+);
+
+/**
+ * Returned by setPermissionMode when the harness CAN cycle, but the requested
+ * target is not reachable in this session. The raiser attaches the concrete
+ * evidence (observed axis value, `source`, `raw`, press count) to the message.
+ *
+ * Raised when:
+ *   - `bypass` is requested without a bypass-enabling launch configuration;
+ *   - the cycle ring lapped all the way round without landing on the target;
+ *   - the target is off this harness's axis (a ladder rung on codex,
+ *     `"default"` on claude);
+ *   - the observed value is off-ladder but LEGIBLE — a non-empty `raw` with
+ *     `observed: "unknown"` (a renamed mode such as `dontAsk`, or a codex
+ *     `Custom (…)` pair). The screen was read fine; the session is simply
+ *     somewhere the ladder does not describe.
+ */
+export const ErrPermissionModeUnreachable: Sentinel = defineSentinel(
+  "chat/permission-mode-unreachable",
+  "chat: permission mode unreachable",
+);
+
+/**
+ * Returned by setPermissionMode when the switch neither reached the target nor
+ * proved it unreachable — the cycle did not make observable progress. The raiser
+ * attaches the concrete evidence (observed axis value, `source`, `raw`, press
+ * count) to the message.
+ *
+ * Raised when:
+ *   - a press produced no stable axis change inside the settle bound;
+ *   - the press backstop or the `ctx` deadline fired;
+ *   - the reading is structurally ILLEGIBLE — `unparsed_footer`, `too_narrow`,
+ *     `not_primed`, `not_written` or `written_uncaptured`. We could not see the
+ *     axis, so no reachability claim can be made either way (contrast the
+ *     legible-but-off-ladder case, which is ErrPermissionModeUnreachable).
+ */
+export const ErrPermissionModeStalled: Sentinel = defineSentinel(
+  "chat/permission-mode-stalled",
+  "chat: permission mode did not settle",
+);
+
 /** Returned by Open/Reopen when the harness adapter cannot build resume args. */
 export const ErrResumeUnsupported: Sentinel = defineSentinel(
   "chat/resume-unsupported",
