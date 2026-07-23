@@ -49,6 +49,15 @@ const FLAG_DEFS = [
         },
     },
     {
+        name: "permission-mode",
+        type: "string",
+        def: "",
+        usage: "launch-time permission mode for supported harnesses (plan, manual, ask, auto, bypass; mutually exclusive rungs)",
+        set: (a, v) => {
+            a.permissionMode = v;
+        },
+    },
+    {
         name: "tmux-session",
         type: "string",
         def: "",
@@ -80,6 +89,7 @@ function emptyArgs() {
         traceStderr: false,
         effort: "",
         model: "",
+        permissionMode: "",
         tmuxSession: "",
         tmuxChild: "",
         harnessName: "",

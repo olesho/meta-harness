@@ -4,6 +4,7 @@ export interface HarnessWrapperArgs {
     traceStderr: boolean;
     effort: string;
     model: string;
+    permissionMode: string;
     /**
      * Requests the wrapper spawn the run inside a detached tmux session named
      * mh-<value> and exit immediately after `tmux new-session -d` succeeds.

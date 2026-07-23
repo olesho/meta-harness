@@ -17,6 +17,16 @@ export declare function resolveTracePath(explicit: string, sessionName: string):
     err: Error | null;
 };
 /**
+ * Builds the pane command tmux re-execs: this same entry point in --tmux-child
+ * mode, carrying the resolved trace path plus every launch-time knob the parent
+ * parsed. Any wrapper flag that shapes the run MUST be forwarded here or a
+ * `--tmux-session` invocation silently loses it. Mirrors Go's reexec argv shape
+ * (tmux.go:66-90); process.execPath + process.argv[1] stand in for Go's
+ * single-binary os.Executable(). Pure and exported so the argv contract is
+ * testable without a tmux binary.
+ */
+export declare function buildReexecArgv(args: HarnessWrapperArgs, tracePath: string): string[];
+/**
  * Parent half of `meta-harness-wrapper --tmux-session <name> -- <harness> ...`:
  * resolves the trace path, re-execs this same binary with --tmux-child set
  * inside a detached tmux session, and exits. binPath is not needed here — the
