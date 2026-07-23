@@ -273,7 +273,7 @@ runStructuredTurn(ctx: Context, ws: Workspace, cfg: TurnConfig): Promise<Structu
 ```
 
 1. Writes the prompt to a temp file (never argv or shell-interpolated).
-2. Calls `ws.exec()` with `meta-harness-structured-run --prompt-file <path> … [--sandbox-defaults] <harness> -- <args>` (`--sandbox-defaults` opts into `IS_SANDBOX=1` + the claude-code permission bypass; off by default — argv/env forwarded verbatim).
+2. Calls `ws.exec()` with `meta-harness-structured-run --prompt-file <path> … [--sandbox-defaults] <harness> -- <args>` (`--sandbox-defaults` opts into `IS_SANDBOX=1` + the claude-code permission bypass; off by default — argv/env forwarded verbatim). When `--permission-mode` is also set it wins for argv; the `IS_SANDBOX=1` half still applies, unconditionally and independently of the resolved mode.
 3. Parses the last stdout line as JSON (the structured result). Its optional `permission_mode` reports the rung the guest runner **launched** the harness at — telemetry only, never an authorization signal, and never a readback of the live mode. When the runner emits no JSON at all, the result derived here from exit code + stderr leaves the key **absent**: no turn ran, so there is no launch rung, and the host never synthesises one from its own `cfg.permissionMode`.
 4. Optionally retrieves the on-disk transcript to a host path.
 

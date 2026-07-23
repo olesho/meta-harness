@@ -16,8 +16,8 @@ export interface TurnConfig {
      *  `--permission-mode` flag. Canonical rungs, least to most permissive:
      *  `plan`, `manual`, `ask`, `auto`, `bypass` (`ask` sits ABOVE `manual`
      *  because it auto-accepts edits). Unset or `""` injects nothing. Supported
-     *  on claude-code and codex only. Mutually exclusive with `sandboxDefaults`
-     *  (rejected host-side — see PermissionModeSandboxConflictError).
+     *  on claude-code and codex only. COMPOSES with `sandboxDefaults` — see that
+     *  field for the precedence rule.
      *
      *  The value is validated INSIDE THE GUEST, so an operator meets it as one of
      *  two distinct result shapes rather than a host-side throw:
@@ -42,7 +42,17 @@ export interface TurnConfig {
     harnessArgs?: string[];
     /** Opt into the runner's sandbox defaults (`--sandbox-defaults`): IS_SANDBOX=1
      *  in the guest env (all harnesses) and --dangerously-skip-permissions on the
-     *  argv (claude-code only). Off by default — argv/env forwarded verbatim. */
+     *  argv (claude-code only). Off by default — argv/env forwarded verbatim.
+     *
+     *  Equivalent in intent to `permissionMode: "bypass"` for claude-code only.
+     *  When `permissionMode` is also set it wins for argv (the runner emits no
+     *  --dangerously-skip-permissions); the IS_SANDBOX=1 half still applies,
+     *  unconditionally and independently of the resolved mode. The env half is a
+     *  guest-CONTAINER affordance (it is what permits running as root), not a
+     *  permission directive, so it is gated on this flag alone — the runner's
+     *  buildGuestEnv takes no permission-mode parameter at all. Both flags may be
+     *  set together; `sandboxDefaults` + `permissionMode: "bypass"` is in fact the
+     *  fresh-HOME-safe pairing. */
     sandboxDefaults?: boolean;
     /** Environment overlaid on the guest process. */
     env?: Record<string, string>;
@@ -70,16 +80,6 @@ export declare class TurnProtocolError extends Error {
 export declare class TranscriptRetrievalUnsupportedError extends Error {
     readonly harness: string;
     constructor(harness: string);
-}
-/** Thrown when a turn asks for BOTH `sandboxDefaults` and a non-empty
- *  `permissionMode`. The two flags are mutually exclusive — `--sandbox-defaults`
- *  hard-codes the most permissive rung while `--permission-mode` names one — and
- *  structured-runner's parser rejects the pair with exit 2. This client fails
- *  fast on the HOST so the caller does not pay a prompt upload plus a guest
- *  round-trip (a real cost on a remote workspace) just to be told exit 2. The
- *  message is byte-identical to the guest-side one. */
-export declare class PermissionModeSandboxConflictError extends Error {
-    constructor();
 }
 /**
  * runStructuredTurn drives one structured turn over `ws` and returns the parsed

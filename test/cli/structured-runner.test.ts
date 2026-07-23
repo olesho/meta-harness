@@ -169,34 +169,22 @@ describe("parseStructuredArgs (safe-transport grammar)", () => {
     );
   });
 
-  // The message is shared VERBATIM with the host-side check in src/env/turn.ts.
-  test("--sandbox-defaults + --permission-mode are mutually exclusive (both orders)", () => {
-    const msg =
-      "flags --sandbox-defaults and --permission-mode are mutually exclusive";
-    expect(
-      parseStructuredArgs([
-        "--sandbox-defaults",
-        "--permission-mode",
-        "plan",
-        "claude",
-      ]).error,
-    ).toBe(msg);
-    expect(
-      parseStructuredArgs([
-        "--permission-mode",
-        "plan",
-        "--sandbox-defaults",
-        "claude",
-      ]).error,
-    ).toBe(msg);
-    // Blanket over harnesses — codex injects no argv, but the rule is uniform.
-    expect(
-      parseStructuredArgs([
-        "--sandbox-defaults",
-        "--permission-mode=bypass",
-        "codex",
-      ]).error,
-    ).toBe(msg);
+  // The pair COMPOSES — it is deliberately not a usage error. Rejecting it would
+  // outlaw `--sandbox-defaults --permission-mode bypass`, the fresh-HOME-safe
+  // combination (IS_SANDBOX=1 suppresses claude's bypass acceptance screen).
+  // Precedence lives in metaHarnessArgs, not the parser; the main()-level cases
+  // below pin what each combination actually puts on the child argv.
+  test("--sandbox-defaults + --permission-mode COMPOSE — parsed, never a usage error", () => {
+    for (const argv of [
+      ["--sandbox-defaults", "--permission-mode", "plan", "claude"],
+      ["--permission-mode", "plan", "--sandbox-defaults", "claude"],
+      ["--sandbox-defaults", "--permission-mode=bypass", "codex"],
+    ]) {
+      const p = parseStructuredArgs(argv);
+      expect(p.error).toBeUndefined();
+      expect(p.sandboxDefaults).toBe(true);
+      expect(p.permissionMode).toBeTruthy();
+    }
     // Either flag ALONE stays legal.
     expect(
       parseStructuredArgs(["--sandbox-defaults", "claude"]).error,
@@ -632,23 +620,179 @@ describe("structured-runner main() — one-turn JSON contract (real pty + fake h
     expect("permission_mode" in payload).toBe(false);
   }, 25000);
 
-  test("--sandbox-defaults + --permission-mode: ExitUsage, stderr message, NO JSON on stdout", async () => {
-    const { promptPath } = stageTurn();
-    const { code, payload, stderr } = await captureMain([
-      "--prompt-file",
-      promptPath,
-      "--sandbox-defaults",
-      "--permission-mode",
-      "plan",
-      "claude",
-    ]);
-    expect(code).toBe(ExitUsage);
-    expect(stderr).toBe(
-      "structured-runner: flags --sandbox-defaults and --permission-mode are mutually exclusive\n",
-    );
-    // captureMain falls back to "{}" when stdout stayed empty — emit() always
-    // writes a populated object, so an empty payload IS "no JSON line".
-    expect(payload).toEqual({});
+  // --sandbox-defaults + --permission-mode COMPOSE. The precedence rule: an
+  // explicit --permission-mode wins for ARGV (metaHarnessArgs emits nothing)
+  // while --sandbox-defaults still contributes IS_SANDBOX=1 to the guest env.
+  // Every case below exits ExitOK — the combination is not a usage error.
+  //
+  // No case asserts on the guest env, BY CONSTRUCTION rather than by omission:
+  // buildGuestEnv(baseEnv, sandboxDefaults) takes no permission-mode parameter,
+  // so no combination test here could distinguish "with mode" from "without".
+  // The env half's mode-independence is a type-level guarantee; its behavioural
+  // pin is the buildGuestEnv describe block above, which stays its only one.
+  describe("--sandbox-defaults + --permission-mode precedence", () => {
+    // The claude child argv is NOT injection-only: ClaudeCodeAdapter.initSession
+    // prepends ["--session-id", <randomUUID()>] on the create path, ahead of the
+    // structured-runner args and behind the wrapper's injections. Normalize the
+    // uuid so an exact toEqual is writable at all.
+    function normalizeSessionID(argv: string[]): string[] {
+      const i = argv.indexOf("--session-id");
+      if (i === -1 || i + 1 >= argv.length) return argv;
+      const out = argv.slice();
+      out[i + 1] = "<uuid>";
+      return out;
+    }
+
+    async function claudeArgv(flags: string[]): Promise<string[]> {
+      const { promptPath, argvOut } = stageTurn();
+      const { code } = await captureMain([
+        "--prompt-file",
+        promptPath,
+        ...flags,
+      ]);
+      expect(code).toBe(ExitOK);
+      return normalizeSessionID(JSON.parse(readFileSync(argvOut, "utf8")));
+    }
+
+    // A — the plain conflict: the explicit rung replaces the sugar's argv half.
+    test("A: --sandbox-defaults --permission-mode plan claude → mode wins, bypass token ABSENT", async () => {
+      const argv = await claudeArgv([
+        "--sandbox-defaults",
+        "--permission-mode",
+        "plan",
+        "claude",
+      ]);
+      expect(argv).toEqual([
+        "--permission-mode",
+        "plan",
+        "--session-id",
+        "<uuid>",
+      ]);
+      expect(argv).not.toContain("--dangerously-skip-permissions");
+    }, 25000);
+
+    // A′ — the precedence rule's OWN justifying case: the fresh-HOME-safe pair,
+    // and the only place the bypass rung's claude alias meets --sandbox-defaults.
+    // What it pins is that the two bypass SPELLINGS never both appear. (Today the
+    // same intent would arrive as --dangerously-skip-permissions; the invariant
+    // being frozen is the absence of a second bypass token, not the alias string,
+    // whose SSOT is the wrapper's mapping table.)
+    test("A′: --sandbox-defaults --permission-mode bypass claude → one bypass spelling, not two", async () => {
+      const argv = await claudeArgv([
+        "--sandbox-defaults",
+        "--permission-mode",
+        "bypass",
+        "claude",
+      ]);
+      expect(argv).toEqual([
+        "--permission-mode",
+        "bypassPermissions",
+        "--session-id",
+        "<uuid>",
+      ]);
+      expect(argv).not.toContain("--dangerously-skip-permissions");
+    }, 25000);
+
+    // C — §2a's decision made visible. The rule suppresses INJECTION only: a
+    // caller-supplied token after `--` still wins, so the turn runs as bypass
+    // under an explicit --permission-mode plan and the plan request is silently
+    // not applied. A verbatim caller argument beating a translated flag is the
+    // convention of the whole argsWith… chain; this is precedence, not a bug.
+    test("C: a caller-supplied --dangerously-skip-permissions beats --permission-mode", async () => {
+      const argv = await claudeArgv([
+        "--sandbox-defaults",
+        "--permission-mode",
+        "plan",
+        "claude",
+        "--",
+        "--dangerously-skip-permissions",
+      ]);
+      expect(argv).toEqual([
+        "--session-id",
+        "<uuid>",
+        "--dangerously-skip-permissions",
+      ]);
+      expect(argv).not.toContain("--permission-mode");
+    }, 25000);
+
+    // E — the predicate tests SET-ness: "" is unset, so the sugar's argv half is
+    // untouched. This expectation is byte-for-byte what `--sandbox-defaults
+    // claude` alone produces, which is the "bit-identical for every existing
+    // single-flag caller" bar made executable. It coincides with C's expectation
+    // for a DIFFERENT reason: C suppresses the injection and the caller re-supplies
+    // the token; E never suppresses at all.
+    test('E: --permission-mode "" is unset — the bypass token survives', async () => {
+      const argv = await claudeArgv([
+        "--sandbox-defaults",
+        "--permission-mode",
+        "",
+        "claude",
+      ]);
+      expect(argv).toEqual([
+        "--session-id",
+        "<uuid>",
+        "--dangerously-skip-permissions",
+      ]);
+      expect(argv).not.toContain("--permission-mode");
+    }, 25000);
+
+    // B — codex. Deliberately NOT toEqual: the expected tokens are the wrapper's
+    // permission-mapping encoding, whose SSOT is src/wrapper/internal/permission.ts.
+    // Freezing it here would break this file on any revision of that table. Assert
+    // only what THIS ticket decides — the claude bypass token is absent, and the
+    // translated pair is present and adjacent.
+    test("B: --sandbox-defaults --permission-mode bypass codex → translated pair, no claude token", async () => {
+      const script = New("codex")
+        .Idle()
+        // Absorb the startup /status prime, then drive the real turn.
+        .AwaitSubmit()
+        .Idle()
+        .AwaitSubmit()
+        .CodexWorking(30, "Working")
+        .CodexReply(40, "Result: " + PromptRef())
+        .Build();
+      const scriptPath = join(
+        mkdtempSync(join(tmpdir(), "sr-script-")),
+        "script.json",
+      );
+      writeFileSync(scriptPath, JSON.stringify(script), { mode: 0o600 });
+      const promptPath = join(
+        mkdtempSync(join(tmpdir(), "sr-prompt-")),
+        "prompt.txt",
+      );
+      writeFileSync(promptPath, "Reply with OK");
+      const argvOut = join(
+        mkdtempSync(join(tmpdir(), "sr-argv-")),
+        "argv.json",
+      );
+
+      setEnv("HARNESS_BINARY_CODEX", fakeHarnessBin);
+      setEnv(EnvVar, scriptPath);
+      setEnv(ArgvOutVar, argvOut);
+      setEnv("LOOM_WORKTREE_PATH", mkdtempSync(join(tmpdir(), "sr-wd-")));
+      setEnv("LOOM_LOCAL_TASK_TIMEOUT_MS", "20000");
+
+      const { code } = await captureMain([
+        "--prompt-file",
+        promptPath,
+        "--sandbox-defaults",
+        "--permission-mode",
+        "bypass",
+        "codex",
+      ]);
+      expect(code).toBe(ExitOK);
+      const argv: string[] = JSON.parse(readFileSync(argvOut, "utf8"));
+
+      // --sandbox-defaults never injected argv for codex, and does not start now.
+      expect(argv).not.toContain("--dangerously-skip-permissions");
+      // The translated posture is present, each axis as an ADJACENT ordered pair.
+      const s = argv.indexOf("-s");
+      expect(s).toBeGreaterThanOrEqual(0);
+      expect(argv[s + 1]).toBe("danger-full-access");
+      const a = argv.indexOf("-a");
+      expect(a).toBeGreaterThanOrEqual(0);
+      expect(argv[a + 1]).toBe("never");
+    }, 25000);
   });
 
   test("forced deadline via HARNESS_WRAPPER_RUN_TIMEOUT: exit 124 + JSON status deadline + stderr anchor", async () => {

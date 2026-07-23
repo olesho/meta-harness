@@ -41,19 +41,6 @@ export class TranscriptRetrievalUnsupportedError extends Error {
         this.name = "TranscriptRetrievalUnsupportedError";
     }
 }
-/** Thrown when a turn asks for BOTH `sandboxDefaults` and a non-empty
- *  `permissionMode`. The two flags are mutually exclusive — `--sandbox-defaults`
- *  hard-codes the most permissive rung while `--permission-mode` names one — and
- *  structured-runner's parser rejects the pair with exit 2. This client fails
- *  fast on the HOST so the caller does not pay a prompt upload plus a guest
- *  round-trip (a real cost on a remote workspace) just to be told exit 2. The
- *  message is byte-identical to the guest-side one. */
-export class PermissionModeSandboxConflictError extends Error {
-    constructor() {
-        super("flags --sandbox-defaults and --permission-mode are mutually exclusive");
-        this.name = "PermissionModeSandboxConflictError";
-    }
-}
 /** Mirrors structured-runner's resolveHarnessName WITHOUT importing from src/cli
  *  (bin-only territory a public barrel must not reach into). Accepts both the
  *  short aliases and the canonical names. */
@@ -79,6 +66,20 @@ function buildArgv(binary, promptPath, cfg) {
     // Deliberately ALSO excludes "": an explicit empty permissionMode means
     // "unset" here rather than pushing a `--permission-mode ""` pair the wrapper
     // would no-op on anyway — noise in the argv and in traces.
+    //
+    // DO NOT harmonize this into the one-clause `!== undefined` shape its
+    // neighbours above/below use. It is the SAME predicate metaHarnessArgs applies
+    // in src/cli/structured-runner.ts, and the two live in different files with no
+    // shared constant. Dropping the `!== ""` clause would emit a bare
+    // `--permission-mode ""` that the runner then reads as unset — while the
+    // runner's own guard suppresses the bypass token — so --sandbox-defaults's
+    // argv half would vanish on both sides at once. The two tests that stop this
+    // drifting are the empty-mode cases in test/env/turn.test.ts and
+    // test/cli/structured-runner.test.ts.
+    //
+    // Slot order matters: --permission-mode sits AFTER --model and BEFORE
+    // --sandbox-defaults, so an argv with no mode set is byte-identical to what
+    // callers got before the flag existed.
     if (cfg.permissionMode !== undefined && cfg.permissionMode !== "")
         argv.push("--permission-mode", cfg.permissionMode);
     if (cfg.sandboxDefaults)
@@ -108,14 +109,6 @@ function statusForExit(code) {
  * exit with no JSON throws TurnProtocolError (never assume a payload).
  */
 export async function runStructuredTurn(ctx, ws, cfg) {
-    // Fail fast BEFORE staging/uploading the prompt: structured-runner rejects the
-    // pair with exit 2, and paying a guest round-trip to learn that is exactly the
-    // cost this check exists to avoid.
-    if (cfg.sandboxDefaults &&
-        typeof cfg.permissionMode === "string" &&
-        cfg.permissionMode !== "") {
-        throw new PermissionModeSandboxConflictError();
-    }
     const binary = cfg.binary ?? DEFAULT_BINARY;
     const cwd = cfg.cwd ?? ws.guestPath("repo");
     // Stage the prompt on the host, upload to the guest tmp dir, exec, clean up.
