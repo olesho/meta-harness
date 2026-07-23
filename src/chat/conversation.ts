@@ -631,6 +631,12 @@ export class Conversation {
    * comparison, so both come from one frame. Safe to call after close(): it
    * returns the last frame's parse with a frozen `generation`.
    *
+   * That comparison (the gateway ships it as `stale`) is A GENERATION
+   * COMPARISON, NOT A LIVENESS CLAIM: it says only "the frame this reading was
+   * parsed from is not the frame you measured". After close() nothing writes,
+   * so a closed claude conversation compares equal on a frozen frame; callers
+   * distinguish that with isClosed(), never with the generations.
+   *
    * It NEVER touches the PTY — no `/status` write, no keystrokes, no store
    * mutation. A getter that writes is a trap: on codex it would mutate the
    * session, and `/status` mid-turn is refused anyway. An explicit re-probe

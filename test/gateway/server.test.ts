@@ -43,6 +43,7 @@ import {
   PromptRef,
   fakeHarnessBin,
   fakeLaunchEnv,
+  openFake,
 } from "../chat/fakeharness.ts";
 
 // ── A faithful fake Conversation ─────────────────────────────────────────────
@@ -164,12 +165,18 @@ class FakeConversation implements ConversationLike {
   async history(): Promise<Turn[]> {
     return this.turns;
   }
-  /** Bumped by tests that simulate a repainting harness. */
+  /** The screen generation the next snapshot reports. */
   generation = 7;
+  /**
+   * When true, EVERY screenSnapshot() bumps the generation — a live claude
+   * repainting under the handler's feet. A handler that sampled the screen
+   * twice would then read two different frames.
+   */
+  repaintPerSnapshot = false;
   /**
    * The reading the fake reports. `generation` is filled from the snapshot the
    * route hands in, exactly like the real Conversation's live claude path,
-   * unless `frozenReading` pins it (the cached-codex-box shape).
+   * unless `frozenGeneration` pins it (the cached-codex-box shape).
    */
   reading: Omit<PermissionModeReading, "generation" | "observedAt"> = {
     observed: "acceptEdits",
@@ -180,6 +187,7 @@ class FakeConversation implements ConversationLike {
   frozenGeneration?: number;
 
   screenSnapshot(): Snapshot {
+    if (this.repaintPerSnapshot) this.generation++;
     return {
       text: "SCREEN",
       cols: 80,
@@ -1149,6 +1157,216 @@ describe("permission_mode (POST /v1/conversations + POST /v1/turns)", () => {
 
     const del = await req(base, "DELETE", `/v1/conversations/${open.json.id}`);
     expect(del.status).toBe(204);
+  }, 30_000);
+});
+// ── GET /v1/conversations/{id}/permission-mode ───────────────────────────────
+
+describe("permission-mode route", () => {
+  const path = (id: string): string =>
+    `/v1/conversations/${id}/permission-mode`;
+
+  test("pure read: no control token, full reading on the wire", async () => {
+    const fake = new FakeConversation();
+    fake.reading = {
+      requested: "bypass",
+      requestedRaw: "bypassPermissions",
+      observed: "acceptEdits",
+      raw: "accept edits",
+      collaboration: "default",
+      source: "footer",
+    };
+    const { base } = await serverFor(fake);
+    const id = await open(base, fake);
+
+    // NOT token-gated — nobody has ever acquired control here.
+    const r = await req(base, "GET", path(id));
+    expect(r.status).toBe(200);
+    expect(r.json).toEqual({
+      requested: "bypass",
+      requested_raw: "bypassPermissions",
+      observed: "acceptEdits",
+      raw: "accept edits",
+      collaboration: "default",
+      source: "footer",
+      generation: 7,
+      current_generation: 7,
+      stale: false,
+      observed_at: "2026-07-22T18:04:11.220Z",
+    });
+  });
+
+  test("one snapshot serves both generations: a live read under continuous repaint is NOT stale", async () => {
+    // The fake repaints on EVERY screenSnapshot() call, exactly like a live
+    // claude. A handler that sampled the screen twice would see the second,
+    // bumped generation and report stale:true on a genuinely live read.
+    const fake = new FakeConversation();
+    fake.repaintPerSnapshot = true;
+    const { base } = await serverFor(fake);
+    const id = await open(base, fake);
+
+    for (let i = 0; i < 3; i++) {
+      const r = await req(base, "GET", path(id));
+      expect(r.status).toBe(200);
+      expect(r.json.stale).toBe(false);
+      expect(r.json.current_generation).toBe(r.json.generation);
+    }
+    // Successive reads DO advance — the frames really are different.
+    const a = (await req(base, "GET", path(id))).json.generation;
+    const b = (await req(base, "GET", path(id))).json.generation;
+    expect(b).toBeGreaterThan(a);
+  });
+
+  test("a cached (codex /status) reading reports stale once the screen has moved on", async () => {
+    const fake = new FakeConversation();
+    fake.reading = {
+      observed: "auto",
+      raw: "Full access",
+      collaboration: "default",
+      source: "status",
+    };
+    fake.frozenGeneration = 3; // parsed at prime time
+    fake.generation = 4711; // the screen has been repainted since
+    const { base } = await serverFor(fake);
+    const id = await open(base, fake);
+
+    const r = await req(base, "GET", path(id));
+    expect(r.json).toMatchObject({
+      observed: "auto",
+      source: "status",
+      generation: 3,
+      current_generation: 4711,
+      stale: true,
+    });
+  });
+
+  test("404 on an unknown id", async () => {
+    const { base } = await start();
+    const r = await req(base, "GET", path("no-such-conversation"));
+    expect(r.status).toBe(404);
+    expect(r.json.code).toBe("not_found");
+  });
+
+  test("off-ladder: `Workspace (Approve for me)` reaches the HTTP body as raw", async () => {
+    // The whole off-ladder story has to survive to the wire: unknown WITH a raw
+    // is "outside the ladder", not "we couldn't see".
+    const fake = new FakeConversation();
+    fake.reading = {
+      observed: "unknown",
+      raw: "Workspace (Approve for me)",
+      source: "unparsed_footer",
+    };
+    const { base } = await serverFor(fake);
+    const id = await open(base, fake);
+
+    const r = await req(base, "GET", path(id));
+    expect(r.status).toBe(200);
+    expect(r.json.observed).toBe("unknown");
+    expect(r.json.raw).toBe("Workspace (Approve for me)");
+    expect(r.json.source).toBe("unparsed_footer");
+    // The raw text survives the JSON round-trip byte for byte.
+    expect(r.text).toContain("Workspace (Approve for me)");
+  });
+
+  test("`requested`, `requested_raw`, `raw` and `collaboration` are omitted when empty", async () => {
+    const fake = new FakeConversation();
+    fake.reading = { observed: "unknown", source: "no_footer" };
+    const { base } = await serverFor(fake);
+    const id = await open(base, fake);
+
+    const r = await req(base, "GET", path(id));
+    expect(r.json).toEqual({
+      observed: "unknown",
+      source: "no_footer",
+      generation: 7,
+      current_generation: 7,
+      stale: false,
+      observed_at: "2026-07-22T18:04:11.220Z",
+    });
+    for (const k of ["requested", "requested_raw", "raw", "collaboration"]) {
+      expect(r.text).not.toContain(`"${k}"`);
+    }
+  });
+
+  test("the closed-conversation case cannot arise over HTTP — DELETE 404s the route", async () => {
+    // `stale` is a generation comparison, not a liveness claim, so a closed
+    // conversation would report stale:false on a frozen frame. It never gets
+    // the chance: closeConv removes the entry from the registry SYNCHRONOUSLY
+    // before awaiting close(), so the route 404s instead.
+    const fake = new FakeConversation();
+    const { base } = await serverFor(fake);
+    const id = await open(base, fake);
+    expect((await req(base, "GET", path(id))).status).toBe(200);
+
+    expect((await req(base, "DELETE", `/v1/conversations/${id}`)).status).toBe(
+      204,
+    );
+    const after = await req(base, "GET", path(id));
+    expect(after.status).toBe(404);
+    expect(after.json.code).toBe("not_found");
+  });
+
+  test("a REAL pi conversation reads back over the route: launch source, no throw", async () => {
+    // No screen reader exists for pi/opencode/generic, so the route must still
+    // answer 200 with `observed: "unknown"` / `source: "launch"` — never a 500.
+    // `requested` is necessarily absent here: the wrapper rejects a launch
+    // permissionMode outright for a harness with no permission axis, so a pi
+    // conversation can never carry one.
+    const script = New("pi").Idle().StayAliveUntilStopped().Build();
+    const conv = await openFake(script);
+    try {
+      const { base } = await start(async () => conv);
+      const o = await req(base, "POST", "/v1/conversations", {
+        harness: "pi",
+        binary_path: "/bin/x",
+      });
+      expect(o.status).toBe(201);
+
+      const r = await req(base, "GET", path(o.json.id));
+      expect(r.status).toBe(200);
+      expect(r.json).toMatchObject({
+        observed: "unknown",
+        source: "launch",
+        stale: false,
+      });
+      expect(Object.hasOwn(r.json, "requested")).toBe(false);
+      expect(Object.hasOwn(r.json, "requested_raw")).toBe(false);
+      expect(typeof r.json.generation).toBe("number");
+      expect(r.json.current_generation).toBe(r.json.generation);
+      expect(Date.parse(r.json.observed_at)).not.toBeNaN();
+    } finally {
+      await conv.close();
+    }
+  }, 30_000);
+
+  test("a REAL claude-code conversation carries requested/requested_raw over the route", async () => {
+    // The launch spelling is normalized on the way out (`bypassPermissions` →
+    // `bypass`) while `requested_raw` keeps it verbatim — both survive to the
+    // wire. The fake's idle frame paints no mode footer, so the live read
+    // honestly reports `no_footer` rather than guessing.
+    const script = New("claude-code").Idle().StayAliveUntilStopped().Build();
+    const conv = await openFake(script, {
+      permissionMode: "bypassPermissions",
+    });
+    try {
+      const { base } = await start(async () => conv);
+      const o = await req(base, "POST", "/v1/conversations", {
+        harness: "claude-code",
+        binary_path: "/bin/x",
+      });
+      expect(o.status).toBe(201);
+
+      const r = await req(base, "GET", path(o.json.id));
+      expect(r.status).toBe(200);
+      expect(r.json).toMatchObject({
+        requested: "bypass",
+        requested_raw: "bypassPermissions",
+        observed: "unknown",
+        source: "no_footer",
+        stale: false,
+      });
+    } finally {
+      await conv.close();
+    }
   }, 30_000);
 });
 

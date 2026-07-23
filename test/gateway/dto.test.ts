@@ -7,11 +7,13 @@ import {
   goDurationString,
   inputRequestDTO,
   parseAnswerRequest,
+  permissionModeResponse,
   screenResponse,
   sessionDTO,
   turnDTO,
 } from "../../src/gateway/dto.ts";
 import type { InputRequest, Session, Turn } from "../../src/chat/types.ts";
+import type { PermissionModeReading } from "../../src/chat/permission.ts";
 import type { Snapshot } from "../../src/screen/screen.ts";
 
 function baseTurn(over: Partial<Turn> = {}): Turn {
@@ -173,5 +175,118 @@ describe("screenResponse + sessionDTO", () => {
       created_at: "2026-01-01T00:00:00.000Z",
       harness_session_id: "hx",
     });
+  });
+});
+
+describe("permissionModeResponse", () => {
+  const base: PermissionModeReading = {
+    observed: "acceptEdits",
+    source: "status",
+    generation: 12,
+    observedAt: new Date("2026-07-22T18:04:11.220Z"),
+  };
+
+  test("full reading → snake_case KEYS, verbatim VALUES, stale computed", () => {
+    expect(
+      permissionModeResponse(
+        {
+          ...base,
+          requested: "bypass",
+          requestedRaw: "bypassPermissions",
+          raw: "Workspace (Approve for me)",
+          collaboration: "default",
+        },
+        4711,
+      ),
+    ).toEqual({
+      requested: "bypass",
+      requested_raw: "bypassPermissions",
+      observed: "acceptEdits",
+      raw: "Workspace (Approve for me)",
+      collaboration: "default",
+      source: "status",
+      generation: 12,
+      current_generation: 4711,
+      stale: true,
+      observed_at: "2026-07-22T18:04:11.220Z",
+    });
+  });
+
+  test("casing is pinned: rung values stay camelCase, source values stay snake_case", () => {
+    const out = permissionModeResponse(
+      {
+        ...base,
+        requested: "acceptEdits",
+        observed: "acceptEdits",
+        source: "written_uncaptured",
+      },
+      12,
+    );
+    // Rungs are the TS spelling verbatim, so they round-trip unchanged.
+    expect(out.requested).toBe("acceptEdits");
+    expect(out.observed).toBe("acceptEdits");
+    // Sources are primeOutcome's vocabulary verbatim.
+    expect(out.source).toBe("written_uncaptured");
+    // Only KEYS are snake_case.
+    expect(Object.keys(out)).toEqual(
+      expect.arrayContaining([
+        "current_generation",
+        "observed_at",
+        "generation",
+        "stale",
+      ]),
+    );
+  });
+
+  test("stale is a pure generation comparison — equal generations → false", () => {
+    expect(permissionModeResponse(base, 12).stale).toBe(false);
+    expect(permissionModeResponse(base, 13).stale).toBe(true);
+    // A LOWER current generation is still a mismatch, never a special case.
+    expect(permissionModeResponse(base, 11).stale).toBe(true);
+  });
+
+  test("requested / requested_raw / raw / collaboration are omitted when empty", () => {
+    const out = permissionModeResponse(
+      { ...base, observed: "unknown", source: "launch" },
+      12,
+    );
+    expect(out).toEqual({
+      observed: "unknown",
+      source: "launch",
+      generation: 12,
+      current_generation: 12,
+      stale: false,
+      observed_at: "2026-07-22T18:04:11.220Z",
+    });
+    for (const k of ["requested", "requested_raw", "raw", "collaboration"]) {
+      expect(Object.hasOwn(out, k)).toBe(false);
+    }
+  });
+
+  test("empty-string raw / requestedRaw are omitted, not emitted as \"\"", () => {
+    const out = permissionModeResponse(
+      { ...base, raw: "", requestedRaw: "", collaboration: undefined },
+      12,
+    );
+    expect(Object.hasOwn(out, "raw")).toBe(false);
+    expect(Object.hasOwn(out, "requested_raw")).toBe(false);
+  });
+
+  test("off-ladder: unknown observed WITH raw survives encoding", () => {
+    // The whole point of shipping `raw`: distinguishes "outside the ladder"
+    // from "couldn't see", which is unknown with NO raw.
+    const seen = permissionModeResponse(
+      { ...base, observed: "unknown", raw: "Workspace (Approve for me)" },
+      12,
+    );
+    expect(seen.observed).toBe("unknown");
+    expect(seen.raw).toBe("Workspace (Approve for me)");
+    const blind = permissionModeResponse(
+      { ...base, observed: "unknown", source: "no_footer" },
+      12,
+    );
+    expect(blind.observed).toBe("unknown");
+    expect(Object.hasOwn(blind, "raw")).toBe(false);
+    expect(blind.source).toBe("no_footer");
   });
 });
