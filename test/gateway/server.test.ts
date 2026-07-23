@@ -27,6 +27,7 @@ import {
   ErrNoControl,
   ErrNoInputPending,
   ErrNotMultiSelect,
+  ErrPermissionModeUnreachable,
   ErrStaleInputRequest,
   ErrTurnInFlight,
   ErrUnknownHarness,
@@ -34,6 +35,7 @@ import {
   type InputAnswer,
   type InputRequest,
   type PermissionModeReading,
+  type PermissionModeTarget,
   type Turn,
 } from "../../src/chat/index.ts";
 import { Context, ctxCanceled } from "../../src/internal/async/index.ts";
@@ -204,6 +206,58 @@ class FakeConversation implements ConversationLike {
       generation: this.frozenGeneration ?? s.generation,
       observedAt: new Date("2026-07-22T18:04:11.220Z"),
     };
+  }
+
+  /**
+   * The targets this fake's "harness" can reach. A KNOWN token outside it is
+   * ErrPermissionModeUnreachable — the real Conversation's answer for a ladder
+   * rung on codex or `"default"` on claude. Default: the claude shape (the
+   * 5-rung ladder, no collaboration axis).
+   */
+  reachable: PermissionModeTarget[] = [
+    "plan",
+    "manual",
+    "acceptEdits",
+    "auto",
+    "bypass",
+  ];
+  /** Every target setPermissionMode was actually driven to, in order. */
+  readonly setTargets: PermissionModeTarget[] = [];
+  /** How many times refreshPermissionMode ran (0 proves "no silent refresh"). */
+  refreshes = 0;
+
+  /** Gates shared by both mutating permission ops, mirroring the real ones. */
+  private async permissionGates(ctx: Context): Promise<void> {
+    if (this.closed || this.forceClosed) throw ErrClosed;
+    if (!this.queue.held()) throw ErrNoControl;
+    if (this.block) {
+      await Promise.race([ctx.done(), this.closedSignal()]);
+      if (this.closed || this.forceClosed) throw ErrClosed;
+      throw ctx.err();
+    }
+    if (this.inject !== undefined) throw this.inject;
+  }
+
+  async setPermissionMode(
+    ctx: Context,
+    target: PermissionModeTarget,
+  ): Promise<PermissionModeReading> {
+    await this.permissionGates(ctx);
+    if (!this.reachable.includes(target)) throw ErrPermissionModeUnreachable;
+    this.setTargets.push(target);
+    // A cycle keystroke reaches the PTY, so the screen repaints.
+    this.generation++;
+    this.reading =
+      target === "default"
+        ? { ...this.reading, collaboration: "default" }
+        : { ...this.reading, observed: target, raw: target };
+    return this.permissionMode();
+  }
+
+  async refreshPermissionMode(ctx: Context): Promise<PermissionModeReading> {
+    await this.permissionGates(ctx);
+    this.refreshes++;
+    return this.permissionMode();
   }
   async close(): Promise<void> {
     this.closed = true;
@@ -1368,6 +1422,231 @@ describe("permission-mode route", () => {
       await conv.close();
     }
   }, 30_000);
+});
+
+// ── POST /v1/conversations/{id}/permission-mode ──────────────────────────────
+//
+// MH-ONLY, no Go counterpart: the request decoding is not corpus-covered, so
+// every row below is hand-written. The response body is the SAME DTO the GET
+// above returns (permissionModeResponse), so a client parses one shape for both.
+
+describe("permission-mode switch route", () => {
+  const path = (id: string): string =>
+    `/v1/conversations/${id}/permission-mode`;
+
+  /** Open + acquire control; returns the wire id and the control token. */
+  async function opened(
+    fake: FakeConversation,
+  ): Promise<{ base: string; id: string; token: string }> {
+    const { base } = await serverFor(fake);
+    const id = await open(base, fake);
+    const token = (await req(base, "POST", `/v1/conversations/${id}/control`))
+      .json.token as string;
+    return { base, id, token };
+  }
+
+  test("un-tokened caller → 409 no_control (a switch is at least as privileged as a send)", async () => {
+    const fake = new FakeConversation();
+    const { base } = await serverFor(fake);
+    const id = await open(base, fake);
+
+    const r = await req(base, "POST", path(id), { permission_mode: "plan" });
+    expect(r.status).toBe(409);
+    expect(r.json.code).toBe("no_control");
+    expect(fake.setTargets).toEqual([]);
+  });
+
+  test("the token gate covers the refresh form too — a codex re-probe writes /status", async () => {
+    const fake = new FakeConversation();
+    const { base } = await serverFor(fake);
+    const id = await open(base, fake);
+
+    const r = await req(base, "POST", path(id), { refresh: true });
+    expect(r.status).toBe(409);
+    expect(r.json.code).toBe("no_control");
+    expect(fake.refreshes).toBe(0);
+  });
+
+  test("neither permission_mode nor refresh → 400 invalid_options", async () => {
+    const fake = new FakeConversation();
+    const { base, id, token } = await opened(fake);
+
+    const r = await req(base, "POST", path(id), { token });
+    expect(r.status).toBe(400);
+    expect(r.json.code).toBe("invalid_options");
+    expect(fake.refreshes).toBe(0);
+    expect(fake.setTargets).toEqual([]);
+  });
+
+  test("both permission_mode and refresh → 400 invalid_options", async () => {
+    const fake = new FakeConversation();
+    const { base, id, token } = await opened(fake);
+
+    const r = await req(base, "POST", path(id), {
+      token,
+      permission_mode: "plan",
+      refresh: true,
+    });
+    expect(r.status).toBe(400);
+    expect(r.json.code).toBe("invalid_options");
+    expect(fake.setTargets).toEqual([]);
+    expect(fake.refreshes).toBe(0);
+  });
+
+  test("a MISSPELLED key is 400 invalid_options, NEVER a silent refresh", async () => {
+    // readJSON validates nothing, so without the explicit discriminator every
+    // one of these would decode to `{}` + a 200 whose reading looks plausible
+    // and whose mode never changed.
+    const fake = new FakeConversation();
+    const { base, id, token } = await opened(fake);
+
+    for (const key of ["permissionMode", "mode", "permission-mode"]) {
+      const r = await req(base, "POST", path(id), { token, [key]: "plan" });
+      expect(r.status, key).toBe(400);
+      expect(r.json.code, key).toBe("invalid_options");
+    }
+    expect(fake.refreshes).toBe(0);
+    expect(fake.setTargets).toEqual([]);
+  });
+
+  test("an unknown mode token → 400 invalid_options, not a fall-through 500", async () => {
+    // No sentinel row matches an unknown string, so without the syntactic check
+    // this would reach FALLBACK → 500 internal. Includes the per-harness native
+    // spellings: the gateway normalizes harness-agnostically, so they are NOT
+    // admitted here.
+    const fake = new FakeConversation();
+    const { base, id, token } = await opened(fake);
+
+    for (const mode of [
+      "yolo",
+      "",
+      "bypassPermissions",
+      "workspace-write",
+      "read-only",
+      "dontAsk",
+    ]) {
+      const r = await req(base, "POST", path(id), {
+        token,
+        permission_mode: mode,
+      });
+      expect(r.status, mode).toBe(400);
+      expect(r.json.code, mode).toBe("invalid_options");
+    }
+    expect(fake.setTargets).toEqual([]);
+  });
+
+  test("a KNOWN token off this harness's axis → 409 permission_mode_unreachable", async () => {
+    // Syntax is the gateway's call; reachability is chat's. `default` is a real
+    // vocabulary member (codex's collaboration axis) and so passes the gateway's
+    // check, then loses to the claude-shaped fake's axis.
+    const fake = new FakeConversation();
+    const { base, id, token } = await opened(fake);
+
+    const r = await req(base, "POST", path(id), {
+      token,
+      permission_mode: "default",
+    });
+    expect(r.status).toBe(409);
+    expect(r.json.code).toBe("permission_mode_unreachable");
+  });
+
+  test("timeout_seconds expiry → 504 timeout", async () => {
+    const fake = new FakeConversation();
+    const { base, id, token } = await opened(fake);
+    fake.block = true;
+
+    const r = await req(base, "POST", path(id), {
+      token,
+      permission_mode: "plan",
+      timeout_seconds: 0.05,
+    });
+    expect(r.status).toBe(504);
+    expect(r.json.code).toBe("timeout");
+  });
+
+  test("set: 200 carrying the GET's DTO shape, and the target really was driven", async () => {
+    const fake = new FakeConversation();
+    fake.reading = {
+      requested: "bypass",
+      requestedRaw: "bypassPermissions",
+      observed: "acceptEdits",
+      raw: "accept edits",
+      source: "footer",
+    };
+    const { base, id, token } = await opened(fake);
+
+    const r = await req(base, "POST", path(id), {
+      token,
+      permission_mode: "acceptedits", // the ladder spelling is case-insensitive
+    });
+    expect(r.status).toBe(200);
+    expect(fake.setTargets).toEqual(["acceptEdits"]);
+    expect(fake.refreshes).toBe(0);
+    // Keys snake_case, rung values camelCase, source values snake_case — 102's
+    // deliberate mix, reused verbatim.
+    expect(r.json).toEqual({
+      requested: "bypass",
+      requested_raw: "bypassPermissions",
+      observed: "acceptEdits",
+      raw: "acceptEdits",
+      source: "footer",
+      generation: 8, // the cycle keystroke repainted
+      current_generation: 8,
+      stale: false,
+      observed_at: "2026-07-22T18:04:11.220Z",
+    });
+
+    // Byte-for-byte the same shape the GET reports for the same session.
+    const g = await req(base, "GET", path(id));
+    expect(Object.keys(g.json).sort()).toEqual(Object.keys(r.json).sort());
+  });
+
+  test("refresh: 200 carrying the GET's DTO shape, and nothing was driven", async () => {
+    const fake = new FakeConversation();
+    fake.reading = {
+      observed: "auto",
+      raw: "Full access",
+      collaboration: "default",
+      source: "status",
+    };
+    const { base, id, token } = await opened(fake);
+
+    const r = await req(base, "POST", path(id), { token, refresh: true });
+    expect(r.status).toBe(200);
+    expect(fake.refreshes).toBe(1);
+    expect(fake.setTargets).toEqual([]);
+    expect(r.json).toEqual({
+      observed: "auto",
+      raw: "Full access",
+      collaboration: "default",
+      source: "status",
+      generation: 7,
+      current_generation: 7,
+      stale: false,
+      observed_at: "2026-07-22T18:04:11.220Z",
+    });
+  });
+
+  test("404 on an unknown id", async () => {
+    const { base } = await start();
+    const r = await req(base, "POST", path("no-such-conversation"), {
+      permission_mode: "plan",
+    });
+    expect(r.status).toBe(404);
+    expect(r.json.code).toBe("not_found");
+  });
+
+  test("malformed JSON → 400 invalid_json", async () => {
+    const fake = new FakeConversation();
+    const { base, id } = await opened(fake);
+    const res = await fetch(base + path(id), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{not json",
+    });
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe("invalid_json");
+  });
 });
 
 // ── SSE collection helper ────────────────────────────────────────────────────
