@@ -71,6 +71,14 @@
 // `/permissions` dialog is never driven (selecting a preset there writes
 // ~/.codex/config.toml globally).
 //
+// CHECK 5 (also META-HARNESS-131) is check 4's claude counterpart and the
+// SILENT-RENAME catcher of the set: it LAUNCHES claude once per permission rung
+// — plus once with no permission flag at all — and asserts the live footer reads
+// back through the SHIPPED parsePermissionMode. Where the flag surface degrades
+// loudly (an `unexpected argument` exit), the DETECTION path degrades silently:
+// a renamed footer reports the wrong mode with no error raised anywhere. Also
+// launch-and-scrape only — no prompt is sent, so it costs zero model calls.
+//
 // Every half and every check is cleanly SKIPPED (not failed) when CONFORMANCE is
 // unset or the binary is absent.
 
@@ -1094,7 +1102,7 @@ describe("conformance: codex /status rows (CONFORMANCE=1)", () => {
 // DEFAULT permission mode to Manual; the installed binary moved 2.1.217 →
 // 2.1.218 during this plan's own review. Unit tests over the recorded corpus
 // (test/chat/permission.test.ts, replaying test/corpus/claude-code/
-// permission-modes/*) cannot catch any of that — the fixtures are frozen bytes
+// permission-mode-*) cannot catch any of that — the fixtures are frozen bytes
 // and keep passing forever after the real CLI has moved on.
 //
 // MECHANICS — launch, poll, close. NOTHING IS SENT. startPumps runs inside Open
@@ -1130,8 +1138,31 @@ const FOOTER_POLL_INTERVAL = 250;
 /** Where the claude footer parse lives, for every remediation pointer below. */
 const FOOTER_PARSER = "src/chat/permission.ts";
 
-/** The corpus fixture the failure reports tell the next reader to re-record. */
-const FOOTER_CORPUS = "test/corpus/claude-code/permission-modes/";
+/**
+ * The recorded fixtures the failure reports tell the next reader to re-record.
+ *
+ * They ALREADY EXIST — hand-recorded against live claude 2.1.218 and replayed by
+ * test/chat/permission.test.ts's "claude-code corpus replay" block — so this
+ * check re-records nothing and points at them instead. Each `meta.json` carries
+ * the keystrokes, the cycle order and the hex codepoints of the footer's glyph
+ * run; test/corpus/README.md's hand-recorded table explains why they are inert
+ * to `npm run rebake-corpus` (screenbench-record has no scripted-keystroke seam
+ * for Shift+Tab).
+ *
+ * Note the naming: `permission-mode-<rung>` (singular, hyphenated), NOT a
+ * `permission-modes/` subdirectory. A pointer at a path that does not exist is
+ * worse than no pointer — the whole value of this report is that the next reader
+ * can act on it without a search.
+ */
+const FOOTER_CORPUS = "test/corpus/claude-code/";
+
+/**
+ * The `auto` rung has NO dedicated fixture: every scripted recording launches on
+ * auto, so the three scenario recordings already carry that footer (the replay
+ * block asserts exactly that). Named here so the auto report still points
+ * somewhere real.
+ */
+const AUTO_FIXTURES = `${FOOTER_CORPUS}{multi-turn,tool-call,interrupted-mid-reply}`;
 
 /**
  * The five live footer cases, derived from META-HARNESS-99's live-probed table.
@@ -1148,12 +1179,36 @@ const FOOTER_CORPUS = "test/corpus/claude-code/permission-modes/";
  * parsePermissionMode, so this file carries no second copy of the footer shape.
  * A test with its own regex would stay green while the shipped parser rotted.
  */
-const CLAUDE_FOOTER_CASES: readonly { mode: string; fragment: string }[] = [
-  { mode: PermissionModeAuto, fragment: "auto mode on" },
-  { mode: PermissionModeManual, fragment: "manual mode on" },
-  { mode: ClaudeModeAcceptEdits, fragment: "accept edits on" },
-  { mode: PermissionModePlan, fragment: "plan mode on" },
-  { mode: ClaudeModeBypassPermissions, fragment: "bypass permissions on" },
+const CLAUDE_FOOTER_CASES: readonly {
+  mode: string;
+  fragment: string;
+  fixture: string;
+}[] = [
+  {
+    mode: PermissionModeAuto,
+    fragment: "auto mode on",
+    fixture: AUTO_FIXTURES,
+  },
+  {
+    mode: PermissionModeManual,
+    fragment: "manual mode on",
+    fixture: `${FOOTER_CORPUS}permission-mode-manual`,
+  },
+  {
+    mode: ClaudeModeAcceptEdits,
+    fragment: "accept edits on",
+    fixture: `${FOOTER_CORPUS}permission-mode-accept-edits`,
+  },
+  {
+    mode: PermissionModePlan,
+    fragment: "plan mode on",
+    fixture: `${FOOTER_CORPUS}permission-mode-plan`,
+  },
+  {
+    mode: ClaudeModeBypassPermissions,
+    fragment: "bypass permissions on",
+    fixture: `${FOOTER_CORPUS}permission-mode-bypass`,
+  },
 ];
 
 /**
@@ -1459,17 +1514,18 @@ describe("conformance: claude permission-mode footers (CONFORMANCE=1)", () => {
         [],
         CLAUDE_FOOTER_CASES.map((c) => c.fragment).join(" | "),
         undefined,
-        `${FOOTER_CORPUS}<the default mode>`,
+        // Which fixture to re-record depends on which rung claude now defaults
+        // to, so name the whole set rather than guessing one.
+        `${FOOTER_CORPUS}permission-mode-* (whichever rung the default now lands on)`,
       );
     },
     TEST_TIMEOUT,
   );
 
   // ── The five named modes, one test() each ──────────────────────────────────
-  for (const { mode, fragment } of CLAUDE_FOOTER_CASES) {
+  for (const { mode, fragment, fixture } of CLAUDE_FOOTER_CASES) {
     const expected = normalizePermissionRung(mode, "claude-code");
     const args = [ClaudePermissionModeFlag, mode];
-    const fixture = `${FOOTER_CORPUS}${mode === ClaudeModeAcceptEdits ? "accept-edits" : mode === ClaudeModeBypassPermissions ? "bypass" : mode}`;
 
     // `manual` gets its own test() for a reason beyond the per-mode rule: it is
     // the ONLY footer lacking the "(shift+tab to cycle)" suffix, so a
