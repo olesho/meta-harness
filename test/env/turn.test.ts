@@ -8,7 +8,6 @@ import { readFileSync } from "node:fs";
 
 import { Context } from "../../src/async/index.ts";
 import {
-  PermissionModeSandboxConflictError,
   runStructuredTurn,
   TurnProtocolError,
   TranscriptRetrievalUnsupportedError,
@@ -169,31 +168,49 @@ describe("runStructuredTurn — happy path & transport", () => {
     expect(ws.execArgv).not.toContain("");
   });
 
-  test("sandboxDefaults + permissionMode is REJECTED host-side, before any upload", async () => {
+  // D — the two flags COMPOSE: both reach the runner argv, no throw. The slot
+  // order is load-bearing: --permission-mode sits AFTER --model and immediately
+  // BEFORE --sandbox-defaults, so an argv with no mode set stays byte-identical
+  // to what callers got before the flag existed. Precedence between the two is
+  // then resolved inside the runner (metaHarnessArgs), not here.
+  test("sandboxDefaults + permissionMode COMPOSE — both on the argv, in slot order", async () => {
     const ws = new TurnFakeWorkspace({ code: 0, stdout: okLine(), stderr: "" });
-    await expect(
-      runStructuredTurn(
-        ctx,
-        ws,
-        cfg({ sandboxDefaults: true, permissionMode: "plan" }),
-      ),
-    ).rejects.toBeInstanceOf(PermissionModeSandboxConflictError);
-    // Byte-identical to structured-runner's guest-side rejection message.
-    await expect(
-      runStructuredTurn(
-        ctx,
-        ws,
-        cfg({ sandboxDefaults: true, permissionMode: "plan" }),
-      ),
-    ).rejects.toThrow(
-      "flags --sandbox-defaults and --permission-mode are mutually exclusive",
+    const res = await runStructuredTurn(
+      ctx,
+      ws,
+      cfg({
+        effort: "high",
+        model: "sonnet",
+        sandboxDefaults: true,
+        permissionMode: "plan",
+      }),
     );
-    // The whole point of the host-side check: no prompt upload / guest round-trip.
-    expect(ws.uploadCount).toBe(0);
-    expect(ws.execArgv).toEqual([]);
+    expect(res.status).toBe("completed");
+    expect(ws.uploadCount).toBe(1);
+    expect(ws.execArgv).toEqual([
+      "meta-harness-structured-run",
+      "--prompt-file",
+      "/inner/tmp/meta-harness-prompt.txt",
+      "--effort",
+      "high",
+      "--model",
+      "sonnet",
+      "--permission-mode",
+      "plan",
+      "--sandbox-defaults",
+      "claude",
+    ]);
   });
 
-  test("sandboxDefaults + empty permissionMode is NOT a conflict", async () => {
+  // D′ — the empty-mode guard, and the ONLY thing that makes "the two guards
+  // cannot drift" true rather than aspirational. buildArgv's predicate here and
+  // metaHarnessArgs's in src/cli/structured-runner.ts are literally the same
+  // (`!== undefined && !== ""`) but live in different files with no shared
+  // constant: this test pins THIS one, the runner's case E pins that one. Were
+  // this guard tidied into the neighbours' one-clause `!== undefined` shape, a
+  // bare `--permission-mode ""` would reach the runner, which reads it as unset
+  // — and --sandbox-defaults's argv half would vanish on both sides at once.
+  test('sandboxDefaults + permissionMode "" — empty mode is unset, sugar survives', async () => {
     const ws = new TurnFakeWorkspace({ code: 0, stdout: okLine(), stderr: "" });
     await runStructuredTurn(
       ctx,

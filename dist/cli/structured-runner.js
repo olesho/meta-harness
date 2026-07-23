@@ -52,7 +52,40 @@ function resolveBinaryPath(harness, env) {
 // (off by default so argv is forwarded verbatim, matching Go structured-run):
 // when set, claude gets the permission bypass, codex gets no argv injection.
 // effort/model flow through OneShotConfig, not here.
-function metaHarnessArgs(harness, sandboxDefaults) {
+//
+// Equivalent in intent to `permissionMode: "bypass"` for claude-code only.
+// When --permission-mode is also set it wins for argv (this returns []); the
+// IS_SANDBOX=1 half still applies, unconditionally and independently of the
+// resolved mode — see buildGuestEnv, which takes no mode parameter at all.
+//
+// PRECEDENCE, and why it lives HERE. Under the wrapper's all-or-nothing
+// injection-suppression rule --dangerously-skip-permissions sits in claude's
+// guarded flag set, so leaving it on the argv would make argsWithHarnessPermission-
+// Mode inject NOTHING: a harness-GENERATED flag silently beating the caller's
+// EXPLICIT knob (`--sandbox-defaults --permission-mode plan claude` would run as
+// bypass). Suppressing the injection here — in the single auditable place the
+// bypass token is generated, rather than by teaching the wrapper chain about
+// --sandbox-defaults — removes that footgun for the tokens meta-harness itself
+// emits. The pair is LEGAL, not an error: --sandbox-defaults --permission-mode
+// bypass is precisely the fresh-HOME-safe combination (IS_SANDBOX=1 suppresses
+// claude's "Bypass Permissions mode" acceptance screen, src/chat/ready.ts).
+//
+// The predicate tests SET-ness, not validity. "" means unset (matching
+// src/env/turn.ts's buildArgv guard and the wrapper chain's argsWithHarnessEffort),
+// so `--sandbox-defaults --permission-mode "" claude` keeps the bypass token
+// rather than silently losing BOTH halves of the argv. An unrecognized rung does
+// suppress the token, but never silently: the wrapper's validateConfig rejects it
+// with ErrInvalidConfig before any spawn, so the turn fails loudly as `errored`.
+//
+// NOT covered, deliberately: a caller-supplied --dangerously-skip-permissions
+// after `--` still wins over an explicit --permission-mode. A verbatim caller
+// argument beating a translated flag is the established convention of the whole
+// argsWith… chain; making --permission-mode the one knob that overrides an
+// explicit caller token would be the surprising rule. So the two tokens never
+// coexist BY INJECTION — a caller can still put both there themselves.
+function metaHarnessArgs(harness, sandboxDefaults, permissionMode) {
+    if (permissionMode !== undefined && permissionMode !== "")
+        return [];
     return sandboxDefaults && harness === "claude-code"
         ? ["--dangerously-skip-permissions"]
         : [];
@@ -171,21 +204,11 @@ export function parseStructuredArgs(argv) {
         i++;
         break;
     }
-    // --sandbox-defaults injects HARNESS-GENERATED argv (--dangerously-skip-
-    // permissions), and under the wrapper's all-or-nothing injection-suppression
-    // rule that generated flag would silently beat the caller's EXPLICIT rung —
-    // `--sandbox-defaults --permission-mode plan claude` would inject nothing at
-    // all. Reject the pair as a usage error instead of letting either side win
-    // silently. Blanket over all harnesses (not just claude-code, the only one
-    // whose argv is actually injected) — deliberate simplicity: one rule to state,
-    // and codex never gains a quietly-different meaning for the same argv pair.
-    // The message is shared VERBATIM with the host-side check in src/env/turn.ts.
-    // "" counts as unset (it injects nothing), matching src/cli/wrapperFlags.ts.
-    if (out.sandboxDefaults === true && (out.permissionMode ?? "") !== "") {
-        out.error =
-            "flags --sandbox-defaults and --permission-mode are mutually exclusive";
-        return out;
-    }
+    // --sandbox-defaults and --permission-mode COMPOSE — the pair is deliberately
+    // not a usage error. `--sandbox-defaults --permission-mode bypass` is the
+    // fresh-HOME-safe combination, so rejecting it would be wrong. The precedence
+    // between them is resolved in metaHarnessArgs (explicit mode wins for argv;
+    // the IS_SANDBOX=1 env half is untouched), not by the parser.
     if (out.name === undefined) {
         out.error = "missing <name>";
         return out;
@@ -255,12 +278,15 @@ usage: structured-runner [--prompt-file <path>] [--effort E] [--model M] [--perm
   <name>              short alias: claude → claude-code, codex → codex
   --effort E          reasoning effort passed to the harness
   --model M           model passed to the harness
-  --permission-mode P launch-time permission mode (plan, manual, ask, auto, bypass);
-                      mutually exclusive with --sandbox-defaults
+  --permission-mode P launch-time permission mode (plan, manual, ask, auto, bypass)
   --sandbox-defaults  opt into sandbox defaults: IS_SANDBOX=1 in the guest env
                       (all harnesses) and --dangerously-skip-permissions
                       prepended to the argv (claude-code only). Off by default:
-                      argv and env are forwarded verbatim.
+                      argv and env are forwarded verbatim. Equivalent in intent
+                      to --permission-mode bypass for claude-code only. When
+                      --permission-mode is also set it wins for argv; the
+                      IS_SANDBOX=1 half still applies, unconditionally and
+                      independently of the resolved mode.
   --                  everything after is forwarded verbatim to the harness
 
 Emits ONE JSON line on stdout: { status, reply, harnessSessionID, transcript_entries,
@@ -317,7 +343,7 @@ export async function main(argv) {
             binaryPath,
             prompt,
             args: [
-                ...metaHarnessArgs(harness, parsed.sandboxDefaults === true),
+                ...metaHarnessArgs(harness, parsed.sandboxDefaults === true, parsed.permissionMode),
                 ...parsed.harnessArgs,
             ],
             workingDir,
