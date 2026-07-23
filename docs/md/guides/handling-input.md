@@ -23,6 +23,10 @@ The client-surfaced `kind` values, and which harness produces each:
 | `approval_prompt`    | A mid-turn [command / apply-patch approval](#approval-prompts-approval_prompt).                            | Codex       |
 | `permissions_prompt` | The `/permissions` ["Update Model Permissions"](#the-permissions-dialog-permissions_prompt) preset picker. | Codex       |
 
+`permissions_prompt` is a **mid-turn dialog**, not the launch-time
+[`permissionMode`](../modules/wrapper.md#permission-mode) knob — that one pins the posture
+in argv before the harness starts and never surfaces as an input request.
+
 Codex's startup interstitials ("Update available!", model migration, "Press enter to
 continue") are auto-dismissed on the ladder's first rung and never surface as kinds.
 
@@ -272,6 +276,14 @@ up, the composer is gone, so a prompt sent in that window would be typed into th
 The codex adapter surfaces it as kind `"permissions_prompt"` (the `prompt` is the header
 `"Update Model Permissions"`, `options` are the preset rows), and `readyForInput` holds
 sends until it clears.
+
+Do not confuse it with the launch-time
+[`permissionMode`](../modules/wrapper.md#permission-mode) knob, which pins the same posture
+in argv before the harness starts. The two really do interact: answering **this** dialog
+writes the chosen preset to `~/.codex/config.toml` **globally**, for every later session,
+whereas the `-c` overrides and flags the launch knob emits are **per-invocation** — which
+is exactly why pinning the permissions axis at launch is the deterministic way to get a
+known posture, whatever an earlier session wrote into the global config file.
 
 Two things differ from `approval_prompt`:
 

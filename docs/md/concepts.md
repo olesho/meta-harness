@@ -92,35 +92,58 @@ credit / quota-exceeded hints in the output.
 
 ## Effort & model
 
-Three per-harness knobs meta-harness translates into each CLI's own flags:
+Two per-harness knobs meta-harness translates into each CLI's own flags:
 
 - **Effort** — reasoning effort, one of `low` / `medium` / `high` / `xhigh` / `max`.
   Supported by Claude Code (`--effort <level>`) and Codex
   (`-c model_reasoning_effort=...`, mapping `max → xhigh`); ignored by the others.
 - **Model** — a model override. Claude Code (`--model <m>`), Codex (`-c model=...`);
   ignored by the others.
-- **Permission mode** — how much the guest may do without being asked, as one of five
-  rungs. Supported by Claude Code (`--permission-mode <value>`) and Codex
-  (`-s <sandbox> [-a <policy>]`); ignored by the others.
 
-The permission rungs, **least to most permissive**:
+An override you pass explicitly in `args` always wins over the translated one. Leaving a
+knob unset (or `""`) injects nothing, so the harness's own default wins.
+
+See [`wrapper`](modules/wrapper.md#effort--model).
+
+---
+
+## Permission mode
+
+A third launch-time knob — but deliberately not a third member of the pair above, because
+it does not behave like one. `permissionMode` names how much the guest may do without
+being asked, as one of five rungs, **least to most permissive**:
 
 `plan` → `manual` → `ask` → `auto` → `bypass`
 
 **`ask` sits above `manual`** — `manual` prompts before every edit, while `ask`
 auto-accepts them. The name reads backwards; the ordering above is the authority.
 
-An override you pass explicitly in `args` always wins over the translated one — for all
-three knobs. For permission mode that suppression is all-or-nothing per harness: pin
-either axis yourself and the wrapper injects neither. Leaving a knob unset (or `""`)
-injects nothing, so the harness's own default wins.
+Only Claude Code (`--permission-mode <value>`) and Codex (`-s <sandbox> [-a <policy>]`)
+support it. Unlike a model override, it is not quietly dropped elsewhere: `validateConfig`
+**rejects** a `permissionMode` set on any other harness with `ErrInvalidConfig`, the same
+two-check shape `effort` uses.
 
-Codex's `plan` is honestly **the launch half only**: `-s read-only -a untrusted` pins the
-permissions axis, but the collaboration axis stays unset — it is _not_ launch-time parity
-with Claude Code's `plan`.
+Fidelity is not uniform, and the ladder is a translation rather than an identity. Claude
+Code names each rung in a single native value, so its side is exact — it also accepts its
+own native spellings as input, including `dontAsk`, which is Claude-only and sits off the
+ladder entirely. Codex has no single-token spelling at all: permissions and collaboration
+are two orthogonal axes there, so the wrapper emits a pair of flags. On Codex, `bypass`
+lands **good**; `manual` / `ask` / `auto` are **approximations** of the Claude Code rung;
+and `plan` is **partial** — it pins the permissions axis only, leaving the collaboration
+axis unset, so it is _not_ launch-time parity with Claude Code's `plan`.
 
-See [`wrapper`](modules/wrapper.md#effort--model) and
-[`wrapper` › Permission mode](modules/wrapper.md#permission-mode).
+The rung → flag mapping for both harnesses is documented once, in
+[`wrapper` › Permission mode](modules/wrapper.md#permission-mode), and deliberately not
+restated here so the two cannot drift. Precedence is **all-or-nothing per harness**: any
+guarded flag or config key already in `args` suppresses the whole injection — pin either
+axis yourself and the wrapper injects neither — and unset (or `""`) injects nothing.
+
+This knob is a **launch-time** pin, and is not the mid-turn
+[`permissions_prompt` dialog](guides/handling-input.md#the-permissions-dialog-permissions_prompt)
+Codex pops from `/permissions`. The two interact: answering that dialog writes
+`~/.codex/config.toml` **globally**, for every later session, while what this knob emits
+is per-invocation — which is exactly why pinning the rung at launch fixes the posture for
+this run regardless of what an earlier session left behind.
 
 ---
 
@@ -309,6 +332,9 @@ picker: a numbered menu of permission presets, one marked `(current)`. Its rows 
 commits the highlighted preset to `~/.codex/config.toml` globally — so it always reaches
 the client, answerable only by explicit `optionID`. See
 [Guides › Handling input](guides/handling-input.md#the-permissions-dialog-permissions_prompt).
+This is the **mid-turn** dialog, not the launch-time
+[permission mode](#permission-mode) knob the wrapper translates into argv — see
+[`wrapper` › Permission mode](modules/wrapper.md#permission-mode).
 
 ### Disposition & InputPolicy
 
