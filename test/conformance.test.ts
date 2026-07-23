@@ -776,6 +776,26 @@ function rowText(text: string, label: string): string {
   return `row absent (no line containing "${label}")`;
 }
 
+/**
+ * redactAccount masks the `Account:` row's value in the screen dump.
+ *
+ * The failure report prints the WHOLE screen, and the live box carries the
+ * running operator's ChatGPT login — which would land verbatim in CI logs on any
+ * red run. test/corpus/codex/status-box/meta.json records the same redaction for
+ * the recorded bytes ("the ONLY edit to bytes.raw"); this is the live analogue.
+ * Column-preserving so the surrounding box still lines up, and no assertion
+ * reads this row, so masking it costs the report nothing.
+ */
+function redactAccount(text: string): string {
+  return text.replace(
+    /^(\s*│\s+Account:\s+)(\S[^│]*?)(\s*│.*)$/gm,
+    (_m, head: string, value: string, tail: string) =>
+      head +
+      "<redacted>".padEnd(value.length, " ").slice(0, value.length) +
+      tail,
+  );
+}
+
 describe("conformance: codex /status rows (CONFORMANCE=1)", () => {
   const info = infos.codex;
   const skip = !CONFORMANCE || !info.installed;
@@ -934,7 +954,7 @@ describe("conformance: codex /status rows (CONFORMANCE=1)", () => {
         `  Re-record the box with test/corpus/tools/record-pty.ts into ` +
         `test/corpus/codex/status-box/ and re-derive the row regexes in ` +
         `src/chat/permission.ts against src/turns/harness/codex.ts.\n` +
-        `  --- screen ---\n${text}\n  --- end screen ---`;
+        `  --- screen ---\n${redactAccount(text)}\n  --- end screen ---`;
 
       // A dead session is never a row-drift finding — say what actually killed
       // it. The PTY captured codex's own stderr, so a rejected flag reports
