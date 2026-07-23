@@ -1739,7 +1739,16 @@ function isolatedCodexHome(rig: Rig): string[] {
   ];
 }
 
-/** Polls until readyForInput goes true, the session dies, or `bound` elapses. */
+/**
+ * Polls until the session will actually CONSUME a write, the session dies, or
+ * `bound` elapses.
+ *
+ * readyForInput() alone is not that predicate on codex: the recorded
+ * boot-window fixture shows the `›` composer painted, readyForInput() true, and
+ * the keystroke swallowed anyway. See CODEX_BOOT_MARKER — the marker is required
+ * ABSENT here for exactly that reason, on two consecutive polls so the write
+ * does not race the repaint that cleared it.
+ */
 async function awaitReady(
   conv: Conversation,
   harness: string,
@@ -1747,8 +1756,14 @@ async function awaitReady(
   bound: number,
 ): Promise<boolean> {
   const until = Date.now() + bound;
+  let clean = 0;
   for (;;) {
-    if (readyForInput(harness, conv.screenSnapshot().text)) return true;
+    const frame = conv.screenSnapshot().text;
+    const ok =
+      readyForInput(harness, frame) &&
+      (harness !== "codex" || !frame.includes(CODEX_BOOT_MARKER));
+    clean = ok ? clean + 1 : 0;
+    if (clean >= 2) return true;
     if (rig.fatal() !== "" || Date.now() >= until) return false;
     await new Promise((r) => setTimeout(r, READY_POLL_INTERVAL));
   }
@@ -1772,11 +1787,42 @@ async function awaitFooterReading(
 }
 
 /**
+ * The codex MCP-server boot marker — the ONE thing checks 6-7 must wait out
+ * before writing anything into a codex session.
+ *
+ * `test/corpus/codex/permission-mode-cycle-boot-window` records the finding this
+ * literal encodes: a Shift+Tab landing while codex is still booting its MCP
+ * servers is SWALLOWED, even though the `›` composer is already painted and
+ * readyForInput() returns true. The recording proved it with an in-session
+ * control (the same bytes, over the same PTY, worked once the window closed) and
+ * left "hold the first press until the window closes" as FOLLOW-UP work for the
+ * chat layer — deliberately NOT fixed in setPermissionMode, which contains it as
+ * a stall rather than a silent wrong mode.
+ *
+ * So the live checks must not press into it. Re-measured for this task
+ * (2026-07-23, codex-cli 0.144.5, cold isolated CODEX_HOME): the marker is on
+ * screen from ~1.4 s to ~4.9 s after Open returns, and the FIRST toggle attempt
+ * after it clears lands. That is a WAIT, not a weakened assertion — a codex that
+ * stopped honouring Shift+Tab still fails, just later.
+ *
+ * Matched as a substring of the rendered line
+ * (`• Booting MCP server: codex_apps (0s • esc to interrupt)`), because the
+ * server name and the elapsed counter both vary.
+ */
+const CODEX_BOOT_MARKER = "Booting MCP server";
+
+/**
  * Polls until the codex `/status` box carries a legible `Collaboration mode:`
- * row, the session dies, or `bound` elapses — check 4's settle predicate, which
- * is a PRECONDITION here rather than the thing under test: primeSessionID exits
- * as soon as the id and the mode-box parse land, and `Permissions:` parses two
- * rows ABOVE `Collaboration mode:` in a box that paints top-down.
+ * row AND the MCP boot window has closed, the session dies, or `bound` elapses.
+ *
+ * The box half is check 4's settle predicate, a PRECONDITION here rather than
+ * the thing under test: primeSessionID exits as soon as the id and the mode-box
+ * parse land, and `Permissions:` parses two rows ABOVE `Collaboration mode:` in
+ * a box that paints top-down. The boot half is CODEX_BOOT_MARKER's.
+ *
+ * Both are required on TWO CONSECUTIVE polls: the boot marker disappearing is a
+ * repaint like any other, and settling on the first clean frame would race the
+ * write against it.
  */
 async function awaitCodexBox(
   conv: Conversation,
@@ -1784,16 +1830,17 @@ async function awaitCodexBox(
   bound: number,
 ): Promise<boolean> {
   const until = Date.now() + bound;
+  let clean = 0;
   for (;;) {
     const frame = conv.screenSnapshot().text;
     const reading = parsePermissionMode(frame, "codex");
-    if (
+    const ok =
       frame.includes(CODEX_BANNER) &&
+      !frame.includes(CODEX_BOOT_MARKER) &&
       reading !== null &&
-      reading.collaboration !== "unknown"
-    ) {
-      return true;
-    }
+      reading.collaboration !== "unknown";
+    clean = ok ? clean + 1 : 0;
+    if (clean >= 2) return true;
     if (rig.fatal() !== "" || Date.now() >= until) return false;
     await new Promise((r) => setTimeout(r, STATUS_POLL_INTERVAL));
   }
@@ -2372,10 +2419,12 @@ describe("conformance: codex mid-session switch (CONFORMANCE=1)", () => {
    * Opens codex with the pinned permission flags against an isolated CODEX_HOME,
    * then waits for the `/status` box to finish painting.
    *
-   * Returns `null` when the box never rendered. That is check 4's PRECONDITION,
-   * not this check's subject: a fresh CODEX_HOME can leave the composer unready
-   * (migration/first-run screens are pinned not-ready), and a check that failed
-   * on it would report fabricated drift. Callers skip.
+   * `painted` is false when the box never rendered. That is check 4's
+   * PRECONDITION, not this check's subject: a fresh CODEX_HOME can leave the
+   * composer unready (migration/first-run screens are pinned not-ready), and a
+   * check that failed on it would report fabricated drift. Callers skip — and
+   * the conversation still comes back, so the skip message can name the prime
+   * outcome that explains WHY.
    */
   async function openCodex(
     rig: Rig,
@@ -2384,7 +2433,7 @@ describe("conformance: codex mid-session switch (CONFORMANCE=1)", () => {
       workingDir?: string;
       store?: ReturnType<typeof newMemStore>;
     } = {},
-  ): Promise<Conversation | null> {
+  ): Promise<{ conv: Conversation; painted: boolean }> {
     const conv = rig.adopt(
       await Open(rig.ctx, {
         harness: "codex",
@@ -2402,15 +2451,19 @@ describe("conformance: codex mid-session switch (CONFORMANCE=1)", () => {
         onActivity: rig.onActivity,
       }),
     );
-    return (await awaitCodexBox(conv, rig, STATUS_PAINT_BOUND)) ? conv : null;
+    return {
+      conv,
+      painted: await awaitCodexBox(conv, rig, STATUS_PAINT_BOUND),
+    };
   }
 
   /** The skip message for a box that never painted — check 4 owns that precondition. */
-  function boxPrecondition(conv: Conversation | null, rig: Rig): string {
+  function boxPrecondition(conv: Conversation, rig: Rig): string {
     return (
       `codex ${info.detectedVersion || "?"}: the \`/status\` box never rendered a legible ` +
-      `\`Collaboration mode:\` row within ${String(STATUS_PAINT_BOUND)} ms ` +
-      `(prime outcome ${conv ? (primeOutcomeOf(conv) ?? "none") : "n/a"}, session ` +
+      `\`Collaboration mode:\` row with the MCP boot window closed within ` +
+      `${String(STATUS_PAINT_BOUND)} ms ` +
+      `(prime outcome ${primeOutcomeOf(conv) ?? "none"}, session ` +
       `${rig.fatal() === "" ? "healthy" : rig.fatal()}). There is no axis to drive from a ` +
       `box we cannot read — precondition, not drift; check 4 owns it.`
     );
@@ -2423,8 +2476,8 @@ describe("conformance: codex mid-session switch (CONFORMANCE=1)", () => {
       const version = info.detectedVersion || "?";
       const rig = newRig();
       try {
-        const conv = await openCodex(rig);
-        if (!conv) {
+        const { conv, painted } = await openCodex(rig);
+        if (!painted) {
           t.skip(boxPrecondition(conv, rig));
           return;
         }
@@ -2532,8 +2585,8 @@ describe("conformance: codex mid-session switch (CONFORMANCE=1)", () => {
       const version = info.detectedVersion || "?";
       const rig = newRig();
       try {
-        const conv = await openCodex(rig);
-        if (!conv) {
+        const { conv, painted } = await openCodex(rig);
+        if (!painted) {
           t.skip(boxPrecondition(conv, rig));
           return;
         }
@@ -2591,8 +2644,8 @@ describe("conformance: codex mid-session switch (CONFORMANCE=1)", () => {
       const version = info.detectedVersion || "?";
       const rig = newRig();
       try {
-        const conv = await openCodex(rig);
-        if (!conv) {
+        const { conv, painted } = await openCodex(rig);
+        if (!painted) {
           t.skip(boxPrecondition(conv, rig));
           return;
         }
@@ -2675,8 +2728,12 @@ describe("conformance: codex mid-session switch (CONFORMANCE=1)", () => {
         const dir = rig.dir("conformance-codex-resume-");
         const store = newMemStore();
 
-        const first = await openCodex(rig, { env, workingDir: dir, store });
-        if (!first) {
+        const { conv: first, painted } = await openCodex(rig, {
+          env,
+          workingDir: dir,
+          store,
+        });
+        if (!painted) {
           t.skip(boxPrecondition(first, rig));
           return;
         }
@@ -2809,8 +2866,8 @@ describe("conformance: codex mid-session switch (CONFORMANCE=1)", () => {
       const version = info.detectedVersion || "?";
       const rig = newRig();
       try {
-        const conv = await openCodex(rig);
-        if (!conv) {
+        const { conv, painted } = await openCodex(rig);
+        if (!painted) {
           t.skip(boxPrecondition(conv, rig));
           return;
         }
