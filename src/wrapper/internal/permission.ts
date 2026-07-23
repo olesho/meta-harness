@@ -60,12 +60,16 @@ import {
   ClaudeModeAcceptEdits,
   ClaudeModeBypassPermissions,
   ClaudeModeDontAsk,
+  ClaudePermissionModeFlag,
   ClaudeSkipPermissionsFlags,
+  CodexApprovalFlags,
   CodexApprovalNever,
   CodexApprovalOnRequest,
   CodexApprovalUntrusted,
   CodexBypassFlag,
+  CodexProfileFlags,
   CodexSandboxDangerFullAccess,
+  CodexSandboxFlags,
   CodexSandboxReadOnly,
   CodexSandboxWorkspaceWrite,
   PermissionModeAsk,
@@ -80,7 +84,7 @@ import {
  * suppresses injection entirely.
  */
 const claudeGuardFlags: readonly string[] = [
-  "--permission-mode",
+  ClaudePermissionModeFlag,
   ...ClaudeSkipPermissionsFlags,
 ];
 
@@ -103,12 +107,9 @@ const claudeGuardFlags: readonly string[] = [
  * is `--print`.
  */
 const codexGuardFlags: readonly string[] = [
-  "-s",
-  "--sandbox",
-  "-a",
-  "--ask-for-approval",
-  "-p",
-  "--profile",
+  ...CodexSandboxFlags,
+  ...CodexApprovalFlags,
+  ...CodexProfileFlags,
   CodexBypassFlag,
 ];
 

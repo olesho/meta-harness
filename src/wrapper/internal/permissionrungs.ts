@@ -41,6 +41,17 @@ export const CodexApprovalOnRequest = "on-request";
 export const CodexApprovalNever = "never";
 
 /**
+ * Claude Code's --permission-mode flag: the single spelling that carries the
+ * whole claude permission axis.
+ *
+ * Exported for the same reason the flag SETS below are: this module is the
+ * replay authority for these spellings, so it is their natural home and the
+ * one place a live conformance check can derive them from rather than retype
+ * them (test/conformance.test.ts, check 1).
+ */
+export const ClaudePermissionModeFlag = "--permission-mode";
+
+/**
  * Claude Code's blanket permission-bypass flags. Both spellings exist at
  * claude-code 2.1.217; either one in argv leaves the harness unrestricted.
  */
@@ -52,11 +63,22 @@ export const ClaudeSkipPermissionsFlags: readonly string[] = [
 /** codex's blanket approval+sandbox bypass flag. */
 export const CodexBypassFlag = "--dangerously-bypass-approvals-and-sandbox";
 
-/** codex's profile flag: a profile can set BOTH permission axes out of band. */
-const codexProfileFlags: readonly string[] = ["-p", "--profile"];
+/** codex's sandbox-axis flag, short and long spelling. */
+export const CodexSandboxFlags: readonly string[] = ["-s", "--sandbox"];
 
-/** codex's approval-axis flag. */
-const codexApprovalFlags: readonly string[] = ["-a", "--ask-for-approval"];
+/** codex's approval-axis flag, short and long spelling. */
+export const CodexApprovalFlags: readonly string[] = [
+  "-a",
+  "--ask-for-approval",
+];
+
+/** codex's profile flag: a profile can set BOTH permission axes out of band. */
+export const CodexProfileFlags: readonly string[] = ["-p", "--profile"];
+
+// The private aliases below keep every existing call site spelled as it was;
+// they are the SAME arrays as the exported constants, never a second copy.
+const codexProfileFlags = CodexProfileFlags;
+const codexApprovalFlags = CodexApprovalFlags;
 
 /** codex config keys that move a permission axis out of band. */
 const codexSandboxConfigKey = "sandbox_mode";
@@ -185,7 +207,7 @@ export function effectiveLaunchRung(
         return PermissionModeBypass;
       }
       {
-        const [value, ok] = flagValue(args, "--permission-mode");
+        const [value, ok] = flagValue(args, ClaudePermissionModeFlag);
         // argv wins, mirroring the suppression rule.
         if (ok) return claudeRung(value);
       }
@@ -204,7 +226,7 @@ function codexLaunchRung(args: string[], mode: string): string {
   // 1. Blanket bypass flag.
   if (argsContainAnyFlag(args, [CodexBypassFlag])) return PermissionModeBypass;
 
-  const [sandbox, sandboxOK] = flagValue(args, "-s", "--sandbox");
+  const [sandbox, sandboxOK] = flagValue(args, ...CodexSandboxFlags);
   const [sandboxCfg, sandboxCfgOK] = configKeyValue(
     args,
     codexSandboxConfigKey,
@@ -228,7 +250,7 @@ function codexLaunchRung(args: string[], mode: string): string {
     // 4. Present but unreadable.
     if (sandbox === "") return "";
     // 5. Both axes when the approval axis is readable, the ceiling otherwise.
-    const [approval, approvalOK] = flagValue(args, "-a", "--ask-for-approval");
+    const [approval, approvalOK] = flagValue(args, ...codexApprovalFlags);
     if (approvalOK && approval !== "") return codexPairRung(sandbox, approval);
     return codexSandboxRung(sandbox);
   }

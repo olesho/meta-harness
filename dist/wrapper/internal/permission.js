@@ -49,13 +49,13 @@
 // what we emit. Rationale mirrored in docs/design/permission-argv-parity.md §2.
 // codex's `--full-auto` is NOT used: removed in 0.144.5, now a hard error.
 import { argsContainAnyFlag, argsContainConfigKey, flagValue, normHarness, prependArgs, } from "./harnessargs.js";
-import { ClaudeModeAcceptEdits, ClaudeModeBypassPermissions, ClaudeModeDontAsk, ClaudeSkipPermissionsFlags, CodexApprovalNever, CodexApprovalOnRequest, CodexApprovalUntrusted, CodexBypassFlag, CodexSandboxDangerFullAccess, CodexSandboxReadOnly, CodexSandboxWorkspaceWrite, PermissionModeAsk, PermissionModeAuto, PermissionModeBypass, PermissionModeManual, PermissionModePlan, } from "./permissionrungs.js";
+import { ClaudeModeAcceptEdits, ClaudeModeBypassPermissions, ClaudeModeDontAsk, ClaudePermissionModeFlag, ClaudeSkipPermissionsFlags, CodexApprovalFlags, CodexApprovalNever, CodexApprovalOnRequest, CodexApprovalUntrusted, CodexBypassFlag, CodexProfileFlags, CodexSandboxDangerFullAccess, CodexSandboxFlags, CodexSandboxReadOnly, CodexSandboxWorkspaceWrite, PermissionModeAsk, PermissionModeAuto, PermissionModeBypass, PermissionModeManual, PermissionModePlan, } from "./permissionrungs.js";
 /**
  * claude flags that pin the permission axis out of band. Any of them in argv
  * suppresses injection entirely.
  */
 const claudeGuardFlags = [
-    "--permission-mode",
+    ClaudePermissionModeFlag,
     ...ClaudeSkipPermissionsFlags,
 ];
 /**
@@ -77,12 +77,9 @@ const claudeGuardFlags = [
  * is `--print`.
  */
 const codexGuardFlags = [
-    "-s",
-    "--sandbox",
-    "-a",
-    "--ask-for-approval",
-    "-p",
-    "--profile",
+    ...CodexSandboxFlags,
+    ...CodexApprovalFlags,
+    ...CodexProfileFlags,
     CodexBypassFlag,
 ];
 /**
