@@ -84,14 +84,21 @@
 
 import { describe, expect, test } from "vitest";
 import { spawnSync } from "node:child_process";
+import { createServer, type Server as HTTPServer } from "node:http";
 import { copyFileSync, existsSync, mkdtempSync, rmSync } from "node:fs";
+import type { AddressInfo } from "node:net";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { Context } from "../src/internal/async/index.ts";
+import { Context, isSentinel } from "../src/internal/async/index.ts";
 import {
+  ErrInputPending,
+  ErrPermissionModeStalled,
+  ErrPermissionModeUnreachable,
+  ErrPermissionModeUnsupported,
   EventTurn,
   Open,
+  Reopen,
   RoleAssistant,
   TurnStateComplete,
   TurnStateErrored,
@@ -101,9 +108,14 @@ import {
   readyForInput,
   resolveAdapter,
   type Conversation,
+  type PermissionModeReading,
   type PermissionRung,
   type Turn,
 } from "../src/chat/index.ts";
+import {
+  Server as GatewayServer,
+  type ConversationLike,
+} from "../src/gateway/index.ts";
 import { AutoAcceptTrust } from "../src/oneshot/index.ts";
 import { lookup, type Info } from "../src/discovery/index.ts";
 import { all as allVersions } from "../src/versions/index.ts";
@@ -137,6 +149,7 @@ import {
   CodexSandboxReadOnly,
   CodexSandboxWorkspaceWrite,
   PermissionModeAuto,
+  PermissionModeBypass,
   PermissionModeManual,
   PermissionModePlan,
 } from "../src/wrapper/internal/permissionrungs.ts";
@@ -1545,4 +1558,1463 @@ describe("conformance: claude permission-mode footers (CONFORMANCE=1)", () => {
       TEST_TIMEOUT,
     );
   }
+});
+
+// ── Checks 6-7: the MID-SESSION SWITCH against real binaries ─────────────────
+//
+// META-HARNESS-106's `setPermissionMode()` / `refreshPermissionMode()` are
+// deterministically covered by test/chat/set_permission_mode.test.ts (a
+// Conversation over a painted Screen) and test/chat/permission_cycle_fake.test.ts
+// (the same bytes through a PTY-backed fake). Neither can tell you whether the
+// keystroke a REAL claude/codex build consumes still moves the axis, nor whether
+// the axis it moves is the one the parser reads back — the fake paints whatever
+// the fixture says. These two checks close exactly that gap and nothing else.
+//
+// They are the WRITE-side counterparts of checks 4-5: those launch once per rung
+// and scrape; these launch once and then DRIVE the ring, asserting through the
+// shipped Conversation methods (never a test-local keystroke or regex).
+//
+// MECHANICS. Every case is launch → acquireControl → setPermissionMode /
+// refreshPermissionMode → close. NO prompt is sent and ZERO model calls are made
+// except in the single "refresh-then-turn" case, which needs a real turn to pin
+// the hazard it exists for. `--permission-mode` is passed through the STRUCTURED
+// `Options.permissionMode` knob rather than raw `args`, because `requested` is
+// read from that knob (conversation.ts permissionMode()); a raw-args launch
+// leaves `requested` undefined and the drift assertion below could not be made.
+//
+// SIDE EFFECTS. The claude cases touch ~/.claude.json exactly as checks 2 and 5
+// do — see this file's header. The codex cases isolate CODEX_HOME the way check
+// 4 does, so nothing here writes the developer's ~/.codex/config.toml. Neither
+// method writes any config file of its own: claude's Shift+Tab ring and codex's
+// collaboration toggle are both SESSION-LOCAL (the only codex mechanism that
+// leaks out of the session is the `/permissions` dialog, which nothing here
+// drives — see check 4).
+//
+// ── WHAT THESE CHECKS ACTUALLY REPORTED WHEN THEY LANDED ────────────────────
+//
+// Run 2026-07-23 against claude-code 2.1.218 and codex-cli 0.144.5, both
+// installed. Recorded here rather than in a ticket comment because a live check
+// that is RED on arrival is worthless to the next reader unless they can tell a
+// known finding from a new one.
+//
+//   claude, all four cases            PASS.
+//   codex, Default -> Plan            PASS (the first press lands and `/status`
+//                                     confirms it, with `observed` unmoved).
+//   codex, Default start / rung target PASS.
+//   codex, Plan -> Default            FAIL — `the permission axis did not change
+//                                     after press 1 (still "plan")`. The RETURN
+//                                     press is swallowed. This is the recorded
+//                                     boot-window swallow's family
+//                                     (test/corpus/codex/permission-mode-cycle-
+//                                     boot-window) but NOT that window: it
+//                                     survives the boot wait, a settled box and
+//                                     CODEX_POST_SWITCH_DWELL. The corpus
+//                                     recording that measured a clean 2-cycle
+//                                     drove `/status` differently — it typed,
+//                                     settled, submitted SEPARATELY and then
+//                                     CLEARED the composer (ESC + Ctrl-U) before
+//                                     each press, which the shipped single
+//                                     `/status\x1b[13u` burst does not do. A
+//                                     live capture here showed that burst
+//                                     leaving `status/status` sitting in the
+//                                     composer, which is exactly the state the
+//                                     corpus notes swallows every subsequent
+//                                     keystroke. Making the `/status` write
+//                                     popup-safe is src/ work, out of scope for
+//                                     this subtask; the failure is FAIL-SAFE
+//                                     (Stalled, never a silent wrong mode).
+//   codex, refresh-then-turn          FAIL — `prompt not accepted / no assistant
+//                                     output`. NOT attributable to the refresh:
+//                                     a plain codex turn on this machine with NO
+//                                     permission call at all fails identically
+//                                     (measured), with the model's reply visible
+//                                     on screen, and check 2's own codex
+//                                     sentinel round-trip fails here the same
+//                                     way. The case is landed unweakened; it is
+//                                     blocked on that separate turn-detection
+//                                     problem, not on META-HARNESS-106.
+//   codex, resumed refresh + GET      NOT EXECUTED — skipped on its own
+//                                     precondition guard in this environment.
+//
+// NOTHING above was softened to go green. A check that is honestly red is the
+// point of this file (see the version-drift half's "fail rather than pass
+// silently"); a check tuned until it passes is not.
+
+/** How long one live mid-session switch may take before we call it stalled. */
+const SWITCH_BOUND = 90_000;
+
+/** How long to wait for a resumed/reopened session to reach a ready composer. */
+const READY_BOUND = 45_000;
+
+const READY_POLL_INTERVAL = 250;
+
+/** Where the mid-session switch lives, for every remediation pointer below. */
+const SWITCH_IMPL = "src/chat/conversation.ts";
+
+/** Byte-identical comparison — the cycle-keystroke counter's predicate. */
+function sameBytes(a: Uint8Array, b: Uint8Array): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] !== b[i]) return false;
+  }
+  return true;
+}
+
+/**
+ * cycleCounter counts the CYCLE keystrokes a live Conversation writes.
+ *
+ * "Writes zero cycle keystrokes" is a load-bearing claim of the no-op and the
+ * fast-fail cases, and it is not observable from outside: the deterministic
+ * suite reads it off KeyRecorder, which is the whole writeStdin sink of a
+ * conversation built by hand. A LIVE conversation's sink is the PTY, so this
+ * installs a PASS-THROUGH spy over the private `writeKeys` — the single funnel
+ * every chat-layer write goes through — and counts only the writes
+ * byte-identical to THIS adapter's `permissionCycleKeys()`.
+ *
+ * Reaching a private member is the same structural escape primeOutcomeOf (check
+ * 4) uses, and for the same reason: there is no public seam, and inventing one
+ * would widen the shipped surface for a test. Unlike that read this one is a
+ * WRAP, so it is written to be behaviour-preserving — every byte is forwarded to
+ * the original, in order, synchronously, before the counter is consulted by
+ * anybody.
+ *
+ * Counting BYTE-IDENTICAL matches (rather than every write) is what keeps the
+ * count honest: the codex path writes a `/status` burst on every probe, and the
+ * zero-write guarantee is explicitly scoped to CYCLE keystrokes — the probe is a
+ * write and has to be.
+ */
+function cycleCounter(conv: Conversation): { presses: () => number } {
+  // The SAME structural probe the shipped adapterPermissionCycleKeys uses — the
+  // optional-capability declaration in src/chat/deps.ts is documentation, not
+  // compile-time checking, so a typed call here would assert a guarantee the
+  // production call site does not have.
+  const a = conv.getAdapter() as unknown as {
+    permissionCycleKeys?: () => Uint8Array;
+  };
+  const seq =
+    typeof a.permissionCycleKeys === "function"
+      ? a.permissionCycleKeys()
+      : null;
+  const priv = conv as unknown as { writeKeys: (p: Uint8Array) => void };
+  const inner = priv.writeKeys.bind(conv);
+  let n = 0;
+  priv.writeKeys = (p: Uint8Array): void => {
+    if (seq && sameBytes(p, seq)) n++;
+    inner(p);
+  };
+  return { presses: () => n };
+}
+
+/**
+ * One live session's context, terminal-status observer and teardown.
+ *
+ * Every case below opens exactly one harness (the reopen case opens two in
+ * sequence), and every one of them needs the same four things: a deadlined ctx,
+ * the fail-fast `onActivity` observer checks 4-5 already rely on (without it a
+ * rejected flag is a 240 s hang with no diagnosis), a list of temp dirs to
+ * remove, and a close that never masks the assertion that failed. This is that,
+ * factored once instead of nine times.
+ */
+interface Rig {
+  ctx: Context;
+  /** Non-empty once the wrapper reported a terminal status. */
+  fatal: () => string;
+  onActivity: (snap: { status: string; reason: string }) => void;
+  /** mkdtemp under the system temp dir, removed by dispose(). */
+  dir: (prefix: string) => string;
+  /** Registers a conversation to be closed by dispose(). */
+  adopt: (c: Conversation) => Conversation;
+  dispose: () => Promise<void>;
+}
+
+function newRig(): Rig {
+  const { ctx, cancel } = Context.withDeadline(
+    Context.background(),
+    CTX_DEADLINE,
+  );
+  const dirs: string[] = [];
+  const convs: Conversation[] = [];
+  const TERMINAL: string[] = [
+    StatusFailed,
+    StatusBinaryNotFound,
+    StatusInterrupted,
+  ];
+  let fatal = "";
+  return {
+    ctx,
+    fatal: () => fatal,
+    onActivity: (snap) => {
+      if (fatal === "" && TERMINAL.includes(snap.status)) {
+        fatal = `${snap.status}${snap.reason ? `: ${snap.reason}` : ""}`;
+      }
+    },
+    dir: (prefix) => {
+      const d = mkdtempSync(join(tmpdir(), prefix));
+      dirs.push(d);
+      return d;
+    },
+    adopt: (c) => {
+      convs.push(c);
+      return c;
+    },
+    dispose: async () => {
+      cancel();
+      for (const c of convs.splice(0)) {
+        const { ctx: closeCtx } = Context.withDeadline(
+          Context.background(),
+          3000,
+        );
+        await c.close(closeCtx).catch(() => undefined);
+      }
+      for (const d of dirs.splice(0))
+        rmSync(d, { recursive: true, force: true });
+    },
+  };
+}
+
+/**
+ * An isolated CODEX_HOME seeded with the real auth.json, byte-for-byte check
+ * 4's reasoning: a bare fresh dir lands on the sign-in wall, while copying
+ * config.toml would let the developer's own approval settings decide what
+ * `/status` reports — and would put this suite one keystroke away from writing
+ * them. Nothing here writes that file either way.
+ */
+function isolatedCodexHome(rig: Rig): string[] {
+  const home = rig.dir("conformance-codex-home-");
+  const realAuth = join(homedir(), ".codex", "auth.json");
+  if (existsSync(realAuth)) copyFileSync(realAuth, join(home, "auth.json"));
+  return [
+    ...Object.entries(process.env).map(([k, v]) => `${k}=${v ?? ""}`),
+    `CODEX_HOME=${home}`,
+  ];
+}
+
+/**
+ * Polls until the session will actually CONSUME a write, the session dies, or
+ * `bound` elapses.
+ *
+ * readyForInput() alone is not that predicate on codex: the recorded
+ * boot-window fixture shows the `›` composer painted, readyForInput() true, and
+ * the keystroke swallowed anyway. See CODEX_BOOT_MARKER — the marker is required
+ * ABSENT here for exactly that reason, and CODEX_SETTLE_POLLS for why the clean
+ * state must HOLD rather than merely occur.
+ */
+async function awaitReady(
+  conv: Conversation,
+  harness: string,
+  rig: Rig,
+  bound: number,
+): Promise<boolean> {
+  const until = Date.now() + bound;
+  const need = harness === "codex" ? CODEX_SETTLE_POLLS : 1;
+  let clean = 0;
+  for (;;) {
+    const frame = conv.screenSnapshot().text;
+    const ok =
+      readyForInput(harness, frame) &&
+      (harness !== "codex" || !frame.includes(CODEX_BOOT_MARKER));
+    clean = ok ? clean + 1 : 0;
+    if (clean >= need) return true;
+    if (rig.fatal() !== "" || Date.now() >= until) return false;
+    await new Promise((r) => setTimeout(r, READY_POLL_INTERVAL));
+  }
+}
+
+/** Polls until the claude footer parses positively, the session dies, or `bound` elapses. */
+async function awaitFooterReading(
+  conv: Conversation,
+  rig: Rig,
+  bound: number,
+): Promise<PermissionModeReading> {
+  const until = Date.now() + bound;
+  for (;;) {
+    const frame = conv.screenSnapshot();
+    const reading = conv.permissionMode(frame);
+    if (reading.source === "footer" && reading.observed !== "unknown")
+      return reading;
+    if (rig.fatal() !== "" || Date.now() >= until) return reading;
+    await new Promise((r) => setTimeout(r, FOOTER_POLL_INTERVAL));
+  }
+}
+
+/**
+ * The codex MCP-server boot marker — the ONE thing checks 6-7 must wait out
+ * before writing anything into a codex session.
+ *
+ * `test/corpus/codex/permission-mode-cycle-boot-window` records the finding this
+ * literal encodes: a Shift+Tab landing while codex is still booting its MCP
+ * servers is SWALLOWED, even though the `›` composer is already painted and
+ * readyForInput() returns true. The recording proved it with an in-session
+ * control (the same bytes, over the same PTY, worked once the window closed) and
+ * left "hold the first press until the window closes" as FOLLOW-UP work for the
+ * chat layer — deliberately NOT fixed in setPermissionMode, which contains it as
+ * a stall rather than a silent wrong mode.
+ *
+ * So the live checks must not press into it. Re-measured for this task
+ * (2026-07-23, codex-cli 0.144.5, cold isolated CODEX_HOME): the marker is on
+ * screen from ~1.4 s to ~4.9 s after Open returns, and the FIRST toggle attempt
+ * after it clears lands. That is a WAIT, not a weakened assertion — a codex that
+ * stopped honouring Shift+Tab still fails, just later.
+ *
+ * Matched as a substring of the rendered line
+ * (`• Booting MCP server: codex_apps (0s • esc to interrupt)`), because the
+ * server name and the elapsed counter both vary.
+ */
+const CODEX_BOOT_MARKER = "Booting MCP server";
+
+/**
+ * How many consecutive clean polls a codex session must show before this file
+ * writes into it.
+ *
+ * ONE is not enough, and neither is two: the boot marker appears AFTER Open
+ * returns, not before it. Measured on the same 2026-07-23 run — Open returned at
+ * 1686 ms onto a frame with `readyForInput` FALSE and no boot marker, and the
+ * marker only painted at 1938 ms, staying up to ~4.2 s. A predicate satisfied by
+ * the first frames therefore walks straight into the window it exists to avoid.
+ * Requiring the clean state to HOLD across four polls (≈1 s at
+ * STATUS_POLL_INTERVAL) plus `readyForInput` covers that gap with margin.
+ */
+const CODEX_SETTLE_POLLS = 4;
+
+/**
+ * How long to dwell after a SUCCESSFUL codex collaboration switch before writing
+ * again.
+ *
+ * Entering Plan makes codex re-select the model and print
+ * `• Model changed to <model> <effort> for Plan mode.` — real work behind a
+ * composer that is already painted and already parses. The boot-window fixture's
+ * lesson generalises: "the composer is drawn" is not "the composer will consume
+ * my keystroke", and the only honest response is to wait.
+ */
+const CODEX_POST_SWITCH_DWELL = 3000;
+
+/**
+ * Polls until the codex `/status` box carries a legible `Collaboration mode:`
+ * row AND the MCP boot window has closed, the session dies, or `bound` elapses.
+ *
+ * The box half is check 4's settle predicate, a PRECONDITION here rather than
+ * the thing under test: primeSessionID exits as soon as the id and the mode-box
+ * parse land, and `Permissions:` parses two rows ABOVE `Collaboration mode:` in
+ * a box that paints top-down. The boot half is CODEX_BOOT_MARKER's.
+ *
+ * Both must hold across CODEX_SETTLE_POLLS consecutive polls; see that constant
+ * for why one clean frame is actively misleading here.
+ *
+ * readyForInput() is deliberately NOT part of this predicate. The
+ * permission-mode-cycle recording notes it never fired in that whole session
+ * because codex painted an `Update available!` notice box, while every press
+ * still landed — so requiring it here would turn a healthy session into a
+ * permanent skip. It belongs in awaitReady, which is about a composer that will
+ * accept a TURN.
+ */
+async function awaitCodexBox(
+  conv: Conversation,
+  rig: Rig,
+  bound: number,
+): Promise<boolean> {
+  const until = Date.now() + bound;
+  let clean = 0;
+  for (;;) {
+    const frame = conv.screenSnapshot().text;
+    const reading = parsePermissionMode(frame, "codex");
+    const ok =
+      frame.includes(CODEX_BANNER) &&
+      !frame.includes(CODEX_BOOT_MARKER) &&
+      reading !== null &&
+      reading.collaboration !== "unknown";
+    clean = ok ? clean + 1 : 0;
+    if (clean >= CODEX_SETTLE_POLLS) return true;
+    if (rig.fatal() !== "" || Date.now() >= until) return false;
+    await new Promise((r) => setTimeout(r, STATUS_POLL_INTERVAL));
+  }
+}
+
+/** Runs `p` and returns the rejection, or undefined when it resolved. */
+async function rejection(p: Promise<unknown>): Promise<unknown> {
+  try {
+    await p;
+    return undefined;
+  } catch (e) {
+    return e;
+  }
+}
+
+/** `err` rendered for a failure report — sentinel chain included. */
+function describeError(err: unknown): string {
+  if (err === undefined) return "(resolved — no error was thrown)";
+  const e = err as { message?: string };
+  const kinds = [
+    ["ErrPermissionModeUnreachable", ErrPermissionModeUnreachable],
+    ["ErrPermissionModeStalled", ErrPermissionModeStalled],
+    ["ErrPermissionModeUnsupported", ErrPermissionModeUnsupported],
+    ["ErrInputPending", ErrInputPending],
+  ] as const;
+  const matched = kinds
+    .filter(([, s]) => isSentinel(err, s))
+    .map(([name]) => name);
+  return `${e.message ?? "(no message)"} [${matched.length ? matched.join(",") : "no known sentinel"}]`;
+}
+
+/**
+ * Serves a LIVE Conversation behind a real gateway Server on a loopback port and
+ * returns a reader for `GET /v1/conversations/:id/permission-mode`.
+ *
+ * The Server is constructed with an injected Opener that hands back the
+ * already-open conversation, which is the same seam test/gateway/server.test.ts
+ * uses for its fakes — here pointed at the real thing, so the route is exercised
+ * end to end (registry, handler, DTO) over a genuine reading rather than a
+ * hand-built one. The POST body's `harness` / `binary_path` are decoded and
+ * discarded by that opener; they are supplied truthfully anyway so the request is
+ * one a real client could have sent.
+ *
+ * Closing shuts the HTTP listener ONLY. The conversation's lifetime belongs to
+ * the caller's rig, and closing it here would race the assertions that read it.
+ */
+async function serveConversation(
+  conv: Conversation,
+  binaryPath: string,
+): Promise<{
+  read: () => Promise<Record<string, unknown>>;
+  close: () => Promise<void>;
+}> {
+  const gateway = new GatewayServer({
+    open: () => Promise.resolve(conv as unknown as ConversationLike),
+  });
+  const http: HTTPServer = createServer(gateway.handle);
+  const base = await new Promise<string>((resolve) => {
+    http.listen(0, "127.0.0.1", () => {
+      const { port } = http.address() as AddressInfo;
+      resolve(`http://127.0.0.1:${String(port)}`);
+    });
+  });
+  const close = (): Promise<void> =>
+    new Promise<void>((resolve) => {
+      http.close(() => {
+        resolve();
+      });
+    });
+  try {
+    const opened = await fetch(`${base}/v1/conversations`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ harness: "codex", binary_path: binaryPath }),
+    });
+    const body = (await opened.json()) as { id?: string };
+    if (opened.status !== 201 || !body.id) {
+      throw new Error(
+        `conformance: gateway refused to register the live conversation ` +
+          `(status ${String(opened.status)}): ${JSON.stringify(body)}`,
+      );
+    }
+    const id = body.id;
+    return {
+      read: async () => {
+        const r = await fetch(`${base}/v1/conversations/${id}/permission-mode`);
+        const json = (await r.json()) as Record<string, unknown>;
+        if (r.status !== 200) {
+          throw new Error(
+            `conformance: GET permission-mode returned ${String(r.status)}: ` +
+              JSON.stringify(json),
+          );
+        }
+        return json;
+      },
+      close,
+    };
+  } catch (err) {
+    await close();
+    throw err;
+  }
+}
+
+// ── Check 6: claude-code — the Shift+Tab ring, driven live ────────────────────
+
+describe("conformance: claude mid-session switch (CONFORMANCE=1)", () => {
+  const info = infos["claude-code"];
+  const skip = !CONFORMANCE || !info.installed;
+
+  /**
+   * The reachable rungs on a NON-bypass-enabled claude session, and the order
+   * this check drives them in.
+   *
+   * Derived from the shipped legal-target table's vocabulary via
+   * normalizePermissionRung, minus `bypass` — which is reachable only from a
+   * bypass-enabling LAUNCH and gets its own two cases below. The order is a
+   * CHAIN: each switch starts from the previous target, so the four switches
+   * cover four DISTINCT starting rungs as well as four distinct targets. Ring
+   * order is deliberately not assumed anywhere — setPermissionMode presses until
+   * it lands, and lap detection (not a press count) is the terminator.
+   */
+  const REACHABLE: readonly PermissionRung[] = [
+    "acceptEdits",
+    "auto",
+    "plan",
+    "manual",
+  ];
+
+  /**
+   * The starting rung every case below launches at.
+   *
+   * NAMED rather than left to claude's default. 102 reads `manual` positively
+   * off `manual mode on`, the ONLY footer without the `(shift+tab to cycle)`
+   * suffix, so it is the most interesting rung to start from — but claude has
+   * already flipped its default once, and pinning THAT is check 5's flagless
+   * case, which deliberately asserts only "some known rung". Launching the rung
+   * explicitly gives this check a deterministic start without re-litigating what
+   * the default is.
+   */
+  const START = PermissionModeManual;
+
+  /**
+   * START as a ladder rung, through the SHIPPED normalizer — never retyped, same
+   * discipline as checks 1-2, 4 and 5.
+   *
+   * A function rather than a describe-scope const so the derivation guard runs
+   * inside a test body: at collection time (CONFORMANCE unset) this file must do
+   * nothing at all, and a normalizer that lost the entry must fail the case that
+   * depends on it rather than break collection for the whole file.
+   */
+  function startRungOf(): PermissionRung {
+    const r = normalizePermissionRung(START, "claude-code");
+    if (r === undefined) {
+      throw new Error(
+        `claude: normalizePermissionRung no longer maps the launch spelling ` +
+          `${JSON.stringify(START)} to any ladder rung (${FOOTER_PARSER}) — the claude arm ` +
+          `of the normalizer has lost the entry these cases derive from.`,
+      );
+    }
+    return r;
+  }
+
+  function claudeReport(conv: Conversation, rig: Rig, detail: string): string {
+    const version = info.detectedVersion || "?";
+    const scrape = conv.screenSnapshot().text;
+    const r = parsePermissionMode(scrape, "claude-code");
+    return (
+      `claude ${version} LIVE MID-SESSION SWITCH DRIFT.\n` +
+      `  case:           ${detail}\n` +
+      `  observed now:   ${r ? `"${r.observed}" (source ${r.source}, raw ${JSON.stringify(r.raw ?? "")})` : "(parsePermissionMode returned null)"}\n` +
+      `  footer line:    ${glyphLine(scrape)}\n` +
+      `  pending input:  ${conv.pendingInput()?.kind ?? "(none)"}\n` +
+      `  session status: ${rig.fatal() === "" ? "healthy" : rig.fatal()}\n` +
+      `  The keystroke is the adapter's permissionCycleKeys() (src/turns/harness/` +
+      `claudecode.ts); the ring driver is setPermissionMode (${SWITCH_IMPL}); the ` +
+      `footer parse is ${FOOTER_PARSER}. If the FOOTER moved, check 5 fails too and ` +
+      `${FOOTER_CORPUS}permission-mode-* must be re-recorded; if only THIS check fails, ` +
+      `the KEYSTROKE or the ring itself moved.\n` +
+      `  --- screen ---\n${redactWelcome(scrape)}\n  --- end screen ---`
+    );
+  }
+
+  /** Opens claude at `mode`, waits for a parsed footer, and asserts the start rung. */
+  async function openAtStart(
+    rig: Rig,
+    mode: string,
+  ): Promise<{ conv: Conversation; reading: PermissionModeReading }> {
+    const version = info.detectedVersion || "?";
+    const conv = rig.adopt(
+      await Open(rig.ctx, {
+        harness: "claude-code",
+        binaryPath: info.path,
+        workingDir: rig.dir("conformance-claude-switch-"),
+        store: newMemStore(),
+        // The STRUCTURED knob, not raw args: `requested` is read from it, and
+        // the "requested is not rewritten" assertion below needs it populated.
+        permissionMode: mode,
+        // Answers the folder-trust dialog AND the "Bypass Permissions mode"
+        // acceptance screen; both are pinned not-ready, so without a policy the
+        // footer poll would deadlock behind them.
+        inputPolicy: AutoAcceptTrust,
+        activityInterval: 250,
+        onActivity: rig.onActivity,
+      }),
+    );
+    const reading = await awaitFooterReading(conv, rig, FOOTER_PAINT_BOUND);
+    expect(
+      rig.fatal(),
+      `claude ${version}: session died before the footer painted.\n` +
+        claudeReport(conv, rig, `launch permissionMode ${mode}`),
+    ).toBe("");
+    expect(
+      reading.source,
+      `claude ${version}: no live footer parse after ${String(FOOTER_PAINT_BOUND)} ms; ` +
+        `nothing can be switched from a screen we cannot read (check 5 owns this ` +
+        `precondition and fails on it too).\n` +
+        claudeReport(conv, rig, `launch permissionMode ${mode}`),
+    ).toBe("footer");
+    return { conv, reading };
+  }
+
+  // ── Every reachable rung, from four distinct starting rungs ────────────────
+  //
+  // ONE launch drives the whole chain: four cold claude launches to switch four
+  // times would triple this file's dominant cost for no extra coverage — the
+  // starting rung is what varies between the switches, and chaining varies it by
+  // construction.
+  test.skipIf(skip)(
+    "claude-code: setPermissionMode reaches every reachable rung, and `requested` is not rewritten",
+    async () => {
+      const version = info.detectedVersion || "?";
+      const rig = newRig();
+      try {
+        const { conv, reading } = await openAtStart(rig, START);
+        const start = startRungOf();
+        expect(
+          reading.observed,
+          `claude ${version}: launched at ${JSON.stringify(START)} but the live footer does ` +
+            `not read it back, so the ring cannot be driven from a known start.\n` +
+            claudeReport(conv, rig, `start rung ${START}`),
+        ).toBe(start);
+
+        const counter = cycleCounter(conv);
+        const release = await conv.acquireControl(rig.ctx);
+        try {
+          for (const target of REACHABLE) {
+            const before = counter.presses();
+            const { ctx: sctx, cancel } = Context.withDeadline(
+              rig.ctx,
+              SWITCH_BOUND,
+            );
+            let after: PermissionModeReading;
+            try {
+              after = await conv.setPermissionMode(sctx, target);
+            } finally {
+              cancel();
+            }
+
+            // THE load-bearing assertion: the returned reading's `observed` IS
+            // the requested rung — read back through the shipped footer parser,
+            // never through a test-local regex.
+            expect(
+              after.observed,
+              `claude ${version}: setPermissionMode(${JSON.stringify(target)}) returned ` +
+                `observed ${JSON.stringify(after.observed)}.\n` +
+                claudeReport(conv, rig, `switch -> ${target}`),
+            ).toBe(target);
+            expect(after.source).toBe("footer");
+
+            // `requested` is a LAUNCH fact and MUST survive the switch: after a
+            // successful move it still reports the rung the session was LAUNCHED
+            // with, so requested !== observed is expected drift, not a bug.
+            // Compared through normalizePermissionRung — the launch spelling and
+            // the screen spelling are different vocabularies.
+            expect(
+              normalizePermissionRung(after.requestedRaw ?? "", "claude-code"),
+              `claude ${version}: a successful switch REWROTE \`requested\` (raw ` +
+                `${JSON.stringify(after.requestedRaw ?? "")}). It is a launch fact — see ` +
+                `setPermissionMode's honest-return guarantees in ${SWITCH_IMPL}.\n` +
+                claudeReport(conv, rig, `switch -> ${target}`),
+            ).toBe(start);
+            expect(after.requested).toBe(start);
+
+            // Every step of the CHAIN genuinely moves (no step asks for the rung
+            // it is already on — that is the no-op case's own test below), so
+            // each must have cost at least one press. A success reported without
+            // a keystroke would mean the loop never drove the ring at all.
+            expect(
+              counter.presses(),
+              `claude ${version}: setPermissionMode(${JSON.stringify(target)}) reported ` +
+                `success without writing a cycle keystroke.\n` +
+                claudeReport(conv, rig, `switch -> ${target}`),
+            ).toBeGreaterThan(before);
+
+            // And the LIVE screen agrees with the returned reading — the return
+            // value is not a private bookkeeping value.
+            expect(
+              conv.permissionMode().observed,
+              `claude ${version}: setPermissionMode returned ${JSON.stringify(target)} but a ` +
+                `fresh read of the live footer disagrees.\n` +
+                claudeReport(conv, rig, `switch -> ${target}`),
+            ).toBe(target);
+          }
+        } finally {
+          release();
+        }
+      } finally {
+        await rig.dispose();
+      }
+    },
+    TEST_TIMEOUT,
+  );
+
+  // ── The no-op ─────────────────────────────────────────────────────────────
+  test.skipIf(skip)(
+    "claude-code: requesting the rung the session is already on writes ZERO cycle keystrokes",
+    async () => {
+      const version = info.detectedVersion || "?";
+      const rig = newRig();
+      try {
+        const { conv } = await openAtStart(rig, START);
+        const start = startRungOf();
+        const counter = cycleCounter(conv);
+        const release = await conv.acquireControl(rig.ctx);
+        let after: PermissionModeReading;
+        try {
+          const { ctx: sctx, cancel } = Context.withDeadline(
+            rig.ctx,
+            SWITCH_BOUND,
+          );
+          try {
+            after = await conv.setPermissionMode(sctx, start);
+          } finally {
+            cancel();
+          }
+        } finally {
+          release();
+        }
+        expect(
+          after.observed,
+          `claude ${version}: the no-op did not return the CURRENT reading.\n` +
+            claudeReport(conv, rig, `no-op -> ${start}`),
+        ).toBe(start);
+        expect(
+          counter.presses(),
+          `claude ${version}: the no-op wrote ${String(counter.presses())} cycle ` +
+            `keystroke(s). setPermissionMode is documented idempotent-by-construction: a ` +
+            `target already on the axis returns BEFORE any write (${SWITCH_IMPL}).\n` +
+            claudeReport(conv, rig, `no-op -> ${start}`),
+        ).toBe(0);
+      } finally {
+        await rig.dispose();
+      }
+    },
+    TEST_TIMEOUT,
+  );
+
+  // ── `bypass` on a session that cannot reach it ────────────────────────────
+  test.skipIf(skip)(
+    "claude-code: `bypass` on a non-bypass-enabled session fails Unreachable BEFORE any keystroke",
+    async () => {
+      const version = info.detectedVersion || "?";
+      const rig = newRig();
+      try {
+        const { conv } = await openAtStart(rig, START);
+        const counter = cycleCounter(conv);
+        const release = await conv.acquireControl(rig.ctx);
+        let err: unknown;
+        try {
+          const { ctx: sctx, cancel } = Context.withDeadline(
+            rig.ctx,
+            SWITCH_BOUND,
+          );
+          try {
+            err = await rejection(conv.setPermissionMode(sctx, "bypass"));
+          } finally {
+            cancel();
+          }
+        } finally {
+          release();
+        }
+        expect(
+          err !== undefined && isSentinel(err, ErrPermissionModeUnreachable),
+          `claude ${version}: expected ErrPermissionModeUnreachable for \`bypass\` on a ` +
+            `session launched \`${START}\` — the rung is not on this session's ring at ` +
+            `all. Got: ${describeError(err)}.\n` +
+            claudeReport(conv, rig, "bypass on a non-bypass session"),
+        ).toBe(true);
+        expect(
+          counter.presses(),
+          `claude ${version}: the fast-fail wrote ${String(counter.presses())} cycle ` +
+            `keystroke(s); it is documented to refuse BEFORE any keystroke (${SWITCH_IMPL}).\n` +
+            claudeReport(conv, rig, "bypass on a non-bypass session"),
+        ).toBe(0);
+        // The live footer must still read the START rung: a refused switch may
+        // not have moved the session.
+        expect(conv.permissionMode().observed).toBe(
+          normalizePermissionRung(START, "claude-code"),
+        );
+      } finally {
+        await rig.dispose();
+      }
+    },
+    TEST_TIMEOUT,
+  );
+
+  // ── `bypass` on a session launched WITH it ────────────────────────────────
+  //
+  // Launched at `bypass`, so reaching it again is a no-op — the case therefore
+  // moves AWAY first (to `manual`) and then traverses BACK, which is the only
+  // shape that actually exercises landing on the bypass rung mid-ring.
+  //
+  // THE ACCEPTANCE SCREEN. On an already-accepted machine it is skipped; on a
+  // fresh HOME claude paints "Bypass Permissions mode", which the turns layer
+  // reports as `trust_prompt`. setPermissionMode refuses while ANY input is
+  // pending — INCLUDING one an inputPolicy is mid-way through auto-resolving —
+  // so the honest outcomes are BOTH accepted: either the traversal completes, or
+  // it raises ErrInputPending NAMING the kind. What is never acceptable is
+  // ErrPermissionModeStalled, which would mean the session was left parked in a
+  // modal with the ring reported dead.
+  test.skipIf(skip)(
+    "claude-code: `bypass` on a bypass-enabled session is reachable (or reports the trust_prompt)",
+    async () => {
+      const version = info.detectedVersion || "?";
+      const rig = newRig();
+      try {
+        const { conv, reading } = await openAtStart(rig, PermissionModeBypass);
+        expect(
+          reading.observed,
+          `claude ${version}: launched with the bypass-enabling permissionMode but the ` +
+            `footer does not read \`bypass\` back.\n` +
+            claudeReport(conv, rig, "bypass-enabled launch"),
+        ).toBe("bypass");
+
+        const release = await conv.acquireControl(rig.ctx);
+        try {
+          // Step away from the rung so stepping back onto it is a real traversal.
+          const { ctx: away, cancel: cancelAway } = Context.withDeadline(
+            rig.ctx,
+            SWITCH_BOUND,
+          );
+          let mid: PermissionModeReading;
+          try {
+            mid = await conv.setPermissionMode(away, "manual");
+          } finally {
+            cancelAway();
+          }
+          expect(
+            mid.observed,
+            `claude ${version}: could not step OFF the bypass rung.\n` +
+              claudeReport(conv, rig, "bypass-enabled: step away"),
+          ).toBe("manual");
+
+          const { ctx: back, cancel: cancelBack } = Context.withDeadline(
+            rig.ctx,
+            SWITCH_BOUND,
+          );
+          let err: unknown;
+          let after: PermissionModeReading | undefined;
+          try {
+            after = await conv.setPermissionMode(back, "bypass");
+          } catch (e) {
+            err = e;
+          } finally {
+            cancelBack();
+          }
+
+          if (err !== undefined) {
+            // The ONE tolerated failure: a mid-traversal acceptance screen.
+            // Asserted precisely — the message names the kind — so a genuine
+            // stall or an unreachable-rung report still fails here.
+            expect(
+              isSentinel(err, ErrInputPending) &&
+                ((err as { message?: string }).message ?? "").includes(
+                  "trust_prompt",
+                ),
+              `claude ${version}: traversing back onto \`bypass\` failed with something ` +
+                `other than a NAMED trust_prompt: ${describeError(err)}. A stall here would ` +
+                `mean the session is parked in the acceptance modal with the ring reported ` +
+                `dead.\n` +
+                claudeReport(conv, rig, "bypass-enabled: step back"),
+            ).toBe(true);
+            return;
+          }
+
+          expect(
+            after?.observed,
+            `claude ${version}: traversing back onto \`bypass\` reported success with ` +
+              `observed ${JSON.stringify(after?.observed ?? "")}.\n` +
+              claudeReport(conv, rig, "bypass-enabled: step back"),
+          ).toBe("bypass");
+          // `requested` is still the LAUNCH fact after two successful switches.
+          expect(
+            normalizePermissionRung(after?.requestedRaw ?? "", "claude-code"),
+          ).toBe("bypass");
+        } finally {
+          release();
+        }
+      } finally {
+        await rig.dispose();
+      }
+    },
+    TEST_TIMEOUT,
+  );
+});
+
+// ── Check 7: codex — the collaboration 2-cycle and the refresh, driven live ───
+//
+// codex's TWO AXES DO NOT COLLAPSE, and that is the whole point of this check.
+// `setPermissionMode(ctx, "plan")` on codex supplies only the COLLABORATION half
+// of META-HARNESS-99's `plan` rung; the PERMISSIONS half is launch-flag
+// territory (`-s` / `-a`) and must be left exactly where the launch put it. So
+// every assertion below is a PAIR: the collaboration axis moved AND the
+// permissions rung stayed put. A driver that watched the wrong field would send
+// the whole ring into the backstop, and one that collapsed them would silently
+// claim a rung the session is not on.
+//
+// The confirmation is a REAL `/status` probe per press — codex renders the
+// collaboration row only inside that box, and the composer's own
+// ` Plan mode (shift+tab to cycle)` marker never feeds the field 102 reads.
+//
+// CODEX_HOME is isolated exactly as in check 4 (auth.json only), so what
+// `/status` reports comes from the launch flags rather than from the
+// developer's config — and so nothing here can write it.
+
+describe("conformance: codex mid-session switch (CONFORMANCE=1)", () => {
+  const info = infos.codex;
+  const skip = !CONFORMANCE || !info.installed;
+
+  // Derived from the replay authority, never retyped — same discipline as
+  // checks 1-2 and 4. The pair pins the PERMISSIONS axis so the assertions can
+  // state what must NOT move while the collaboration axis does.
+  const LAUNCH_ARGS = [
+    CodexSandboxFlags[0],
+    CodexSandboxWorkspaceWrite,
+    CodexApprovalFlags[0],
+    CodexApprovalOnRequest,
+  ];
+
+  /** The permissions rung the launch flags above pin, via the shipped normalizer. */
+  const LAUNCH_RUNG = normalizePermissionRung(
+    CodexSandboxWorkspaceWrite,
+    "codex",
+  );
+
+  function codexReport(conv: Conversation, rig: Rig, detail: string): string {
+    const version = info.detectedVersion || "?";
+    const text = conv.screenSnapshot().text;
+    // BOTH readings, because on codex they can legitimately differ and which one
+    // moved is the first thing the next reader needs: `cached` is what
+    // permissionMode() serves (the prime-time box, unbounded-stale, refreshed
+    // only by refreshPermissionMode), `live` is what the screen says right now.
+    const cached = conv.permissionMode();
+    const live = parsePermissionMode(text, "codex");
+    return (
+      `codex ${version} LIVE MID-SESSION SWITCH DRIFT.\n` +
+      `  case:           ${detail}\n` +
+      `  launch flags:   ${LAUNCH_ARGS.join(" ")}\n` +
+      `  cached reading: collaboration ${cached.collaboration ?? "(none)"}, observed ` +
+      `${cached.observed} (source ${cached.source}, raw ${JSON.stringify(cached.raw ?? "")})\n` +
+      `  live parse:     ${live ? `collaboration ${live.collaboration ?? "(none)"}, observed ${live.observed} (raw ${JSON.stringify(live.raw ?? "")})` : "(parsePermissionMode returned null)"}\n` +
+      `  Collaboration:  ${rowText(text, "Collaboration mode:")}\n` +
+      `  Permissions:    ${rowText(text, "Permissions:")}\n` +
+      `  pending input:  ${conv.pendingInput()?.kind ?? "(none)"}\n` +
+      `  session status: ${rig.fatal() === "" ? "healthy" : rig.fatal()}\n` +
+      `  The keystroke is the adapter's permissionCycleKeys() (src/turns/harness/codex.ts); ` +
+      `the driver and the per-press \`/status\` confirm are setPermissionMode / ` +
+      `confirmCodexCollaboration (${SWITCH_IMPL}); the row parse is ${FOOTER_PARSER}. If ` +
+      `the ROWS moved, check 4 fails too and test/corpus/codex/status-* must be ` +
+      `re-recorded; if only THIS check fails, the KEYSTROKE or the toggle itself moved.\n` +
+      `  --- screen ---\n${redactAccount(text)}\n  --- end screen ---`
+    );
+  }
+
+  /**
+   * Opens codex with the pinned permission flags against an isolated CODEX_HOME,
+   * then waits for the `/status` box to finish painting.
+   *
+   * `painted` is false when the box never rendered. That is check 4's
+   * PRECONDITION, not this check's subject: a fresh CODEX_HOME can leave the
+   * composer unready (migration/first-run screens are pinned not-ready), and a
+   * check that failed on it would report fabricated drift. Callers skip — and
+   * the conversation still comes back, so the skip message can name the prime
+   * outcome that explains WHY.
+   */
+  async function openCodex(
+    rig: Rig,
+    extra: {
+      env?: string[];
+      workingDir?: string;
+      store?: ReturnType<typeof newMemStore>;
+    } = {},
+  ): Promise<{ conv: Conversation; painted: boolean }> {
+    const conv = rig.adopt(
+      await Open(rig.ctx, {
+        harness: "codex",
+        binaryPath: info.path,
+        workingDir: extra.workingDir ?? rig.dir("conformance-codex-switch-"),
+        env: extra.env ?? isolatedCodexHome(rig),
+        args: LAUNCH_ARGS,
+        store: extra.store ?? newMemStore(),
+        inputPolicy: AutoAcceptTrust,
+        // See check 4: the PRODUCTION 800 ms prime bound is deliberately tight
+        // and a cold codex against a fresh CODEX_HOME does not clear it. Widening
+        // it here changes how long we WAIT, never what is asserted.
+        primeBound: PRIME_BOUND,
+        activityInterval: 250,
+        onActivity: rig.onActivity,
+      }),
+    );
+    return {
+      conv,
+      painted: await awaitCodexBox(conv, rig, STATUS_PAINT_BOUND),
+    };
+  }
+
+  /** The skip message for a box that never painted — check 4 owns that precondition. */
+  function boxPrecondition(conv: Conversation, rig: Rig): string {
+    return (
+      `codex ${info.detectedVersion || "?"}: the \`/status\` box never rendered a legible ` +
+      `\`Collaboration mode:\` row with the MCP boot window closed within ` +
+      `${String(STATUS_PAINT_BOUND)} ms ` +
+      `(prime outcome ${primeOutcomeOf(conv) ?? "none"}, session ` +
+      `${rig.fatal() === "" ? "healthy" : rig.fatal()}). There is no axis to drive from a ` +
+      `box we cannot read — precondition, not drift; check 4 owns it.`
+    );
+  }
+
+  // ── Default ⇄ Plan, BOTH directions, confirmed through /status ─────────────
+  test.skipIf(skip)(
+    "codex: setPermissionMode toggles Default ⇄ Plan while the launch permissions rung stays put",
+    async (t) => {
+      const version = info.detectedVersion || "?";
+      const rig = newRig();
+      try {
+        const { conv, painted } = await openCodex(rig);
+        if (!painted) {
+          t.skip(boxPrecondition(conv, rig));
+          return;
+        }
+        // The pre-state is read off the LIVE box, deliberately NOT off
+        // permissionMode(): on codex that serves the PRIME-TIME cache, which the
+        // META-HARNESS-155 probe recorded as `collaboration: "unknown"` on all
+        // three launches it drove (primeSessionID exits as soon as the id and the
+        // mode-box parse land, and the collaboration row paints below them). The
+        // cache being half-painted is exactly why setPermissionMode re-probes and
+        // never trusts it — asserting the start rung through it would be
+        // asserting the bug.
+        expect(
+          parsePermissionMode(conv.screenSnapshot().text, "codex")
+            ?.collaboration,
+          `codex ${version}: a launch that never ran \`/plan\` must start on Default.\n` +
+            codexReport(conv, rig, "start"),
+        ).toBe("default");
+
+        const counter = cycleCounter(conv);
+        const release = await conv.acquireControl(rig.ctx);
+        try {
+          // → Plan.
+          const { ctx: toPlan, cancel: cancelPlan } = Context.withDeadline(
+            rig.ctx,
+            SWITCH_BOUND,
+          );
+          let planned: PermissionModeReading;
+          try {
+            planned = await conv.setPermissionMode(toPlan, "plan");
+          } finally {
+            cancelPlan();
+          }
+          expect(
+            planned.collaboration,
+            `codex ${version}: setPermissionMode("plan") did not move the COLLABORATION ` +
+              `axis.\n` +
+              codexReport(conv, rig, "default -> plan"),
+          ).toBe("plan");
+          // THE PAIR: the permissions axis is launch-flag territory and this
+          // call supplies only the collaboration half of the `plan` rung.
+          expect(
+            planned.observed,
+            `codex ${version}: the collaboration toggle MOVED THE PERMISSIONS AXIS — it ` +
+              `reports ${JSON.stringify(planned.observed)} where the launch flags pin ` +
+              `${JSON.stringify(LAUNCH_RUNG ?? "")}. The two axes do not collapse; a call ` +
+              `claiming the rung would be a silent mis-report of the session's posture.\n` +
+              codexReport(conv, rig, "default -> plan"),
+          ).toBe(LAUNCH_RUNG);
+          expect(planned.source).toBe("status");
+          expect(
+            counter.presses(),
+            `codex ${version}: the toggle reported success without writing a cycle ` +
+              `keystroke.\n` +
+              codexReport(conv, rig, "default -> plan"),
+          ).toBe(1);
+
+          // Settle again before the second write. Entering Plan is not a pure
+          // repaint: codex RE-SELECTS THE MODEL for it and announces the change
+          // ("Model changed to … for Plan mode"), so the return press must not
+          // race that work. The fixed dwell covers the announcement; the box
+          // predicate then covers the repaint, exactly as before the first press.
+          await new Promise((r) => setTimeout(r, CODEX_POST_SWITCH_DWELL));
+          expect(
+            await awaitCodexBox(conv, rig, STATUS_PAINT_BOUND),
+            `codex ${version}: the session did not settle back to a quiet, ready composer ` +
+              `after the first toggle, so the second one would be written blind.\n` +
+              codexReport(conv, rig, "settle between toggles"),
+          ).toBe(true);
+
+          // → Default. The OTHER direction, asserted separately: a driver that
+          // could only leave Default would pass a one-way check forever.
+          const { ctx: toDefault, cancel: cancelDefault } =
+            Context.withDeadline(rig.ctx, SWITCH_BOUND);
+          let back: PermissionModeReading;
+          try {
+            back = await conv.setPermissionMode(toDefault, "default");
+          } finally {
+            cancelDefault();
+          }
+          expect(
+            back.collaboration,
+            `codex ${version}: setPermissionMode("default") did not move the collaboration ` +
+              `axis back.\n` +
+              codexReport(conv, rig, "plan -> default"),
+          ).toBe("default");
+          expect(
+            back.observed,
+            `codex ${version}: the return toggle moved the permissions axis.\n` +
+              codexReport(conv, rig, "plan -> default"),
+          ).toBe(LAUNCH_RUNG);
+          expect(
+            counter.presses(),
+            `codex ${version}: the return toggle cost ` +
+              `${String(counter.presses() - 1)} press(es); the collaboration ring is a ` +
+              `2-cycle.\n` +
+              codexReport(conv, rig, "plan -> default"),
+          ).toBe(2);
+        } finally {
+          release();
+        }
+      } finally {
+        await rig.dispose();
+      }
+    },
+    TEST_TIMEOUT,
+  );
+
+  // ── Starting from Default, asking for Default probes rather than presses ────
+  //
+  // The failure this pins is not hypothetical: setPermissionMode used to be able
+  // to trust the PRIME-TIME cached reading for its entry value, and a session
+  // already on Default would then be pressed into Plan and back — a visible,
+  // session-mutating round trip for a call that must be a no-op. The proof is
+  // the press count, which is why cycleCounter exists.
+  test.skipIf(skip)(
+    "codex: the Default start case probes `/status` before the first press — ZERO cycle keystrokes",
+    async (t) => {
+      const version = info.detectedVersion || "?";
+      const rig = newRig();
+      try {
+        const { conv, painted } = await openCodex(rig);
+        if (!painted) {
+          t.skip(boxPrecondition(conv, rig));
+          return;
+        }
+        // The LIVE box, not the prime-time cache — see the toggle case above.
+        expect(
+          parsePermissionMode(conv.screenSnapshot().text, "codex")
+            ?.collaboration,
+        ).toBe("default");
+
+        const counter = cycleCounter(conv);
+        const release = await conv.acquireControl(rig.ctx);
+        let after: PermissionModeReading;
+        try {
+          const { ctx: sctx, cancel } = Context.withDeadline(
+            rig.ctx,
+            SWITCH_BOUND,
+          );
+          try {
+            after = await conv.setPermissionMode(sctx, "default");
+          } finally {
+            cancel();
+          }
+        } finally {
+          release();
+        }
+        expect(
+          after.collaboration,
+          `codex ${version}: the no-op did not return the CURRENT reading.\n` +
+            codexReport(conv, rig, "no-op -> default"),
+        ).toBe("default");
+        expect(
+          after.source,
+          `codex ${version}: the no-op's reading did not come from a live \`/status\` ` +
+            `parse.\n` +
+            codexReport(conv, rig, "no-op -> default"),
+        ).toBe("status");
+        expect(
+          counter.presses(),
+          `codex ${version}: the Default start case wrote ${String(counter.presses())} ` +
+            `cycle keystroke(s). It must PROBE \`/status\` for its entry value, never press ` +
+            `into Plan and back (${SWITCH_IMPL}).\n` +
+            codexReport(conv, rig, "no-op -> default"),
+        ).toBe(0);
+      } finally {
+        await rig.dispose();
+      }
+    },
+    TEST_TIMEOUT,
+  );
+
+  // ── A ladder rung is not on codex's axis ──────────────────────────────────
+  test.skipIf(skip)(
+    "codex: a ladder-rung target fails Unreachable before any keystroke",
+    async (t) => {
+      const version = info.detectedVersion || "?";
+      const rig = newRig();
+      try {
+        const { conv, painted } = await openCodex(rig);
+        if (!painted) {
+          t.skip(boxPrecondition(conv, rig));
+          return;
+        }
+        const counter = cycleCounter(conv);
+        const release = await conv.acquireControl(rig.ctx);
+        const errors: Record<string, unknown> = {};
+        try {
+          // Every rung EXCEPT the two collaboration values — `plan` is legal on
+          // codex and means the collaboration mode there, never the rung of the
+          // same name, which is exactly why it is excluded here.
+          for (const target of [
+            "manual",
+            "acceptEdits",
+            "auto",
+            "bypass",
+          ] as const) {
+            const { ctx: sctx, cancel } = Context.withDeadline(
+              rig.ctx,
+              SWITCH_BOUND,
+            );
+            try {
+              errors[target] = await rejection(
+                conv.setPermissionMode(sctx, target),
+              );
+            } finally {
+              cancel();
+            }
+          }
+        } finally {
+          release();
+        }
+        for (const [target, err] of Object.entries(errors)) {
+          expect(
+            err !== undefined && isSentinel(err, ErrPermissionModeUnreachable),
+            `codex ${version}: expected ErrPermissionModeUnreachable for the ladder rung ` +
+              `${JSON.stringify(target)} — the codex axis setPermissionMode drives is the ` +
+              `collaboration 2-cycle, and a rung is launch-flag territory (\`-s\`/\`-a\`). ` +
+              `Got: ${describeError(err)}.\n` +
+              codexReport(conv, rig, `rung target ${target}`),
+          ).toBe(true);
+        }
+        expect(
+          counter.presses(),
+          `codex ${version}: the fast-fail wrote ${String(counter.presses())} cycle ` +
+            `keystroke(s); an off-axis target is refused before any keystroke.\n` +
+            codexReport(conv, rig, "rung targets"),
+        ).toBe(0);
+      } finally {
+        await rig.dispose();
+      }
+    },
+    TEST_TIMEOUT,
+  );
+
+  // ── refreshPermissionMode on a RESUMED session, and the route that serves it ─
+  //
+  // A resumed codex conversation never renders a `/status` box at all —
+  // openWithSession gates the prime on `!opts.resume` — so 102's reading is
+  // permanently `source: "not_primed"` until an explicit refresh lands. That is
+  // the documented KNOWN HOLE, and refreshPermissionMode is the only thing that
+  // closes it.
+  //
+  // THE WRITE-BACK IS THE POINT, so this case does not stop at the return value:
+  // it serves the SAME live conversation behind a real gateway Server and reads
+  // `GET /v1/conversations/:id/permission-mode`, which is a PURE read of the
+  // cached reading. Without the write-back the refresh would hand back a fresh
+  // value while the very next GET still answered `not_primed`, and the two
+  // routes would disagree — a divergence no return-value assertion can see.
+  test.skipIf(skip)(
+    "codex: refreshPermissionMode revives a `not_primed` resumed session, and the GET route agrees",
+    async (t) => {
+      const version = info.detectedVersion || "?";
+      const rig = newRig();
+      let served: Awaited<ReturnType<typeof serveConversation>> | undefined;
+      try {
+        // The SAME CODEX_HOME and working dir across both launches: codex stores
+        // its rollout files under CODEX_HOME, so `codex resume <id>` can only
+        // find the session that the first launch wrote there.
+        const env = isolatedCodexHome(rig);
+        const dir = rig.dir("conformance-codex-resume-");
+        const store = newMemStore();
+
+        const { conv: first, painted } = await openCodex(rig, {
+          env,
+          workingDir: dir,
+          store,
+        });
+        if (!painted) {
+          t.skip(boxPrecondition(first, rig));
+          return;
+        }
+        const harnessSessionID = first.session.harnessSessionID;
+        if (harnessSessionID === "") {
+          t.skip(
+            `codex ${version}: the first launch never captured a harness session id, so ` +
+              `there is nothing to resume (Reopen raises ErrNoHarnessSession). Precondition, ` +
+              `not drift.`,
+          );
+          return;
+        }
+        const sessionID = first.sessionID();
+        await first.close(rig.ctx).catch(() => undefined);
+
+        const second = rig.adopt(
+          await Reopen(rig.ctx, {
+            sessionID,
+            binaryPath: info.path,
+            env,
+            store,
+            inputPolicy: AutoAcceptTrust,
+            activityInterval: 250,
+            onActivity: rig.onActivity,
+          }),
+        );
+
+        // The documented pre-state, asserted rather than assumed: a refresh that
+        // "revives" a reading which was never stale proves nothing.
+        const stale = second.permissionMode();
+        expect(
+          stale.source,
+          `codex ${version}: a RESUMED session is documented to read \`not_primed\` until a ` +
+            `refresh lands (permissionMode's KNOWN HOLE, ${SWITCH_IMPL}); this one reads ` +
+            `${JSON.stringify(stale.source)}, so the hole this case exists to close has ` +
+            `moved.\n` +
+            codexReport(second, rig, "resumed, pre-refresh"),
+        ).toBe("not_primed");
+
+        if (!(await awaitReady(second, "codex", rig, READY_BOUND))) {
+          t.skip(
+            `codex ${version}: the resumed session never reached a ready composer within ` +
+              `${String(READY_BOUND)} ms (session ` +
+              `${rig.fatal() === "" ? "healthy" : rig.fatal()}), so \`/status\` could never ` +
+              `be written. Precondition, not drift.`,
+          );
+          return;
+        }
+
+        const release = await second.acquireControl(rig.ctx);
+        let live: PermissionModeReading;
+        try {
+          const { ctx: rctx, cancel } = Context.withDeadline(
+            rig.ctx,
+            SWITCH_BOUND,
+          );
+          try {
+            live = await second.refreshPermissionMode(rctx);
+          } finally {
+            cancel();
+          }
+        } finally {
+          release();
+        }
+
+        expect(
+          live.source,
+          `codex ${version}: refreshPermissionMode returned a reading that did not come ` +
+            `from a live \`/status\` parse.\n` +
+            codexReport(second, rig, "resumed, post-refresh"),
+        ).toBe("status");
+        expect(
+          live.collaboration,
+          `codex ${version}: the refreshed reading carries no legible collaboration value.\n` +
+            codexReport(second, rig, "resumed, post-refresh"),
+        ).not.toBe("unknown");
+        expect(
+          live.generation,
+          `codex ${version}: the refreshed reading carries generation ` +
+            `${String(live.generation)}, not ahead of the pre-refresh ` +
+            `${String(stale.generation)} — it is not a NEW frame.\n` +
+            codexReport(second, rig, "resumed, post-refresh"),
+        ).toBeGreaterThan(stale.generation);
+
+        // The write-back: the pure per-call read now serves the refreshed value…
+        const cached = second.permissionMode();
+        expect(cached.source).toBe("status");
+        expect(cached.generation).toBe(live.generation);
+        expect(cached.collaboration).toBe(live.collaboration);
+
+        // …and so does the HTTP route that fronts it.
+        served = await serveConversation(second, info.path);
+        const body = await served.read();
+        expect(
+          body,
+          `codex ${version}: GET /v1/conversations/:id/permission-mode DISAGREES with the ` +
+            `reading refreshPermissionMode just returned. The refresh must write back into ` +
+            `the same cached reading the route serves (${SWITCH_IMPL}), or a caller sees a ` +
+            `fresh value from one route and \`not_primed\` from the other.\n` +
+            `  refreshed: ${JSON.stringify(live)}\n` +
+            `  GET body:  ${JSON.stringify(body)}\n` +
+            codexReport(second, rig, "resumed, GET route"),
+        ).toMatchObject({
+          observed: live.observed,
+          collaboration: live.collaboration,
+          source: "status",
+          generation: live.generation,
+        });
+      } finally {
+        if (served) await served.close();
+        await rig.dispose();
+      }
+    },
+    TEST_TIMEOUT,
+  );
+
+  // ── Refresh, then a full turn ─────────────────────────────────────────────
+  //
+  // The ONE case in checks 6-7 that spends a model call, and it has to: the
+  // hazard is a property of the NEXT TURN. codex implements no extractMessage,
+  // so assistantText() falls back to the WHOLE SCREEN — and refreshPermissionMode
+  // is a second, post-open writer of the `/status` burst, so a box left on screen
+  // is exactly what could end up scraped as the turn's reply. The
+  // `currentTurn === null` gate is what contains it, and the driver is forbidden
+  // from inventing a screen-clearing keystroke to tidy up. This asserts the
+  // containment holds against the real binary.
+  test.skipIf(skip)(
+    "codex: after a refresh, a full turn still records the right assistant text",
+    async (t) => {
+      const version = info.detectedVersion || "?";
+      const rig = newRig();
+      try {
+        const { conv, painted } = await openCodex(rig);
+        if (!painted) {
+          t.skip(boxPrecondition(conv, rig));
+          return;
+        }
+
+        const release = await conv.acquireControl(rig.ctx);
+        try {
+          const { ctx: rctx, cancel } = Context.withDeadline(
+            rig.ctx,
+            SWITCH_BOUND,
+          );
+          try {
+            await conv.refreshPermissionMode(rctx);
+          } finally {
+            cancel();
+          }
+          // Let the refresh's own repaint settle before typing. This does NOT
+          // clear the box — nothing does, and leaving it on screen is the whole
+          // point of the case — it only stops the prompt racing the frame the
+          // `/status` burst is still painting.
+          expect(
+            await awaitCodexBox(conv, rig, STATUS_PAINT_BOUND),
+            `codex ${version}: the session did not settle back to a quiet, ready composer ` +
+              `after the refresh, so the prompt would be typed blind.\n` +
+              codexReport(conv, rig, "settle after refresh"),
+          ).toBe(true);
+          // Same control window: the refresh leaves a `/status` box on screen and
+          // the very next turn is the one that could scrape it.
+          await conv.send(rig.ctx, PROMPT);
+        } finally {
+          release();
+        }
+
+        const turn = await waitTerminal(rig.ctx, conv);
+        expect(
+          turn.state,
+          `codex ${version}: the post-refresh turn errored: ${turn.reason}\n` +
+            codexReport(conv, rig, "refresh-then-turn"),
+        ).toBe(TurnStateComplete);
+        expect(
+          turn.text.toLowerCase(),
+          `codex ${version}: the post-refresh turn did not record the assistant's reply. ` +
+            `codex has no extractMessage, so assistantText() falls back to the whole screen — ` +
+            `a lingering \`/status\` box must not be what lands there INSTEAD of the reply ` +
+            `(${SWITCH_IMPL}).\n  --- recorded turn text ---\n${redactAccount(turn.text)}\n` +
+            `  --- end turn text ---\n` +
+            codexReport(conv, rig, "refresh-then-turn"),
+        ).toContain("pomegranate");
+      } finally {
+        await rig.dispose();
+      }
+    },
+    TEST_TIMEOUT,
+  );
 });
