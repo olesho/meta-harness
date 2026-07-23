@@ -234,9 +234,9 @@ interface Session {
 ```
 
 Only these five fields persist. Everything else about a launch (`binaryPath`, `env`,
-`args`, `effort`, `model`, geometry, policies) is supplied by the caller and is **not**
-restored by [`Reopen`](#resume). See [Concepts › Session](../concepts.md#session) for the
-chat-vs-harness id distinction.
+`args`, `effort`, `model`, `permissionMode`, geometry, policies) is supplied by the caller
+and is **not** restored by [`Reopen`](#resume). See [Concepts › Session](../concepts.md#session)
+for the chat-vs-harness id distinction.
 
 ### The Store
 
