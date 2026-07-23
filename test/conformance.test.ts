@@ -1835,9 +1835,15 @@ const CODEX_SETTLE_POLLS = 4;
  * parse land, and `Permissions:` parses two rows ABOVE `Collaboration mode:` in
  * a box that paints top-down. The boot half is CODEX_BOOT_MARKER's.
  *
- * All of it — box, composer, closed boot window — must hold across
- * CODEX_SETTLE_POLLS consecutive polls; see that constant for why one clean
- * frame is actively misleading here.
+ * Both must hold across CODEX_SETTLE_POLLS consecutive polls; see that constant
+ * for why one clean frame is actively misleading here.
+ *
+ * readyForInput() is deliberately NOT part of this predicate. The
+ * permission-mode-cycle recording notes it never fired in that whole session
+ * because codex painted an `Update available!` notice box, while every press
+ * still landed — so requiring it here would turn a healthy session into a
+ * permanent skip. It belongs in awaitReady, which is about a composer that will
+ * accept a TURN.
  */
 async function awaitCodexBox(
   conv: Conversation,
@@ -1852,7 +1858,6 @@ async function awaitCodexBox(
     const ok =
       frame.includes(CODEX_BANNER) &&
       !frame.includes(CODEX_BOOT_MARKER) &&
-      readyForInput("codex", frame) &&
       reading !== null &&
       reading.collaboration !== "unknown";
     clean = ok ? clean + 1 : 0;
