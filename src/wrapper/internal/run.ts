@@ -8,6 +8,7 @@ import { isSentinel } from "../../internal/async/errors.ts";
 import { type Config, ErrBinaryNotFound, validateConfig } from "./config.ts";
 import { argsWithHarnessEffort } from "./effort.ts";
 import { argsWithHarnessModel } from "./model.ts";
+import { argsWithHarnessPermissionMode } from "./permission.ts";
 import { binaryNotFoundError, PtyProcess } from "./pty.ts";
 import { resolvePath } from "../../discovery/discovery.ts";
 import {
@@ -56,6 +57,14 @@ export async function start(
   let args = cfg.args ?? [];
   args = argsWithHarnessEffort(cfg.harness ?? "", args, cfg.effort ?? "");
   args = argsWithHarnessModel(cfg.harness ?? "", args, cfg.model ?? "");
+  // codex `plan` pins the PERMISSIONS axis only (-s read-only -a untrusted);
+  // the collaboration-axis `/plan` write lands with META-HARNESS-106, so this
+  // is not launch-time parity with claude's plan.
+  args = argsWithHarnessPermissionMode(
+    cfg.harness ?? "",
+    args,
+    cfg.permissionMode ?? "",
+  );
   const env = cfg.env ?? [];
   const envRecord = envToRecord(env);
 

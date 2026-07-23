@@ -236,6 +236,48 @@ describe("Run", () => {
     expect(isSentinel(err, ErrInvalidConfig)).toBe(true);
   });
 
+  test("invalid permissionMode rejected at config time, not at launch", async () => {
+    const { sink, drain } = captureStdout();
+    const { err } = await run(undefined, {
+      binaryPath: mockHarnessBin,
+      args: ["--mode", "completed", "--steps", "1", "--delay", "1ms"],
+      stdout: sink,
+      harness: "claude",
+      permissionMode: "ultra",
+    });
+    expect(isSentinel(err, ErrInvalidConfig)).toBe(true);
+    expect(err!.message).toContain("PermissionMode for claude");
+    // validateConfig runs first in start(): the harness never launched.
+    expect(drain()).toBe("");
+  });
+
+  test("codex rejects claude-only permissionMode spellings", async () => {
+    const { sink } = captureStdout();
+    const { err } = await run(undefined, {
+      binaryPath: mockHarnessBin,
+      stdout: sink,
+      harness: "codex",
+      permissionMode: "dontAsk",
+    });
+    expect(isSentinel(err, ErrInvalidConfig)).toBe(true);
+    expect(err!.message).toContain("PermissionMode for codex");
+  });
+
+  test("permissionMode checks the harness before the value", async () => {
+    const { sink } = captureStdout();
+    const { err } = await run(undefined, {
+      binaryPath: mockHarnessBin,
+      stdout: sink,
+      harness: "opencode",
+      permissionMode: "plan",
+    });
+    expect(isSentinel(err, ErrInvalidConfig)).toBe(true);
+    // The harness message, NOT the value message — "plan" is a valid rung.
+    expect(err!.message).toContain(
+      "PermissionMode is only supported for claude and codex harnesses",
+    );
+  });
+
   test("accepts string stdin + buffer stdout", async () => {
     const { sink, drain } = captureStdout();
     const { result, err } = await run(undefined, {

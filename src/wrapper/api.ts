@@ -56,6 +56,11 @@ export {
 } from "./internal/effort.ts";
 export { argsWithHarnessModel } from "./internal/model.ts";
 export {
+  argsWithHarnessPermissionMode,
+  harnessSupportsPermissionMode,
+  isSupportedPermissionMode,
+} from "./internal/permission.ts";
+export {
   effectiveLaunchRung,
   morePermissive,
   permissionRungs,

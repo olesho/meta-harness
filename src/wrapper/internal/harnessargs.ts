@@ -1,4 +1,5 @@
-// Shared helpers for translating per-harness CLI args (effort, model).
+// Shared helpers for translating per-harness CLI args (effort, model,
+// permission mode).
 
 /** Normalize a harness name for switch matching ("claude-code" → matches "claude"). */
 export function normHarness(h: string): string {

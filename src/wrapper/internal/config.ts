@@ -12,6 +12,11 @@ import {
 } from "../../internal/async/errors.ts";
 import { type Classifier } from "./classification.ts";
 import { harnessSupportsEffort, isSupportedEffort } from "./effort.ts";
+import { normHarness } from "./harnessargs.ts";
+import {
+  harnessSupportsPermissionMode,
+  isSupportedPermissionMode,
+} from "./permission.ts";
 import { type Emitter } from "../trace.ts";
 
 /**
@@ -44,6 +49,26 @@ export interface Config {
   effort?: string;
   /** Model override. */
   model?: string;
+  /**
+   * Launch-time permission posture. One of the five canonical rungs, least to
+   * most permissive: plan, manual, ask, auto, bypass. (`ask` sits ABOVE
+   * `manual` because it auto-accepts edits.)
+   *
+   * Per-harness NATIVE spellings are also accepted, and only on their own
+   * harness: claude takes acceptEdits, bypassPermissions and dontAsk; codex
+   * takes the sandbox values read-only, workspace-write and danger-full-access,
+   * each of which sets the `-s` axis ONLY, leaving approval at whatever
+   * ~/.codex/config.toml holds. Values are matched case-sensitively.
+   *
+   * codex `plan` is the launch half only: it pins the permissions axis
+   * (-s read-only -a untrusted) and leaves the collaboration axis unset — not
+   * launch-time parity with claude's plan.
+   *
+   * Only claude and codex have a launch-time permission axis. Argv shapes
+   * verified against claude-code >= 2.1.217 and codex-cli >= 0.144.5; see
+   * permission.ts.
+   */
+  permissionMode?: string;
   /** Quiet threshold (ms). */
   idleQuiet?: number;
   /** Classify threshold (ms). */
@@ -113,6 +138,33 @@ export function validateConfig(cfg: Config): Error | null {
     if (!harnessSupportsEffort(cfg.harness ?? "")) {
       return wrap(
         "wrapper: invalid config: Effort is only supported for claude and codex harnesses",
+        ErrInvalidConfig,
+      );
+    }
+  }
+  if (cfg.permissionMode && cfg.permissionMode !== "") {
+    // Order is load-bearing and deliberately INVERTS the effort block above:
+    // the HARNESS is checked first, then the value. The accepted vocabulary is
+    // per-harness, so checking the value first would report a confusing value
+    // error for `opencode` + `plan` instead of "harness not supported". Each
+    // message names the harness, so a codex caller is never advised to reach
+    // for a claude-only spelling.
+    const harness = cfg.harness ?? "";
+    if (!harnessSupportsPermissionMode(harness)) {
+      return wrap(
+        "wrapper: invalid config: PermissionMode is only supported for claude and codex harnesses",
+        ErrInvalidConfig,
+      );
+    }
+    if (!isSupportedPermissionMode(harness, cfg.permissionMode)) {
+      if (normHarness(harness) === "codex") {
+        return wrap(
+          "wrapper: invalid config: PermissionMode for codex must be one of plan, manual, ask, auto, bypass (or a native codex sandbox value: read-only, workspace-write, danger-full-access, which sets the -s axis only)",
+          ErrInvalidConfig,
+        );
+      }
+      return wrap(
+        "wrapper: invalid config: PermissionMode for claude must be one of plan, manual, ask, auto, bypass (or a native --permission-mode value: acceptEdits, auto, bypassPermissions, manual, dontAsk, plan)",
         ErrInvalidConfig,
       );
     }
