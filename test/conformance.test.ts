@@ -731,15 +731,34 @@ const WROTE_STATUS = new Set([
 const CODEX_BANNER = ">_ OpenAI Codex (v";
 
 /**
+ * The prime deadline this check launches with (Options.primeBound, the
+ * documented test-only override at conversation.ts ~:198).
+ *
+ * The PRODUCTION default is primeBoundGap = 800 ms (conversation.ts ~:311),
+ * deliberately tight so Open can never hang on the scrape. A cold codex against
+ * a FRESH CODEX_HOME does not reach a ready composer inside it: measured live on
+ * 2026-07-23 against 0.144.5, `awaitPromptReadyUntil` deadlines and
+ * primeSessionID records `not_written`, so `/status` is never typed and the box
+ * never renders. Under the default this check would therefore SKIP on every run
+ * — technically correct, permanently useless.
+ *
+ * Widening the bound HERE (and only here) is the honest fix: it changes how long
+ * the test is willing to wait, never what it asserts. It cannot manufacture a
+ * pass — a binary that stopped rendering the box still fails, just later.
+ */
+const PRIME_BOUND = 30_000;
+
+/**
  * How long to poll for the fully-painted `/status` box after Open returns.
  *
- * Open's own prime is bounded at primeBoundGap (800 ms, conversation.ts ~:311),
- * and the box paints TOP-DOWN — `Collaboration mode:` is the sixth of eight
- * rows. The META-HARNESS-155 probe recorded the consequence: the prime-time
- * cached reading came back `collaboration: "unknown"` on all three launches it
- * drove, purely because the row had not landed yet, while a replay of the
- * completed frame parses `default`. Reading ONCE the instant Open returns would
- * therefore assert against a half-painted box. Poll the live screen instead.
+ * primeSessionID exits as soon as BOTH the session id and the mode-box parse
+ * land, and `Permissions:` parses two rows ABOVE `Collaboration mode:` in a box
+ * that paints top-down — so Open can legitimately return on a frame where the
+ * collaboration row has not arrived. The META-HARNESS-155 probe recorded exactly
+ * that: the prime-time cached reading came back `collaboration: "unknown"` on
+ * all three launches it drove, while a replay of the completed frame parses
+ * `default`. Reading ONCE the instant Open returns would assert against a
+ * half-painted box, so poll the live screen until it settles.
  */
 const STATUS_PAINT_BOUND = 30_000;
 const STATUS_POLL_INTERVAL = 250;
@@ -854,6 +873,7 @@ describe("conformance: codex /status rows (CONFORMANCE=1)", () => {
           args: LAUNCH_ARGS,
           store: newMemStore(),
           inputPolicy: AutoAcceptTrust,
+          primeBound: PRIME_BOUND,
           activityInterval: 250,
           onActivity: (snap) => {
             if (fatal === "" && TERMINAL.includes(snap.status)) {
