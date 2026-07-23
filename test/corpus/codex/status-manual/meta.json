@@ -1,0 +1,23 @@
+{
+  "harness": "codex",
+  "binary_version": "0.144.5",
+  "recorded_at": "2026-07-23T06:52:46Z",
+  "cols": 120,
+  "rows": 40,
+  "hand_recorded": true,
+  "recorder": "test/corpus/tools/record-pty.ts --interactive",
+  "launch_flags": ["-s","workspace-write","-a","untrusted"],
+  "keystrokes": "see stdin.log",
+  "permissions_value": "Custom (workspace, untrusted)",
+  "collaboration_value": "Default",
+  "widest_status_row_cols": 95,
+  "status_box_outer_cols": 95,
+  "intrinsic_row_cols": {
+    "Directory:": 94,
+    "Session:": 62,
+    "Permissions:": 55,
+    "Collaboration mode:": 33
+  },
+  "redacted": "The live 'Account:' row carried the recording operator's ChatGPT login. It is replaced byte-for-byte with 'user@example.com' (16 chars in, 16 chars out), so every column of the box renders exactly as captured. This is the ONLY edit to bytes.raw.",
+  "notes": "Hand-recorded probe pinning the 'manual' rung: -s workspace-write -a untrusted renders 'Custom (workspace, untrusted)', CONFIRMING the predicted table row. This value is also the widest Permissions: value observed (intrinsic 55 cols). Widths are measured from the rendered 120x40 screen. widest_status_row_cols/status_box_outer_cols is the box's rendered width; intrinsic_row_cols is the minimum unwrapped width each row needs (opening bar + label column + value + closing bar), which is what CODEX_STATUS_MIN_COLS has to clear. NOTE the Session: row needs 62 cols, above the current CODEX_STATUS_MIN_COLS = 60 — a documented FOLLOW-UP to raise the constant with this evidence, not a defect here: both the session scrape and the permission parse anchor the closing bar on the same physical line, so a wrapped row fails closed at any width."
+}
