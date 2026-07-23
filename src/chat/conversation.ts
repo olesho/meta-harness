@@ -122,6 +122,12 @@ import {
   ClaudeModeBypassPermissions,
   PermissionModeBypass,
 } from "../wrapper/internal/permissionrungs.ts";
+import {
+  normalizePermissionRung,
+  parsePermissionMode,
+  type PermissionModeReading,
+  type PermissionModeSource,
+} from "./permission.ts";
 
 /** Options configures a single Conversation. Mirrors chat.Options. */
 export interface Options {
@@ -303,6 +309,17 @@ const authGateStabilizeGap = 2000;
 // primeBoundGap — the overall wall-clock bound on the startup session-id prime,
 // so Open can never hang on the /status scrape. (ms)
 const primeBoundGap = 800;
+
+/**
+ * How the startup session-id prime ended. Named at module level so the guarded
+ * setPrimeOutcome can take it as a parameter type.
+ */
+type PrimeOutcome =
+  | "captured"
+  | "too_narrow"
+  | "not_written"
+  | "written_uncaptured"
+  | "persist_failed";
 // submitEchoGap — the wall-clock bound on the wait between writing a message's
 // text and writing its submit key, while the composer echoes the text. (ms)
 const submitEchoGap = 1500;
@@ -488,12 +505,24 @@ export class Conversation {
    * other value (or undefined) keeps the fallback OFF — the scrape either worked,
    * was never primed, or is still viable. See extractSessionID.
    */
-  private primeOutcome?:
-    | "captured"
-    | "too_narrow"
-    | "not_written"
-    | "written_uncaptured"
-    | "persist_failed";
+  private primeOutcome?: PrimeOutcome;
+
+  /**
+   * Codex-only: the `/status` permission box parsed at PRIME time, stamped with
+   * the generation/timestamp of the frame it was read from — or undefined when
+   * the box was never observed.
+   *
+   * It has to be cached because Snapshot is viewport-only (src/screen/screen.ts):
+   * the box scrolls off after the first turn, so there is no later frame to
+   * re-read. Deliberately SEPARATE from primeOutcome, which describes the ID
+   * capture: this subtask decoupled the two, so `primeOutcome === "captured"`
+   * with the box never seen is a reachable state. Never set on claude — the
+   * claude footer is repainted every frame and is read live, caching nothing.
+   *
+   * Staleness is UNBOUNDED: codex's `/permissions` rewrites ~/.codex/config.toml
+   * globally mid-session, so a caller must weigh `generation`/`observedAt`.
+   */
+  private primeModeReading?: PermissionModeReading;
 
   eventCh: EventBus;
 
@@ -591,6 +620,91 @@ export class Conversation {
   /** A coherent point-in-time view of the rendered terminal. */
   screenSnapshot(): Snapshot {
     return this.screen.snapshot();
+  }
+
+  /**
+   * Reads the live permission mode. PURE: parses `snap` (defaulting to
+   * `screenSnapshot()`) plus the prime-time cached codex reading, writes
+   * nothing.
+   *
+   * Pass `snap` when you also need the CURRENT generation for a staleness
+   * comparison, so both come from one frame. Safe to call after close(): it
+   * returns the last frame's parse with a frozen `generation`.
+   *
+   * It NEVER touches the PTY — no `/status` write, no keystrokes, no store
+   * mutation. A getter that writes is a trap: on codex it would mutate the
+   * session, and `/status` mid-turn is refused anyway. An explicit re-probe
+   * belongs behind a control-token-gated refreshPermissionMode().
+   *
+   * Per harness:
+   *  - `claude-code` — a STRICT LIVE read of `snap`. The footer is repainted
+   *    every frame, so this is cheap and always current, and it is the only
+   *    semantics that cannot hand back a stale value dressed as a live one.
+   *    Nothing is cached; when the footer is absent (claude's blocking trust /
+   *    bypass dialogs, or a mid-render frame) it reports `observed: "unknown"`
+   *    with `source: "no_footer"` — come back next frame.
+   *  - `codex` — the `/status` box cached at prime time (Snapshot is
+   *    viewport-only, so the box is gone after the first turn). Staleness is
+   *    UNBOUNDED: `/permissions` rewrites ~/.codex/config.toml globally
+   *    mid-session, so weigh `generation`/`observedAt`. When the box was never
+   *    observed, `source` says why, derived from the prime outcome.
+   *  - everything else — no screen reader exists, so `observed: "unknown"` with
+   *    `source: "launch"`; only `requested`/`requestedRaw` carry information.
+   *
+   * KNOWN HOLE (reported honestly, never guessed): a resumed/reopened codex
+   * conversation never renders a `/status` box at all — openWithSession gates
+   * the prime on `!opts.resume` and primeSessionID returns early once
+   * harnessSessionID is seeded — so its reading is permanently
+   * `source: "not_primed"` until an explicit refresh lands.
+   */
+  permissionMode(snap?: Snapshot): PermissionModeReading {
+    const s = snap ?? this.screenSnapshot();
+    // `requested` is filled on EVERY reading, independent of `source`, and is
+    // never an input to the source derivation.
+    const rawReq = this.opts.permissionMode ?? "";
+    const requestedRaw = rawReq === "" ? undefined : rawReq;
+    // Normalized on the way in: without this a session launched with the native
+    // spelling `bypassPermissions` would report requested "bypassPermissions"
+    // against observed "bypass", and a caller diffing the two gets a false drift
+    // alarm. An off-ladder value (e.g. `dontAsk`) yields undefined, keeping the
+    // verbatim spelling in requestedRaw.
+    const requested = requestedRaw
+      ? normalizePermissionRung(requestedRaw, this.opts.harness)
+      : undefined;
+
+    if (this.opts.harness === "codex") {
+      const cached = this.primeModeReading;
+      if (cached) return { ...cached, requested, requestedRaw };
+      return {
+        requested,
+        requestedRaw,
+        observed: "unknown",
+        collaboration: "unknown",
+        source: this.codexUnobservedSource(),
+        generation: s.generation,
+        observedAt: new Date(),
+      };
+    }
+
+    const screen = parsePermissionMode(s.text, this.opts.harness);
+    if (!screen) {
+      // No reader for this harness (pi / opencode / generic / "").
+      return {
+        requested,
+        requestedRaw,
+        observed: "unknown",
+        source: "launch",
+        generation: s.generation,
+        observedAt: new Date(),
+      };
+    }
+    return {
+      ...screen,
+      requested,
+      requestedRaw,
+      generation: s.generation,
+      observedAt: new Date(),
+    };
   }
 
   /** The channel of turn-state transitions (async-iterable). */
@@ -1402,6 +1516,76 @@ export class Conversation {
       : primeBoundGap;
   }
 
+  // ── Permission-mode capture (codex /status box) ──────────────────────────
+
+  /**
+   * Write-once-after-"captured" setter for primeOutcome.
+   *
+   * primeOutcome is LOAD-BEARING, not diagnostic: maybeExtractSessionID's
+   * first-write branch passes `primeOutcome === "written_uncaptured"` as
+   * extractSessionID's allowDiskFallback, so a stray downgrade would arm the
+   * disk-locate backstop on a session whose id was already scraped. Until the
+   * mode capture was decoupled from the id capture, an early id `return`ed out
+   * of the prime loop and no later assignment could land; now the loop stays
+   * alive for the box, so BOTH the tail classification and the ErrInputPending
+   * catch can run after a capture. One guarded setter, not two ad-hoc `if`s.
+   */
+  private setPrimeOutcome(o: PrimeOutcome): void {
+    if (this.primeOutcome === "captured") return;
+    this.primeOutcome = o;
+  }
+
+  /**
+   * Parses the codex `/status` permission box off the CURRENT frame into
+   * primeModeReading. Returns true once the box has been captured (idempotent:
+   * a later frame never overwrites the first observation).
+   *
+   * "Captured" means a `Permissions:` row actually matched — i.e. `raw` is set.
+   * The row regexes require their closing │ on the same physical line, so a
+   * wrapped/truncated box fails CLOSED and we keep polling rather than caching a
+   * half-read value. Called only from the prime loop, which runs under the
+   * control token; the read itself writes nothing.
+   */
+  private captureModeFromScreen(): boolean {
+    if (this.primeModeReading) return true;
+    const snap = this.screenSnapshot();
+    const r = parsePermissionMode(snap.text, this.opts.harness);
+    if (!r || r.raw === undefined) return false;
+    this.primeModeReading = {
+      ...r,
+      generation: snap.generation,
+      observedAt: new Date(),
+    };
+    return true;
+  }
+
+  /**
+   * Why the codex `/status` box was never observed — a TOTAL function of the
+   * prime outcome, reusing primeOutcome's vocabulary rather than paralleling it.
+   *
+   * `"written_uncaptured"` is literally accurate for the `"captured"` row: the
+   * id landed (possibly from a `codex resume` hint that carries no box at all),
+   * `/status` WAS written, and the box was NOT captured.
+   */
+  private codexUnobservedSource(): PermissionModeSource {
+    switch (this.primeOutcome) {
+      case "captured":
+      case "written_uncaptured":
+      case "persist_failed":
+        return "written_uncaptured";
+      case "not_written":
+        return "not_written";
+      case "too_narrow":
+        return "too_narrow";
+      default:
+        // Unset: the prime never ran — resume/Reopen, or the id was already
+        // seeded. NEVER reachable on claude, whose primeSessionID returns before
+        // any outcome is recorded (no primeSessionIDKeys); reporting "we never
+        // primed" there would misdescribe an unpainted footer.
+        return "not_primed";
+    }
+  }
+
   /**
    * Primes the harness session id at first idle by writing the adapter's
    * primeSessionIDKeys (Codex: `/status`), which renders the id on screen, then
@@ -1425,7 +1609,7 @@ export class Conversation {
     // so skip the write entirely and let the /quit hint backstop.
     const cols = this.opts.cols && this.opts.cols > 0 ? this.opts.cols : 120;
     if (cols < codex.CODEX_STATUS_MIN_COLS) {
-      this.primeOutcome = "too_narrow";
+      this.setPrimeOutcome("too_narrow");
       return;
     }
 
@@ -1439,7 +1623,7 @@ export class Conversation {
       // Step 3: wait past interstitials/auto-dismiss for a ready prompt.
       const w0 = await this.awaitPromptReadyUntil(ctx, deadline.promise);
       if (w0 === "deadline") {
-        this.primeOutcome = "not_written";
+        this.setPrimeOutcome("not_written");
         return;
       }
 
@@ -1449,13 +1633,22 @@ export class Conversation {
 
       // Step 5: check-before-wait (a render landing right after the write, before
       // any subscription delivery, is otherwise missed), then poll under one
-      // subscription until captured or the deadline fires.
+      // subscription until BOTH halves are captured or the deadline fires.
+      //
+      // The two halves are DECOUPLED on purpose. extractSessionID tries the
+      // `codex resume <uuid>` hint FIRST (src/turns/harness/codex.ts), and a
+      // frame that yields the id that way carries no /status box at all — so
+      // exiting the instant the id lands would leave the permission box
+      // permanently unobserved. Cost: on an open where the id lands early and
+      // the box never renders, Open blocks the full prime bound (≤ 800 ms by
+      // default). When the box does render, id and box land in the same frame
+      // and the loop exits exactly as it did before.
       const [notify, unsubscribe] = this.screen.subscribe();
       try {
-        if (await this.captureFromScreen()) {
-          this.primeOutcome = "captured";
-          return;
-        }
+        let gotID = await this.captureFromScreen();
+        if (gotID) this.setPrimeOutcome("captured");
+        let gotBox = this.captureModeFromScreen();
+        if (gotID && gotBox) return;
         let resent = false;
         for (;;) {
           const which = await Promise.race([
@@ -1470,15 +1663,25 @@ export class Conversation {
           if (which === "ctx") throw ctx.err();
           if (which === "closed") throw ErrClosed;
           if (which === "changed") {
-            if (await this.captureFromScreen()) {
-              this.primeOutcome = "captured";
-              return;
+            if (!gotID && (await this.captureFromScreen())) {
+              gotID = true;
+              this.setPrimeOutcome("captured");
             }
+            if (!gotBox) gotBox = this.captureModeFromScreen();
+            if (gotID && gotBox) return;
             continue;
           }
           if (which === "half") {
-            // One-shot resend at the halfway mark: only when still empty and the
-            // composer prompt is ready. Consume the latch either way (at most one).
+            // One-shot resend at the halfway mark: only when something is still
+            // missing (the loop has already returned when both halves landed)
+            // and the composer prompt is ready. Consume the latch either way (at
+            // most one). Now that the loop outlives an early id capture this can
+            // fire on a path it never used to — deliberately: when the id came
+            // from the `codex resume` hint there is NO evidence the first
+            // /status write landed at all, so this IS the retry that gets the
+            // box on screen. The MAXIMUM is unchanged at two writes per open
+            // (the `resent` latch plus the readyForInput gate), exactly today's
+            // worst case of an id that never gets captured.
             resent = true;
             if (readyForInput(this.opts.harness, this.screen.snapshot().text)) {
               this.writeKeys(a.primeSessionIDKeys());
@@ -1495,11 +1698,16 @@ export class Conversation {
         // rendered — misclassifying `written_uncaptured` as `persist_failed`,
         // which is NOT in the firing gate set, so the fallback would then never
         // arm on the next TurnComplete (silently disabling itself).
+        //
+        // Guarded: reaching the deadline with the id ALREADY captured (the box
+        // never rendered) must not downgrade "captured" — that value keeps the
+        // disk fallback disarmed on the next TurnComplete.
         const [, parsed] = this.extractSessionID(false);
-        this.primeOutcome =
+        this.setPrimeOutcome(
           parsed && this.session.harnessSessionID === ""
             ? "persist_failed"
-            : "written_uncaptured";
+            : "written_uncaptured",
+        );
       } finally {
         unsubscribe();
       }
@@ -1507,7 +1715,11 @@ export class Conversation {
       // Capture misses are non-fatal; lifecycle/IO failures propagate. A
       // client-facing prompt we can't auto-dismiss is a miss, not a failure.
       if (err === ErrInputPending) {
-        this.primeOutcome = wrote ? "written_uncaptured" : "not_written";
+        // Guarded for the same reason as the tail classification: an id captured
+        // early followed by a pending prompt on the way out must stay
+        // "captured", not be downgraded to "written_uncaptured" (which arms the
+        // disk fallback).
+        this.setPrimeOutcome(wrote ? "written_uncaptured" : "not_written");
         return;
       }
       throw err;
