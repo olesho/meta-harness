@@ -155,8 +155,16 @@ describe("chat integration (real pty + fake harness)", () => {
     const script = New("codex")
       .Session(sessionID)
       .Idle()
-      // Absorb the startup /status prime (Open writes it before returning), then
-      // return to idle so the real turn drives the assertions below.
+      // Absorb BOTH startup /status writes (Open writes them before returning),
+      // then return to idle so the real turn drives the assertions below.
+      //
+      // Two, not one: the fake's Idle frame paints the `codex resume <uuid>`
+      // hint, so the prime captures the session id from the very first frame —
+      // but that frame carries no /status box, so the prime loop stays alive for
+      // the permission-mode read (META-HARNESS-111) and its one-shot halfway
+      // resend fires. Two writes is the primer's unchanged maximum.
+      .AwaitSubmit()
+      .Idle()
       .AwaitSubmit()
       .Idle()
       .AwaitSubmit()
@@ -176,8 +184,10 @@ describe("chat integration (real pty + fake harness)", () => {
 
   test("codex multi-turn completes on each Token-usage footer", async () => {
     const sentinels = ["CDX-AA", "CDX-BB"];
-    // Absorb the startup /status prime, then drive the real turns.
-    let b = New("codex").Idle().AwaitSubmit().Idle();
+    // Absorb both startup /status writes (the initial one and the halfway
+    // resend — see "codex Token-usage completes turn"), then drive the real
+    // turns.
+    let b = New("codex").Idle().AwaitSubmit().Idle().AwaitSubmit().Idle();
     for (const _ of sentinels) {
       b = b
         .AwaitSubmit()
