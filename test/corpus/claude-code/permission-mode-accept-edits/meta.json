@@ -1,0 +1,20 @@
+{
+  "harness": "claude-code",
+  "binary_version": "2.1.218",
+  "recorded_at": "2026-07-23T06:59:07.196Z",
+  "cols": 120,
+  "rows": 40,
+  "notes": "META-HARNESS-109. Permission-mode footer on the ACCEPT EDITS rung. Replayed by test/chat/permission.test.ts, which asserts observed 'acceptEdits' / source 'footer' / raw 'accept edits on'. Hand-recorded, NOT rebakeable: scripts/rebake-corpus.mjs SCENARIOS has no mode scenario and src/cli/screenbench-record.ts has no scripted-keystroke seam for Shift+Tab, so this was captured over the same PTY bridge test/corpus/tools/record-pty.ts --interactive uses (every keystroke logged; see keystrokes below). Adding a 'permission-modes' key to SCENARIOS is a follow-up gated on screenbench-record growing a --keys path. bytes.raw deliberately ENDS BEFORE the teardown: SIGTERM makes claude emit ESC[?1049l (leave alt-screen), and a stream ending with the alt-screen restore replays as a BLANK screen.",
+  "mode": "hand-recorded-interactive",
+  "recorder": "PTY bridge (src/wrapper/internal/pty.ts), the same one test/corpus/tools/record-pty.ts drives",
+  "keystrokes": [
+    "shift+tab (ESC [ Z) x2 — from the launch mode 'auto' through 'manual' to 'accept edits'"
+  ],
+  "cycle_order": "shift+tab cycles auto -> manual -> accept edits -> plan -> auto (bypass is NOT on the cycle)",
+  "footer_line": "⏵⏵ accept edits on (shift+tab to cycle)",
+  "footer_glyph_note": "Raw glyph run, as SERIALIZED THROUGH src/screen — hex codepoints of the leading cells of the footer line, recorded so a future VS16 (U+FE0F) change in claude's rendering shows up as a fixture diff rather than a silent unknown. Today's glyph is BARE ⏵ U+23F5 twice, no variation selector; compare the VS16-decorated shape '20,20,23f5,fe0f,23f5,fe0f,20,61'.",
+  "footer_glyph_hex_6": "20,20,23f5,23f5,20,61",
+  "footer_glyph_hex_8": "20,20,23f5,23f5,20,61,63,63",
+  "version_note": "claude --version reported 2.1.218 (the epic expected 2.1.217). Recorded here for the subtask that owns the src/versions/versions.json pin bump to cite; this task does NOT bump the pin.",
+  "spelling_note": "The recorded footer omits the ' · ← for agents' tail seen in the epic's table. The parser stops at the trailing ' on' and never runs to end-of-line, so the fragment — 'accept edits on' — is unchanged and src/chat/permission.ts needed no mapping-table edit."
+}

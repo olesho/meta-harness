@@ -1,0 +1,21 @@
+{
+  "harness": "claude-code",
+  "binary_version": "2.1.218",
+  "recorded_at": "2026-07-23T06:59:24.744Z",
+  "cols": 120,
+  "rows": 40,
+  "notes": "META-HARNESS-109. Permission-mode footer on the BYPASS PERMISSIONS rung. Replayed by test/chat/permission.test.ts, which asserts observed 'bypass' / source 'footer' / raw 'bypass permissions on'. UNLIKE the other three, this rung is NOT reachable by Shift+Tab — measured against 2.1.218, the cycle is a closed 4-ring (auto -> manual -> accept edits -> plan -> auto) and bypass sits off it, so the session was LAUNCHED into the rung with '--permission-mode bypassPermissions'. No 'Bypass Permissions mode' trust dialog was painted in this environment, so no dialog keystrokes were needed. Hand-recorded, NOT rebakeable: scripts/rebake-corpus.mjs SCENARIOS has no mode scenario and src/cli/screenbench-record.ts has no scripted-keystroke seam for Shift+Tab, so this was captured over the same PTY bridge test/corpus/tools/record-pty.ts --interactive uses. Adding a 'permission-modes' key to SCENARIOS is a follow-up gated on screenbench-record growing a --keys path. bytes.raw deliberately ENDS BEFORE the teardown: SIGTERM makes claude emit ESC[?1049l (leave alt-screen), and a stream ending with the alt-screen restore replays as a BLANK screen.",
+  "mode": "hand-recorded-interactive",
+  "recorder": "PTY bridge (src/wrapper/internal/pty.ts), the same one test/corpus/tools/record-pty.ts drives",
+  "launch_args": ["--permission-mode", "bypassPermissions"],
+  "keystrokes": [
+    "(none — bypass is off the shift+tab ring, so the session was launched directly into the rung)"
+  ],
+  "cycle_order": "shift+tab cycles auto -> manual -> accept edits -> plan -> auto (bypass is NOT on the cycle)",
+  "footer_line": "⏵⏵ bypass permissions on (shift+tab to cycle)",
+  "footer_glyph_note": "Raw glyph run, as SERIALIZED THROUGH src/screen — hex codepoints of the leading cells of the footer line, recorded so a future VS16 (U+FE0F) change in claude's rendering shows up as a fixture diff rather than a silent unknown. Today's glyph is BARE ⏵ U+23F5 twice, no variation selector; compare the VS16-decorated shape '20,20,23f5,fe0f,23f5,fe0f,20,61'.",
+  "footer_glyph_hex_6": "20,20,23f5,23f5,20,62",
+  "footer_glyph_hex_8": "20,20,23f5,23f5,20,62,79,70",
+  "version_note": "claude --version reported 2.1.218 (the epic expected 2.1.217). Recorded here for the subtask that owns the src/versions/versions.json pin bump to cite; this task does NOT bump the pin.",
+  "spelling_note": "The recorded footer omits the ' · ← for agents' tail seen in the epic's table. The parser stops at the trailing ' on' and never runs to end-of-line, so the fragment — 'bypass permissions on' — is unchanged and src/chat/permission.ts needed no mapping-table edit."
+}

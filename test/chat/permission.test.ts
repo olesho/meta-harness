@@ -142,18 +142,56 @@ describe("parsePermissionMode: claude-code footers", () => {
   });
 });
 
+/** Replays a recorded corpus stream into a 120x40 Screen and parses it. */
+async function replay(scenario: string) {
+  const bytes = corpusBytes("claude-code", scenario);
+  expect(bytes).not.toBeNull();
+  const scr = newScreen(120, 40);
+  await scr.write(bytes!);
+  return parsePermissionMode(scr.snapshot().text, "claude-code")!;
+}
+
 describe("parsePermissionMode: claude-code corpus replay", () => {
-  // Live 2.1.201 recordings, all painting "⏵⏵ auto mode on (shift+tab to cycle)".
+  // Live 2.1.201 recordings, all painting "⏵⏵ auto mode on (shift+tab to cycle)"
+  // at expected.txt:40. interrupted-mid-reply doubles as proof that the footer
+  // survives an interrupted turn.
   for (const scenario of ["interrupted-mid-reply", "multi-turn", "tool-call"]) {
     test(`${scenario} reports auto from the recorded footer`, async () => {
-      const bytes = corpusBytes("claude-code", scenario);
-      expect(bytes).not.toBeNull();
-      const scr = newScreen(120, 40);
-      await scr.write(bytes!);
-      const r = parsePermissionMode(scr.snapshot().text, "claude-code")!;
+      const r = await replay(scenario);
       expect(r.observed).toBe("auto");
       expect(r.source).toBe("footer");
       expect(r.raw).toBe("auto mode on");
+    });
+  }
+
+  // The four rungs the `auto` recordings cannot cover, hand-recorded against
+  // live claude 2.1.218 by cycling shift+tab (bypass is off the cycle, so it is
+  // launched with --permission-mode bypassPermissions). See each fixture's
+  // meta.json for the keystrokes and the glyph-run codepoints.
+  //
+  // THE load-bearing case: `manual` is the ONLY footer without the
+  // "(shift+tab to cycle)" suffix, and it is claude's current DEFAULT — a regex
+  // that required that suffix would silently fail to see the most common mode.
+  test("manual: the suffix-less footer still parses (regression)", async () => {
+    const r = await replay("permission-mode-manual");
+    expect(r.observed).toBe("manual");
+    expect(r.source).toBe("footer");
+    expect(r.raw).toBe("manual mode on");
+    // Recorded as "⏸ manual mode on" — no "(shift+tab to cycle)" tail at all.
+    expect(r.raw).not.toContain("shift+tab");
+  });
+
+  const rungs: [string, string, string][] = [
+    ["permission-mode-accept-edits", "acceptEdits", "accept edits on"],
+    ["permission-mode-plan", "plan", "plan mode on"],
+    ["permission-mode-bypass", "bypass", "bypass permissions on"],
+  ];
+  for (const [scenario, observed, raw] of rungs) {
+    test(`${scenario} reports ${observed} from the recorded footer`, async () => {
+      const r = await replay(scenario);
+      expect(r.observed).toBe(observed);
+      expect(r.source).toBe("footer");
+      expect(r.raw).toBe(raw);
     });
   }
 });
