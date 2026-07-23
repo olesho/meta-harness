@@ -473,6 +473,30 @@ describe("setPermissionMode: termination", () => {
     }
   });
 
+  // Gate 5 waits under awaitPromptReadyUntil rather than writing blind. When the
+  // composer never arrives the ctx bound is still reported in this method's own
+  // vocabulary — Stalled — not as a bare ctx error, and nothing is written.
+  test("a composer that never becomes ready is Stalled with zero keystrokes", async () => {
+    const r = newRing();
+    // A blocking dialog: readyForInput false, and no rung footer.
+    await r.screen.write(bypassDialogFrame);
+    const release = await r.conv.acquireControl(Context.background());
+    try {
+      const { ctx, cancel } = Context.withDeadline(Context.background(), 60);
+      try {
+        const before = r.bytes();
+        const err = await caught(r.conv.setPermissionMode(ctx, "plan"));
+        expect(isSentinel(err, ErrPermissionModeStalled)).toBe(true);
+        expect(String(err)).toContain("never reached a ready prompt");
+        expect(r.bytes() - before).toBe(0);
+      } finally {
+        cancel();
+      }
+    } finally {
+      release();
+    }
+  });
+
   test("a press that does not take is Stalled, not a silent re-press", async () => {
     const r = newRing({ presses: [null] });
     const release = await armed(r, "manual");

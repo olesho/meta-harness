@@ -1170,7 +1170,18 @@ export class Conversation {
         void dctx.done().then(resolve);
       });
       if (!readyForInput(harness, this.screen.snapshot().text)) {
-        const w = await this.awaitPromptReadyUntil(ctx, overall);
+        // ErrClosed and ErrInputPending are this method's OWN vocabulary and
+        // pass straight through; a bare ctx.err() is not — the ctx bound is
+        // documented as ErrPermissionModeStalled wherever it fires, and this is
+        // one of the places it can. Zero keystrokes either way.
+        const w = await this.awaitPromptReadyUntil(ctx, overall).catch(
+          (err: unknown) => {
+            if (isSentinel(err, ErrClosed) || isSentinel(err, ErrInputPending))
+              throw err;
+            if (ctx.isDone()) return "deadline" as const;
+            throw err;
+          },
+        );
         if (w === "deadline") {
           throw permissionStalled(
             `the harness never reached a ready prompt before the deadline; ` +
