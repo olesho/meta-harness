@@ -3,13 +3,13 @@ node_modules/
 .orche/
 *.log
 
-# harness transient runtime state (manifest.json is intentionally tracked)
-.harness/lock
-.harness/txn/
-.harness/session-*
+# veracity transient runtime state (manifest.json is intentionally tracked)
+.veracity/lock
+.veracity/txn/
+.veracity/session-*
 
 # This repo commits EXACTLY ONE lockfile: pnpm-lock.yaml (packageManager is
-# pnpm@*, CI uses pnpm/action-setup, `harness bootstrap` uses pnpm). The orche
+# pnpm@*, CI uses pnpm/action-setup, `veracity bootstrap` uses pnpm). The orche
 # release gate picks its frozen install command from whichever root lockfile it
 # finds, in the order bun.lock -> pnpm-lock.yaml -> `npm ci`, so ANY other root
 # lockfile hijacks the gate and runs a package manager nobody here maintains.

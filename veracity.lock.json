@@ -2,7 +2,9 @@
   "schemaVersion": 1,
   "layout": "single",
   "capabilities": {
-    "agents": ["claude"],
+    "agents": [
+      "claude"
+    ],
     "gitHooks": true,
     "ci": true,
     "agentDocs": true,

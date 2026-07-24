@@ -3,9 +3,7 @@
     "PostToolUse": [
       {
         "matcher": "Edit|Write|MultiEdit",
-        "hooks": [
-          { "type": "command", "command": "sh hooks/post-edit.sh claude" }
-        ]
+        "hooks": [{ "type": "command", "command": "sh hooks/post-edit.sh claude" }]
       }
     ],
     "Stop": [
@@ -15,9 +13,7 @@
     ],
     "SessionStart": [
       {
-        "hooks": [
-          { "type": "command", "command": "sh hooks/session-start.sh claude" }
-        ]
+        "hooks": [{ "type": "command", "command": "sh hooks/session-start.sh claude" }]
       }
     ]
   }

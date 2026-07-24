@@ -1,11 +1,11 @@
 ---
-name: harness-docs
-description: Refresh the architecture-diagram prose (module summaries and interface descriptions) for a harness-managed project. Use when `harness docs status` reports pending items, when the Stop hook notes stale summaries, or when the user asks to update the module/interface documentation or diagrams.
+name: veracity-docs
+description: Refresh the architecture-diagram prose (module summaries and interface descriptions) for a veracity-managed project. Use when `veracity docs status` reports pending items, when the Stop hook notes stale summaries, or when the user asks to update the module/interface documentation or diagrams.
 ---
 
-# harness-docs
+# veracity-docs
 
-The `harness` CLI extracts modules and interfaces from the AST and renders
+The `veracity` CLI extracts modules and interfaces from the AST and renders
 Markdown + HTML + SVG deterministically. It does **not** call an LLM — you (the
 running agent) write the prose. Your prose is cached by content hash, so it is
 only needed when code changes.
@@ -15,15 +15,15 @@ only needed when code changes.
 1. **Get the structures and what's pending.** Run:
 
    ```sh
-   harness docs status --json           # single-project repo
-   harness docs status --json <name>    # monorepo: name the project
+   veracity docs status --json           # single-project repo
+   veracity docs status --json <name>    # monorepo: name the project
    ```
 
    The JSON lists modules (id, name, path, doc comments, exports) and each
    module's interfaces (name, methods, doc comments). Items with
    `"needsSummary": true` / `"needsDescription": true` need prose from you.
 
-2. **Write grounded prose.** `harness docs status --template` prints a
+2. **Write grounded prose.** `veracity docs status --template` prints a
    ready-to-fill payload containing exactly the pending items with the right
    keys. For each pending module, write a 1–3 sentence `summary` of what it is
    responsible for — grounded ONLY in its name, path, doc comments, exported
@@ -43,13 +43,13 @@ only needed when code changes.
          "interfaces": { "<InterfaceName>": "…" }
        }
      }
-   }' | harness docs enrich --from -            # add <name> for monorepo
+   }' | veracity docs enrich --from -            # add <name> for monorepo
    ```
 
 4. **Render** the docs and diagrams:
 
    ```sh
-   harness docs render                          # add <name> for monorepo
+   veracity docs render                          # add <name> for monorepo
    ```
 
    This writes `docs/MODULES.md`, `docs/modules.html`, and `docs/modules.svg`.
