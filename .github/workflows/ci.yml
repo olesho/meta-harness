@@ -4,25 +4,27 @@ on:
   pull_request:
 
 jobs:
-  harness-ci:
+  veracity-ci:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      # Go is always required to install the pinned harness binary itself.
-      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+      # Go is always required to install the pinned veracity binary itself.
+      - uses: actions/setup-go@v5
         with:
-          go-version: "1.24"
-      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+          go-version: "1.26"
+      # pnpm version comes from package.json "packageManager"; passing it here
+      # too makes pnpm/action-setup error ("Multiple versions of pnpm specified").
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: "22"
-      - name: Install pinned harness
-        run: go install github.com/olesho/harness/cmd/harness@$(cat .harness-version)
+      - name: Install pinned veracity
+        run: go install github.com/olesho/veracity/cmd/veracity@$(cat .veracity-version)
       - name: Install dependencies
-        run: harness bootstrap
+        run: veracity bootstrap
       - name: Install pinned analyzers
-        run: harness install-tools
-      - name: harness ci
-        run: harness ci
+        run: veracity install-tools
+      - name: veracity ci
+        run: veracity ci

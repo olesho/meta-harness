@@ -1,0 +1,49 @@
+{
+  "schemaVersion": 1,
+  "files": {
+    ".claude/settings.json": {
+      "hash": "38d755eec598158199d50712d7181a4277ba89ef102fc2c2fabc289d68d1e525",
+      "kind": "managed"
+    },
+    ".claude/skills/veracity-docs/SKILL.md": {
+      "hash": "b12f1d36a8a4b69ca1822398bad5666156253678205f733952c3529c389789a9",
+      "kind": "managed"
+    },
+    ".claude/skills/veracity/SKILL.md": {
+      "hash": "d183239d7406e255b982a9e4f907af010af37baedb4f149e3932d9fbcd077592",
+      "kind": "managed"
+    },
+    ".github/workflows/ci.yml": {
+      "hash": "1db21c4b122fdbcaae05a357cc1ed910336086038f83e6ca7993811dbb61fec4",
+      "kind": "managed"
+    },
+    "AGENTS.md": {
+      "hash": "45ccc9d2c6f313b4a8e9b20b1cd9f48ad0da7d49d3ceb0c98d63d08c7983ba79",
+      "kind": "managed"
+    },
+    "CLAUDE.md": {
+      "hash": "50d71283d5dffc152b46986a2d43991480b166c9859bea0a15735a20da2829d7",
+      "kind": "managed"
+    },
+    "SETUP.md": {
+      "hash": "d3fcdef1dafebfe62292f75877cd9ed74d67397c6bd7a392e55bf08c0fd181c0",
+      "kind": "managed"
+    },
+    "docs/ci-setup.md": {
+      "hash": "f432c79436faafc31d7c6a7970eef2ba12b259d18b0666d10003e7934db5158b",
+      "kind": "managed"
+    },
+    "hooks/post-edit.sh": {
+      "hash": "26063999f59a7d4d88949e769a97002500846a6bcf2e7141a2daff205445a3b9",
+      "kind": "managed"
+    },
+    "hooks/session-start.sh": {
+      "hash": "8e11a73bca10780debbac98bfdb212913409d2d00a897d9a2bbf60e545626747",
+      "kind": "managed"
+    },
+    "hooks/stop.sh": {
+      "hash": "a388014effda0f9133d32fd83b79b69ed555e37c36a368933aa63bc2f847bf19",
+      "kind": "managed"
+    }
+  }
+}
