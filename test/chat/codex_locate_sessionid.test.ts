@@ -116,28 +116,31 @@ describe("codex locateSessionID adapter", () => {
     ]);
   });
 
-  test("production path: delegation resolves ~/.codex/sessions via CodexReader", () => {
+  test("production path: delegation resolves the sessions root via CodexReader", () => {
     // sessionsRoot === "" (the production default). The bare locateLatestSession
     // would readdirSync("") and no-op; going through CodexReader.resolveRoot()
-    // resolves homedir()/.codex/sessions, which we point at a temp HOME.
-    const home = tempDir("locate-home-");
+    // resolves the real sessions root, which we point at a temp dir.
+    //
+    // We drive resolveRoot's $CODEX_HOME rung, NOT its homedir() fallback: under
+    // Bun on macOS, os.homedir() reads the passwd database and ignores a
+    // reassigned process.env.HOME, so a HOME-based sandbox silently resolves to
+    // the developer's real ~/.codex/sessions (which has no rollout for this temp
+    // cwd) and the assertion returns ["", false] — non-hermetic and macOS-red.
+    // CODEX_HOME is a plain env var resolveRoot reads directly
+    // (src/transcript/codex/codex.ts:85), so it sandboxes reliably on every
+    // runtime. resolveRoot's homedir() path composition is covered separately by
+    // test/transcript/codex/codex.test.ts.
+    const codexHome = tempDir("locate-codexhome-");
     const cwd = tempDir("locate-home-cwd-");
     const uuid = "019f0b02-0000-7013-a43a-00000000b002";
-    writeCodexRollout(join(home, ".codex", "sessions"), uuid, cwd);
+    writeCodexRollout(join(codexHome, "sessions"), uuid, cwd);
 
     const adapter = codex.New(); // sessionsRoot stays "" — the production shape
-    const savedHome = process.env.HOME;
-    // CODEX_HOME outranks homedir() in resolveRoot(); clear it so an AMBIENT
-    // isolated home in the developer's shell can't send this assertion to a
-    // different root. Restored with HOME below.
     const savedCodexHome = process.env.CODEX_HOME;
     try {
-      process.env.HOME = home;
-      delete process.env.CODEX_HOME;
+      process.env.CODEX_HOME = codexHome;
       expect(adapter.locateSessionID(cwd)).toEqual([uuid, true]);
     } finally {
-      if (savedHome === undefined) delete process.env.HOME;
-      else process.env.HOME = savedHome;
       if (savedCodexHome === undefined) delete process.env.CODEX_HOME;
       else process.env.CODEX_HOME = savedCodexHome;
     }
