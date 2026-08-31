@@ -220,7 +220,11 @@ export class ClaudeCodeAdapter extends GenericAdapter implements Adapter {
           input: req,
         });
       }
-    } else if (this.lastInputID !== "") {
+    } else if (det !== DetectUnparseable && this.lastInputID !== "") {
+      // An unparseable frame means the dialog is STILL up, merely unreadable —
+      // resolving here would report an answer nobody gave. The request is held
+      // until the screen genuinely leaves the dialog (none / pending), which it
+      // will: unparseable requires the anchor to be present.
       const resolved = this.lastInput ?? {
         id: this.lastInputID,
         kind: "",
@@ -261,7 +265,12 @@ export class ClaudeCodeAdapter extends GenericAdapter implements Adapter {
       this.lastUnparseableFingerprint = "";
       return [];
     }
-    const split = anchorSplit(text);
+    // Startup anchors win, the question path is the fallback — the same order
+    // DetectInputDetail uses, so the report quotes the dialog that produced the
+    // state. Note this slice is tab-INCLUSIVE (see questionAnchorSplit) while
+    // the pending/unparseable discriminator uses the strict option-row region:
+    // the evidence has to be readable, the state must not depend on the tab.
+    const split = anchorSplit(text) ?? questionAnchorSplit(text);
     if (!split) return [];
     const [anchor, after] = split;
     const lines = candidateLines(after);
@@ -568,11 +577,10 @@ export function DetectInputDetail(
   else if (text.includes(trustAnchorAlt)) prompt = trustAnchorAlt;
   else if (text.includes(bypassAnchor)) prompt = bypassAnchor;
   else {
-    // No startup anchor: fall through to the question dialogs exactly as
-    // before. DetectQuestion has its own render-completeness guards, so a null
-    // from it stays "none" — it is never reported as an unreadable dialog.
-    const q = DetectQuestion(text);
-    return [q, q ? DetectOK : DetectNone];
+    // No startup anchor: the question dialogs own the frame. They carry the
+    // same four states (see DetectQuestionDetail) — this used to short-circuit
+    // to none/ok, which reported an unreadable question pane as no dialog.
+    return DetectQuestionDetail(text);
   }
 
   // Everything the selector parser looks at must come AFTER the anchor: "❯" is
@@ -611,34 +619,41 @@ function anchorSplit(text: string): [string, string] | null {
   return [anchor, text.slice(text.indexOf(anchor) + anchor.length)];
 }
 
-/**
- * inputFingerprint hashes an anchor plus the raw candidate lines under it, the
- * dedup key for the unrecognized-dialog report. Same shape as inputID.
- */
-function inputFingerprint(anchor: string, lines: string[]): string {
-  const sum = createHash("sha256")
-    .update([anchor, ...lines].join("\0"))
-    .digest();
-  return sum.subarray(0, 8).toString("hex");
+/** Which AskUserQuestion pane questionRegion identified. */
+type QuestionPane = "question" | "review";
+
+/** The AskUserQuestion dialog's location in a rendered frame. */
+interface QuestionRegion {
+  pane: QuestionPane;
+  /** The anchor that proved this is a dialog; quoted in the Errored report. */
+  anchor: string;
+  lines: string[];
+  /** Index of the tab-strip line — the dialog's top edge. */
+  tabIdx: number;
+  /** Review pane only: index of the "Ready to submit your answers?" line. */
+  anchorIdx: number;
+  /** Half-open option-row range. EXCLUDES the composer, which sits above. */
+  from: number;
+  to: number;
 }
 
 /**
- * DetectQuestion recognizes the AskUserQuestion dialog Claude Code renders
- * when the model asks the user a clarifying question mid-turn (verified live
- * against 2.1.210). Two panes exist:
+ * questionRegion locates the AskUserQuestion dialog in the rendered frame: the
+ * tab-strip line that is its top edge, the anchor that proves it is a dialog
+ * rather than a to-do list, and the half-open line range [from, to) holding its
+ * option rows.
  *
- *   - a QUESTION pane (kind "question"): tab-strip line, question text,
- *     numbered options, "Enter to select ·…" footer. Digit keys select an
- *     option directly (single-select) or toggle its checkbox (multi-select).
- *   - a REVIEW pane (kind "question_review"): after the last question of a
- *     multi-question or multi-select dialog — an answers summary plus a
- *     "Ready to submit your answers?" Submit/Cancel menu, no select footer.
+ * It is the SINGLE anchor scan for the question path — DetectQuestion,
+ * DetectQuestionDetail and the unrecognized-dialog report all go through it, so
+ * they cannot disagree about which pane, or which anchor, is on screen.
  *
- * Returns null when neither pane is fully rendered. While either pane is up
- * the harness is idle-but-not-ready: no busy marker, no end-of-turn marker,
- * no empty composer — without this detection the turn would hang silently.
+ * Returns null when there is no question dialog. The tab-strip glyphs (☐/☒)
+ * also occur in rendered to-do lists inside a reply, so the tab line ALONE is
+ * never enough: an anchor below it (the footer, or the review confirmation) is
+ * required. That threshold is what keeps a to-do list reported as "none"
+ * instead of "a dialog we could not read".
  */
-export function DetectQuestion(text: string): InputRequest | null {
+function questionRegion(text: string): QuestionRegion | null {
   const lines = text.split("\n");
 
   // The tab-strip line is the dialog's top edge; the dialog sits below any
@@ -658,30 +673,15 @@ export function DetectQuestion(text: string): InputRequest | null {
       if (lines[i].includes(questionReviewAnchor)) anchorIdx = i;
     }
     if (anchorIdx >= 0) {
-      const parsed = parseQuestionRegion(lines, anchorIdx + 1, lines.length);
-      if (parsed.options.length === 0) return null; // menu not rendered yet
-      const body = lines
-        .slice(tabIdx + 1, anchorIdx + 1)
-        .map((ln) => ln.trim())
-        .filter((ln) => ln !== "" && !boxOrRuleRE.test(ln))
-        .join("\n");
-      const req: InputRequest = {
-        id: "",
-        kind: "question_review",
-        prompt: body,
-        options: parsed.options.map((o) => ({
-          id: o.id,
-          alias: reviewAlias(o.label),
-          label: o.label,
-          // Digit selects on this widget; the trailing CR is a no-op backstop
-          // for a build where the digit only moves the highlight. After the
-          // review pane the dialog is gone, so a stray CR cannot mis-select.
-          keys: enc.encode(o.id + "\r"),
-          ...(o.description !== "" ? { description: o.description } : {}),
-        })),
+      return {
+        pane: "review",
+        anchor: questionReviewAnchor,
+        lines,
+        tabIdx,
+        anchorIdx,
+        from: anchorIdx + 1,
+        to: lines.length,
       };
-      req.id = inputID(req);
-      return req;
     }
     // No review anchor: an unanswered question pane also carries the Submit
     // tab (multi-question / multi-select) — fall through to the question path.
@@ -693,8 +693,136 @@ export function DetectQuestion(text: string): InputRequest | null {
     if (lines[i].trim().startsWith(questionFooterAnchor)) footerIdx = i;
   }
   if (footerIdx < 0) return null;
+  // from = tabIdx+1, never 0: the composer glyph "❯" renders ABOVE the tab
+  // line, so a region that started at the top of the frame would let the
+  // composer make every frame look choice-shaped.
+  return {
+    pane: "question",
+    anchor: questionFooterAnchor,
+    lines,
+    tabIdx,
+    anchorIdx: -1,
+    from: tabIdx + 1,
+    to: footerIdx,
+  };
+}
 
-  const parsed = parseQuestionRegion(lines, tabIdx + 1, footerIdx);
+/**
+ * questionAnchorSplit is anchorSplit's counterpart for the AskUserQuestion
+ * panes: the anchor DetectQuestionDetail matched, plus the evidence text for
+ * the report. The evidence starts at the TAB-STRIP line rather than at
+ * `from`, so an operator reading the log sees which question ("☐ Color") and
+ * its text, not just the rows that defeated the parser.
+ */
+function questionAnchorSplit(text: string): [string, string] | null {
+  const r = questionRegion(text);
+  if (!r) return null;
+  return [r.anchor, r.lines.slice(r.tabIdx, r.to).join("\n")];
+}
+
+/**
+ * inputFingerprint hashes an anchor plus the raw candidate lines under it, the
+ * dedup key for the unrecognized-dialog report. Same shape as inputID.
+ */
+function inputFingerprint(anchor: string, lines: string[]): string {
+  const sum = createHash("sha256")
+    .update([anchor, ...lines].join("\0"))
+    .digest();
+  return sum.subarray(0, 8).toString("hex");
+}
+
+/**
+ * DetectQuestionDetail recognizes the AskUserQuestion dialog and reports which
+ * of the four Detection states the frame is in. DetectQuestion is the nullable
+ * wrapper over it, kept source-compatible for callers that only need "can I
+ * answer this?".
+ *
+ * The states exist here for the same reason they exist on the startup path
+ * (see Detection): a question pane whose anchor is up but whose rows do not
+ * parse is a PERMANENT blocking state, and reporting it as "no dialog" leaves
+ * the turn hanging with nothing naming the cause.
+ *
+ * On claude 2.1.251 the rows are still numbered and this never fires
+ * (PUPPET-301 verified live; see test/corpus/claude-code/question-single). It
+ * is defence in depth against a build that drops the digits the way 2.1.251's
+ * folder-trust dialog did — see menuSelector.ts.
+ */
+export function DetectQuestionDetail(
+  text: string,
+): [InputRequest | null, Detection] {
+  // The ok path goes through DetectQuestion untouched by construction; only
+  // the decline path pays for the second questionRegion scan.
+  const req = DetectQuestion(text);
+  if (req) return [req, DetectOK];
+
+  const r = questionRegion(text);
+  if (!r) return [null, DetectNone];
+
+  // Anchor is up and DetectQuestion still declined. Same discriminator the
+  // startup path uses: if anything choice-SHAPED has painted, the menu is
+  // there and we failed to read it (permanent, must be loud); if not, the
+  // dialog is still painting (transient, must be silent). DetectQuestion
+  // declines for four distinct reasons and this deliberately does not care
+  // which — a fully painted menu we refuse to build a request from (an empty
+  // preamble, say) is the loud case, not the transient one.
+  const region = r.lines.slice(r.from, r.to).join("\n");
+  return [
+    null,
+    hasChoiceShapedLine(region) ? DetectUnparseable : DetectPending,
+  ];
+}
+
+/**
+ * DetectQuestion recognizes the AskUserQuestion dialog Claude Code renders
+ * when the model asks the user a clarifying question mid-turn (verified live
+ * against 2.1.210). Two panes exist:
+ *
+ *   - a QUESTION pane (kind "question"): tab-strip line, question text,
+ *     numbered options, "Enter to select ·…" footer. Digit keys select an
+ *     option directly (single-select) or toggle its checkbox (multi-select).
+ *   - a REVIEW pane (kind "question_review"): after the last question of a
+ *     multi-question or multi-select dialog — an answers summary plus a
+ *     "Ready to submit your answers?" Submit/Cancel menu, no select footer.
+ *
+ * Returns null when neither pane is fully rendered. While either pane is up
+ * the harness is idle-but-not-ready: no busy marker, no end-of-turn marker,
+ * no empty composer — without this detection the turn would hang silently.
+ */
+export function DetectQuestion(text: string): InputRequest | null {
+  const r = questionRegion(text);
+  if (r === null) return null;
+  const { lines, tabIdx, anchorIdx } = r;
+  const tabLine = lines[tabIdx];
+  const parsed = parseQuestionRegion(lines, r.from, r.to);
+
+  // Review pane: Submit tab + confirmation anchor below the tab line.
+  if (r.pane === "review") {
+    if (parsed.options.length === 0) return null; // menu not rendered yet
+    const body = lines
+      .slice(tabIdx + 1, anchorIdx + 1)
+      .map((ln) => ln.trim())
+      .filter((ln) => ln !== "" && !boxOrRuleRE.test(ln))
+      .join("\n");
+    const req: InputRequest = {
+      id: "",
+      kind: "question_review",
+      prompt: body,
+      options: parsed.options.map((o) => ({
+        id: o.id,
+        alias: reviewAlias(o.label),
+        label: o.label,
+        // Digit selects on this widget; the trailing CR is a no-op backstop
+        // for a build where the digit only moves the highlight. After the
+        // review pane the dialog is gone, so a stray CR cannot mis-select.
+        keys: enc.encode(o.id + "\r"),
+        ...(o.description !== "" ? { description: o.description } : {}),
+      })),
+    };
+    req.id = inputID(req);
+    return req;
+  }
+
+  // Question pane: the rows between the tab line and the footer.
   if (parsed.options.length === 0 || parsed.preamble === "") return null;
 
   const multiSelect = parsed.multiSelect;

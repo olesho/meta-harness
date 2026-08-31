@@ -156,6 +156,23 @@ export declare function DetectInput(text: string): InputRequest | null;
  */
 export declare function DetectInputDetail(text: string): [InputRequest | null, Detection];
 /**
+ * DetectQuestionDetail recognizes the AskUserQuestion dialog and reports which
+ * of the four Detection states the frame is in. DetectQuestion is the nullable
+ * wrapper over it, kept source-compatible for callers that only need "can I
+ * answer this?".
+ *
+ * The states exist here for the same reason they exist on the startup path
+ * (see Detection): a question pane whose anchor is up but whose rows do not
+ * parse is a PERMANENT blocking state, and reporting it as "no dialog" leaves
+ * the turn hanging with nothing naming the cause.
+ *
+ * On claude 2.1.251 the rows are still numbered and this never fires
+ * (PUPPET-301 verified live; see test/corpus/claude-code/question-single). It
+ * is defence in depth against a build that drops the digits the way 2.1.251's
+ * folder-trust dialog did — see menuSelector.ts.
+ */
+export declare function DetectQuestionDetail(text: string): [InputRequest | null, Detection];
+/**
  * DetectQuestion recognizes the AskUserQuestion dialog Claude Code renders
  * when the model asks the user a clarifying question mid-turn (verified live
  * against 2.1.210). Two panes exist:

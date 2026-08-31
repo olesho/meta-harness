@@ -107,7 +107,14 @@ The most fully-supported harness. Name `claude-code`, binary `claude`.
   multi-question, multi-select, with the UI's free-text ("Type something.", alias
   `other`) and "Chat about this" affordances parsed as options. Selection mechanics are
   encoded in the option `keys`: a bare digit selects (or toggles, for multi-select;
-  `submitKeys` = Tab commits), while the two UI affordances need digit+CR. See
+  `submitKeys` = Tab commits), while the two UI affordances need digit+CR. The
+  question panes carry the same four detection states as the startup dialogs: a
+  pane whose anchor (the `Enter to select ·` footer, or the review pane's
+  `Ready to submit your answers?`) is on screen but whose rows cannot be parsed
+  is reported as an `Errored` naming the dialog, never as "no dialog", and never
+  resolves a request nobody answered. On 2.1.251 those rows are still numbered,
+  so that state is a guard against a future build rather than a live failure.
+  See
   [Guides › Handling input](guides/handling-input.md#clarifying-questions-question--question_review).
 - **Wrapper patterns.** Rich: API-error lines (with tree-glyph prefixes), session-limit
   banners (`… resets HH:MM (TZ)` → a `resumeAt` instant), plus cost/retry/prompt
