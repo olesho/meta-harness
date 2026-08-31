@@ -7,6 +7,7 @@
 // disposable one-shot contract the Go `harness-wrapper run` provided: prompt in,
 // clean reply out, one turn, then exit.
 import { Open, newMemStore, DispositionAnswer, EventTurn, RoleAssistant, TurnStateComplete, TurnStateErrored, } from "../chat/index.js";
+import { isClaudeNestingEnvKey } from "../chat/env.js";
 import { Context, ctxDeadlineExceeded } from "../internal/async/index.js";
 /** Thrown when the run's deadline (or an ancestor deadline) fired before completion. */
 export class DeadlineError extends Error {
@@ -42,9 +43,14 @@ export const AutoAcceptTrust = {
         trust_prompt: { kind: DispositionAnswer, optionID: "proceed" },
     },
 };
-/** Environment keys that leak the outer Claude Code session into the child harness. */
+/**
+ * Environment keys that leak the outer Claude Code session into the child
+ * harness. Delegates to {@link isClaudeNestingEnvKey}, the canonical definition
+ * in src/chat/env.ts — including its CLAUDE_CODE_OAUTH_TOKEN exemption, which
+ * is a credential rather than a nesting marker (PUPPET-309).
+ */
 export function isLeakedClaudeEnv(key) {
-    return key === "CLAUDECODE" || key.startsWith("CLAUDE_CODE_");
+    return isClaudeNestingEnvKey(key);
 }
 /**
  * cleanEnv returns `env` (KEY=VALUE strings) with the CLAUDECODE / CLAUDE_CODE_*

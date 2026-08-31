@@ -45,6 +45,7 @@ import { basename, dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { resolveAdapter } from "../chat/index.ts";
+import { isClaudeNestingEnvKey } from "../chat/env.ts";
 import {
   readyForInput,
   requiresPromptReadiness,
@@ -293,11 +294,16 @@ function manifestBinary(harness: string): string {
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
-/** process.env minus the outer Claude Code session markers (mirrors cleanHarnessEnv). */
+/**
+ * process.env minus the outer Claude Code session markers. Delegates to the
+ * canonical predicate behind cleanHarnessEnv, so the CLAUDE_CODE_OAUTH_TOKEN
+ * credential survives (PUPPET-309); the record shape is kept because
+ * PtyProcess.spawn takes a Record here, not KEY=VALUE entries.
+ */
 function cleanedEnv(): Record<string, string> {
   const out: Record<string, string> = {};
   for (const [k, v] of Object.entries(process.env)) {
-    if (k === "CLAUDECODE" || k.startsWith("CLAUDE_CODE_")) continue;
+    if (isClaudeNestingEnvKey(k)) continue;
     if (v !== undefined) out[k] = v;
   }
   return out;

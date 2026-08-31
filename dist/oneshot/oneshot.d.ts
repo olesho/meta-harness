@@ -66,7 +66,12 @@ export declare class EmptyPromptError extends Error {
  * run.go one-shot `AUTO_ACCEPT_TRUST` input policy.
  */
 export declare const AutoAcceptTrust: InputPolicy;
-/** Environment keys that leak the outer Claude Code session into the child harness. */
+/**
+ * Environment keys that leak the outer Claude Code session into the child
+ * harness. Delegates to {@link isClaudeNestingEnvKey}, the canonical definition
+ * in src/chat/env.ts — including its CLAUDE_CODE_OAUTH_TOKEN exemption, which
+ * is a credential rather than a nesting marker (PUPPET-309).
+ */
 export declare function isLeakedClaudeEnv(key: string): boolean;
 /**
  * cleanEnv returns `env` (KEY=VALUE strings) with the CLAUDECODE / CLAUDE_CODE_*

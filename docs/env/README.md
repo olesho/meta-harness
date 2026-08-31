@@ -27,7 +27,9 @@ The word "env" now means **three different things** in this codebase. This secti
 
 **What it is:** Claude nesting markers and env-var stripping logic that keeps a harness's **nested invocation** clean.
 
-**Key concept:** When a harness invokes Claude-in-guest, we strip `CLAUDE_*` / `CODEX_*` env vars to avoid the guest seeing the host's Claude context. The canonical predicate is `isClaudeNestingEnvKey` (line 15).
+**Key concept:** When a harness invokes Claude-in-guest, we strip Claude Code's nesting markers — `CLAUDECODE` and `CLAUDE_CODE_*` — to avoid the guest seeing the host's Claude context. The canonical predicate is `isClaudeNestingEnvKey`.
+
+**One exemption:** `CLAUDE_CODE_OAUTH_TOKEN` matches the prefix but is claude's headless credential (`claude setup-token`), not a marker a running claude exports. Stripping it left the spawned harness unauthenticated wherever the token is the only working auth, so it painted the login wall and the turn never completed (PUPPET-309). It is exempt by exact match. Note that this is a _nesting_ predicate, not a containment filter: it never governs what crosses into a guest/sandbox, where `src/env-daytona/leak-probe.ts` independently treats the same key as sensitive. Do not reuse the exemption there.
 
 **When you see it:** In harness initialization code that sets up a nested Claude session.
 
@@ -49,11 +51,9 @@ The word "env" now means **three different things** in this codebase. This secti
 
 ## The Canonical Nesting Predicate
 
-Both `isLeakedClaudeEnv` (in `src/oneshot/oneshot.ts:82`) and `isClaudeNestingEnvKey` (in `src/chat/env.ts:15`) implement **identical logic**: they check if an env var name is a Claude/Codex marker that should not cross a nesting boundary.
+`isClaudeNestingEnvKey` (in `src/chat/env.ts`) is the **canonical definition**: it decides whether an env var name is a nesting marker that must not cross a nesting boundary. Code that needs that check imports it rather than reimplementing it.
 
-**The standard:** `isClaudeNestingEnvKey` is the canonical definition. Code that needs to detect nesting markers should import and use this, not reimplement the check.
-
-**Future cleanup:** These two functions are equivalent duplicates today. Consolidating them — perhaps by making `isLeakedClaudeEnv` call `isClaudeNestingEnvKey` — is optional but desirable to avoid drift if the list changes.
+**Consolidated (PUPPET-309):** `isLeakedClaudeEnv` (`src/oneshot/oneshot.ts`) and the inline `cleanedEnv()` copies in `src/cli/screenbench-record.ts` and `test/corpus/tools/record-scenarios.ts` now all delegate to it. They used to re-implement the check, and the drift this doc warned about duly happened: adding the `CLAUDE_CODE_OAUTH_TOKEN` exemption to `env.ts` alone would have left one-shot runs and both live recorders spawning an unauthenticated claude. Keep them delegating.
 
 ---
 

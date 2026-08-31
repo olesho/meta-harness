@@ -7,12 +7,40 @@
 // persistence, and never writes the JSONL transcript the reply readers depend
 // on. Removing them makes the nested `claude` run as a top-level, persisting
 // session.
+//
+// One CLAUDE_CODE_* key is exempt: CLAUDE_CODE_OAUTH_TOKEN is a credential, not
+// a nesting marker. See NESTING_EXEMPT below.
 
 const NESTING_KEY = "CLAUDECODE";
 const NESTING_PREFIX = "CLAUDE_CODE_";
 
-/** True for CLAUDECODE and any CLAUDE_CODE_* variable (the nesting markers). */
+/**
+ * Keys that match NESTING_PREFIX but are NOT nesting markers, so they must
+ * survive the scrub.
+ *
+ * CLAUDE_CODE_OAUTH_TOKEN is claude's long-lived headless credential
+ * (`claude setup-token`) — the equivalent of a ~/.claude login, not a marker a
+ * running claude exports. Stripping it makes the spawned harness start
+ * unauthenticated in any environment whose only working auth is the token, so
+ * it paints the login wall and the turn never completes (PUPPET-309). loomcli
+ * makes the same exemption: internal/cli/envfilter/envfilter.go (exact
+ * allowlist) and internal/driver/env.go's trustedLocalProviderCredentials.
+ *
+ * This is a NESTING predicate, not a containment filter: it never governs what
+ * crosses into a guest/sandbox (see src/env-daytona/leak-probe.ts, which
+ * independently treats this key as sensitive in-guest). Do not reuse it there.
+ *
+ * Exact match only — CLAUDE_CODE_OAUTH_TOKEN_FILE and friends are still
+ * stripped.
+ */
+const NESTING_EXEMPT = new Set(["CLAUDE_CODE_OAUTH_TOKEN"]);
+
+/**
+ * True for CLAUDECODE and any CLAUDE_CODE_* variable (the nesting markers),
+ * except the credential keys in {@link NESTING_EXEMPT}.
+ */
 export function isClaudeNestingEnvKey(key: string): boolean {
+  if (NESTING_EXEMPT.has(key)) return false;
   return key === NESTING_KEY || key.startsWith(NESTING_PREFIX);
 }
 

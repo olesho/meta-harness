@@ -19,6 +19,7 @@ import {
   type InputPolicy,
   type Turn,
 } from "../chat/index.ts";
+import { isClaudeNestingEnvKey } from "../chat/env.ts";
 import { Context, ctxDeadlineExceeded } from "../internal/async/index.ts";
 import type { Adapter, RequestedAcquisitionMode } from "../turns/index.ts";
 import type { EventEnvelope } from "../transcript/index.ts";
@@ -116,9 +117,14 @@ export const AutoAcceptTrust: InputPolicy = {
   },
 };
 
-/** Environment keys that leak the outer Claude Code session into the child harness. */
+/**
+ * Environment keys that leak the outer Claude Code session into the child
+ * harness. Delegates to {@link isClaudeNestingEnvKey}, the canonical definition
+ * in src/chat/env.ts — including its CLAUDE_CODE_OAUTH_TOKEN exemption, which
+ * is a credential rather than a nesting marker (PUPPET-309).
+ */
 export function isLeakedClaudeEnv(key: string): boolean {
-  return key === "CLAUDECODE" || key.startsWith("CLAUDE_CODE_");
+  return isClaudeNestingEnvKey(key);
 }
 
 /**
