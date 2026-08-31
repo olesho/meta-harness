@@ -101,7 +101,7 @@ turns/index.ts
   TurnComplete: string="turn_complete"
   Watch: function
   Watcher: class{close,events,observation,pumpDone,send}
-  claudecode: object{ClaudeCodeAdapter,DetectInput,DetectQuestion,New}
+  claudecode: object{ClaudeCodeAdapter,DetectInput,DetectInputDetail,DetectNone,DetectOK,DetectPending,DetectQuestion,DetectUnparseable,New}
   codex: object{AutoDismissKeys,CODEX_STATUS_MIN_COLS,CodexAdapter,DetectInput,KindApproval,KindModelMigration,KindNotice,KindPermissions,KindUpdateNotice,New,PromptReady}
   describeAcquisitionMode: function
   generic: object{GenericAdapter,New}

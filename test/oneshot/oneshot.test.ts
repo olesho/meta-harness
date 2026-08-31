@@ -16,6 +16,9 @@ import {
   TurnErroredError,
 } from "../../src/oneshot/index.ts";
 import { Context } from "../../src/internal/async/index.ts";
+import { AutoAcceptTrust } from "../../src/oneshot/index.ts";
+import * as claudecode from "../../src/turns/harness/claudecode.ts";
+import { KeyRecorder, newTestConv } from "../chat/helpers.ts";
 import {
   New,
   PromptRef,
@@ -205,4 +208,42 @@ test("TurnErroredError carries the reason", () => {
   const e = new TurnErroredError("api blocked");
   expect(e.reason).toBe("api blocked");
   expect(e.message).toContain("api blocked");
+});
+
+// The unattended path that actually hangs in the fleet: an untrusted repo, no
+// human, claude 2.1.251's UNNUMBERED trust dialog. AutoAcceptTrust needs no
+// change of its own — findOption resolves "proceed" by ALIAS, which the selector
+// parser populates — but the bytes it ends up writing are the whole point, so
+// they are pinned here rather than assumed.
+describe("AutoAcceptTrust against the unnumbered trust dialog", () => {
+  // Captured live (tmux, 2026-08-29; see PUPPET-236). Highlight on "No, exit".
+  const unnumberedTrustScreen =
+    "Accessing workspace:\n" +
+    "/private/tmp/trustrepo\n" +
+    "Quick safety check: Is this a project you created or one you trust? …\n" +
+    "Claude Code'll be able to read, edit, and execute files here.\n" +
+    "Security guide\n" +
+    " ❯ No, exit\n" +
+    "   Yes, I trust this folder\n" +
+    "Enter to confirm · Esc to cancel\n";
+
+  test('resolves optionID "proceed" and writes ESC [ B + CR, not a bare CR', () => {
+    const req = claudecode.DetectInput(unnumberedTrustScreen);
+    expect(req).not.toBeNull();
+    expect(req!.kind).toBe("trust_prompt");
+
+    const rec = new KeyRecorder();
+    const c = newTestConv(
+      { harness: "claude-code", inputPolicy: AutoAcceptTrust },
+      rec,
+    );
+    c.handleInputRequested(req!);
+
+    // A bare CR here would confirm the highlighted row — "No, exit" — and quit
+    // claude at startup.
+    expect(rec.text()).not.toBe("\r");
+    expect(rec.text()).toBe("\x1b[B\r");
+    // Answered server-side: nothing surfaced to a client that is not there.
+    expect(c.inputSurfaced).toBe(false);
+  });
 });

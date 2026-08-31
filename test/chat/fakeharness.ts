@@ -267,6 +267,19 @@ export class Builder {
     return this.waitInput("[0-9]\\r", false, "menu-choice");
   }
 
+  /**
+   * Blocks until the wrapper answers an UNNUMBERED selector menu by moving the
+   * highlight one row DOWN and confirming — `ESC [ B` then CR, in one write.
+   *
+   * The literal is quoteMeta'd so the "[" is matched, not read as a character
+   * class. If this ever stops matching because the keys became a bare CR,
+   * that is the regression: a bare CR confirms whatever row claude highlighted,
+   * which is "No, exit".
+   */
+  AwaitSelectorDown(): this {
+    return this.waitInput(quoteMeta("\x1b[B\r"), false, "selector-down");
+  }
+
   /** Blocks until the wrapper submits a turn with a bare CR (pi's submit key). */
   AwaitSubmitCR(): this {
     return this.waitInput(quoteMeta(SubmitCR), true, "submit-cr");
@@ -515,6 +528,40 @@ export class Builder {
         "│ ❯ 1. No, exit                          │",
         "│   2. Yes, I accept                     │",
         "╰────────────────────────────────────────╯",
+      ),
+      false,
+    );
+  }
+
+  /**
+   * Paints claude 2.1.251's UNNUMBERED folder-trust dialog — the shape
+   * `parseSelectorMenu` (src/turns/harness/menuSelector.ts) reads and the
+   * numbered `menuRE` cannot. Captured live (tmux, 2026-08-29; see PUPPET-236).
+   *
+   * The byte contract this scenario pins: because the rows carry no digits,
+   * selection is RELATIVE to the highlight — and claude highlights the NEGATIVE
+   * choice ("No, exit") by default. Answering "proceed" must therefore write
+   * `ESC [ B` + CR as a SINGLE pty write. A bare CR would confirm "No, exit" and
+   * quit claude at startup; the arrows split across writes would be a lone Esc,
+   * which cancels the dialog. Pair this with `AwaitSelectorDown()`.
+   *
+   * Idle-but-not-ready, like BypassPrompt: no busy footer, and the composer "❯"
+   * is consumed by the menu's highlight row.
+   */
+  TrustPromptUnnumbered(delayMs: number): this {
+    return this.frame(
+      delayMs,
+      this.ccScreen(
+        " ▐▛███▜▌   " + ccHeader + " v2.1.251",
+        "",
+        "Accessing workspace:",
+        "/private/tmp/trustrepo",
+        "Quick safety check: Is this a project you created or one you trust? …",
+        "Claude Code'll be able to read, edit, and execute files here.",
+        "Security guide",
+        " ❯ No, exit",
+        "   Yes, I trust this folder",
+        "Enter to confirm · Esc to cancel",
       ),
       false,
     );

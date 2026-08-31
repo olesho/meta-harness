@@ -96,7 +96,13 @@ The most fully-supported harness. Name `claude-code`, binary `claude`.
   `~/.claude/projects/<encoded-cwd>/<uuid>.jsonl` (tool-aware, returns `Event[]`).
 - **Interactive prompts.** Folder-trust / "bypass permissions" dialogs are detected as
   `trust_prompt` input requests — the [one-shot loop](modules/oneshot.md) auto-accepts
-  them via `AutoAcceptTrust`. The mid-turn `AskUserQuestion` dialog (shapes verified
+  them via `AutoAcceptTrust`. Claude renders the folder-trust dialog in **two shapes**:
+  the older numbered menu (`❯ 1. Yes, proceed`), answered with an absolute digit, and
+  2.1.251's **unnumbered selector menu**, answered with **relative arrow motion** from
+  the highlighted row — because that dialog's default highlight sits on the _negative_
+  choice ("No, exit"), so a bare Enter would quit the CLI. An anchor whose choices
+  cannot be parsed at all is now reported as an `Errored` naming the dialog, never as
+  "no dialog". The mid-turn `AskUserQuestion` dialog (shapes verified
   live on 2.1.210) is detected as `question` / `question_review` requests — single- and
   multi-question, multi-select, with the UI's free-text ("Type something.", alias
   `other`) and "Chat about this" affordances parsed as options. Selection mechanics are

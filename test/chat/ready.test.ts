@@ -119,6 +119,27 @@ describe("readyForInput(claude-code)", () => {
     "   2. No, exit",
   ].join("\n");
 
+  // The UNNUMBERED folder-trust dialog claude 2.1.251 renders (PUPPET-296). No
+  // digits, and the default highlight is on "No, exit".
+  //
+  // This assertion PASSES BOTH BEFORE AND AFTER the selector-parser fix, and
+  // that is the point: claudeBlockingDialog is ANCHOR-ONLY, so readiness never
+  // depended on the menu parsing. It is a pin, not a reproduction. The Go side
+  // had degraded its claude readiness check to a bare `strings.Contains(text,
+  // "❯")`, which called this dialog READY and let Send type the prompt into it
+  // and submit onto "No, exit" — quitting claude at startup. Keep this check
+  // parser-independent, or that bug reopens here.
+  const trustDialogUnnumbered = [
+    "Accessing workspace:",
+    "/private/tmp/trustrepo",
+    "Quick safety check: Is this a project you created or one you trust? …",
+    "Claude Code'll be able to read, edit, and execute files here.",
+    "Security guide",
+    " ❯ No, exit",
+    "   Yes, I trust this folder",
+    "Enter to confirm · Esc to cancel",
+  ].join("\n");
+
   const startupSplash = [
     " ▐▛███▜▌   Claude Code v2.1.201",
     "",
@@ -152,6 +173,9 @@ describe("readyForInput(claude-code)", () => {
   });
   test("trust dialog (created-or-trust variant) not ready", () => {
     expect(readyForInput("claude-code", trustDialogAlt)).toBe(false);
+  });
+  test("trust dialog (unnumbered 2.1.251 selector menu) not ready", () => {
+    expect(readyForInput("claude-code", trustDialogUnnumbered)).toBe(false);
   });
   test("startup splash not ready", () => {
     expect(readyForInput("claude-code", startupSplash)).toBe(false);

@@ -14,6 +14,7 @@ import { ClaudeCodeReader } from "../../transcript/claudecode/claudecode.js";
 import { turnsFromEvents } from "../../transcript/event.js";
 import { ClaudeHookProvider, ensureSettingsJSONHooks, renderHookCommand, } from "../../hooks/index.js";
 import { GenericAdapter } from "../generic.js";
+import { aliasForLabel, candidateLines, cleanLabel, hasChoiceShapedLine, parseSelectorMenu, } from "./menuSelector.js";
 import { Errored, InputRequested, InputResolved, TurnComplete, } from "../types.js";
 const enc = new TextEncoder();
 // thinkingRE matches the end-of-turn thinking-summary line, anchored to its own
@@ -106,6 +107,12 @@ export class ClaudeCodeAdapter extends GenericAdapter {
     lastInterruptSeen = false;
     lastInputID = "";
     lastInput = null;
+    /**
+     * Dedups the unrecognized-dialog Errored event across redraws of the SAME
+     * unreadable dialog. Cleared whenever the screen leaves that state, so a later
+     * recurrence (a second untrusted repo in one session) still reports.
+     */
+    lastUnparseableFingerprint = "";
     name() {
         return "claude-code";
     }
@@ -139,8 +146,8 @@ export class ClaudeCodeAdapter extends GenericAdapter {
         // Blocking interactive prompt — transition on the request ID. A DIFFERENT
         // request replacing the current one (the next question of a multi-question
         // dialog, or its review pane) resolves the old before surfacing the new.
-        const req = DetectInput(snap.text);
-        if (req) {
+        const [req, det] = DetectInputDetail(snap.text);
+        if (det === DetectOK && req) {
             if (req.id !== this.lastInputID) {
                 if (this.lastInputID !== "" && this.lastInput) {
                     out.push({
@@ -172,7 +179,49 @@ export class ClaudeCodeAdapter extends GenericAdapter {
                 input: resolved,
             });
         }
+        out.push(...this.unparseableEvents(snap.text, det));
         return out;
+    }
+    /**
+     * unparseableEvents reports a blocking dialog whose choices this build cannot
+     * read: one Errored naming the anchor and the raw candidate lines, deduped on
+     * a fingerprint of both so a redraw does not spam it.
+     *
+     * Two things it deliberately does NOT do. It never synthesizes an
+     * InputResolved, and never touches lastInputID/lastInput: no InputRequested
+     * was emitted for this screen, so there is no transition to close. (The
+     * `else if (this.lastInputID !== "")` branch above still runs and correctly
+     * resolves a PREVIOUSLY emitted request that has now vanished — that is a
+     * different screen and stays untouched.)
+     *
+     * And it is a belt, not the primary signal: non-Input events are dropped while
+     * no turn is in flight, so at startup — exactly when the folder-trust dialog
+     * fires — this may go nowhere. src/chat/ready.ts is what keeps the send path
+     * safe, and it does so anchor-only, without consulting this state at all.
+     */
+    unparseableEvents(text, det) {
+        if (det !== DetectUnparseable) {
+            this.lastUnparseableFingerprint = "";
+            return [];
+        }
+        const split = anchorSplit(text);
+        if (!split)
+            return [];
+        const [anchor, after] = split;
+        const lines = candidateLines(after);
+        const fp = inputFingerprint(anchor, lines);
+        if (fp === this.lastUnparseableFingerprint)
+            return [];
+        this.lastUnparseableFingerprint = fp;
+        return [
+            {
+                kind: Errored,
+                reason: "claude-code: unrecognized blocking dialog: " +
+                    anchor +
+                    ": " +
+                    lines.join(" | "),
+            },
+        ];
     }
     /** Implements turns.MessageExtractor. */
     extractMessage(snap) {
@@ -374,13 +423,49 @@ function renderedSpec(spec, nodePath, distDir) {
 export function New() {
     return new ClaudeCodeAdapter();
 }
+/** DetectNone: no dialog anchor on screen. */
+export const DetectNone = "none";
+/**
+ * DetectPending: the anchor is up but nothing choice-shaped has painted yet — a
+ * mid-render frame. Not actionable, and deliberately silent.
+ */
+export const DetectPending = "pending";
+/**
+ * DetectUnparseable: the anchor is up AND choice-shaped lines are present, but
+ * no usable option set could be built. Blocking and permanent; callers must fail
+ * loudly rather than wait.
+ */
+export const DetectUnparseable = "unparseable";
+/** DetectOK: a usable request was built. */
+export const DetectOK = "ok";
 /**
  * DetectInput recognizes a blocking interactive dialog in the rendered screen
- * text and returns the structured request, or null when none is present.
- * Startup dialogs (trust/bypass) win over question dialogs; the two cannot
- * render simultaneously.
+ * text and returns the structured request, or null when no usable request could
+ * be built. Startup dialogs (trust/bypass) win over question dialogs; the two
+ * cannot render simultaneously.
+ *
+ * It is the nullable wrapper over DetectInputDetail kept for callers that only
+ * need "can I answer this?" (src/oneshot, the adapter's InputRequested path).
+ *
+ * Callers that must distinguish "no dialog" (DetectNone / DetectPending) from
+ * "a dialog I cannot read" (DetectUnparseable) must use DetectInputDetail
+ * instead: this form maps every non-ok state to null.
  */
 export function DetectInput(text) {
+    const [req, det] = DetectInputDetail(text);
+    return det === DetectOK ? req : null;
+}
+/**
+ * DetectInputDetail recognizes a blocking interactive dialog in the rendered
+ * screen text and reports which of the four Detection states it is in.
+ *
+ * Note the asymmetry with the Go original: src/chat/ready.ts does NOT consume
+ * this — its claudeBlockingDialog is anchor-only, so it already treats all four
+ * states as not-ready without parsing anything. That is why this port needs no
+ * ErrUnrecognizedDialog sentinel; the known cost is that an unreadable dialog
+ * fails here by waiting out the send deadline rather than fast-failing by name.
+ */
+export function DetectInputDetail(text) {
     let prompt;
     if (text.includes(trustAnchor))
         prompt = trustAnchor;
@@ -388,11 +473,26 @@ export function DetectInput(text) {
         prompt = trustAnchorAlt;
     else if (text.includes(bypassAnchor))
         prompt = bypassAnchor;
-    else
-        return DetectQuestion(text);
-    const opts = parseMenuOptions(text);
-    if (opts.length === 0)
-        return null; // anchor visible but menu not rendered yet
+    else {
+        // No startup anchor: fall through to the question dialogs exactly as
+        // before. DetectQuestion has its own render-completeness guards, so a null
+        // from it stays "none" — it is never reported as an unreadable dialog.
+        const q = DetectQuestion(text);
+        return [q, q ? DetectOK : DetectNone];
+    }
+    // Everything the selector parser looks at must come AFTER the anchor: "❯" is
+    // also the composer prompt glyph, so scanning the whole frame would let
+    // scrollback decide what the dialog's rows are.
+    const after = text.slice(text.indexOf(prompt) + prompt.length);
+    const opts = parseMenuOptions(text, after);
+    if (opts.length === 0) {
+        // The menu IS painted and we could not read it. Permanent, so it must not
+        // be reported as "no dialog".
+        if (hasChoiceShapedLine(after))
+            return [null, DetectUnparseable];
+        // Anchor visible but the menu hasn't rendered yet — not actionable.
+        return [null, DetectPending];
+    }
     const req = {
         id: "",
         kind: "trust_prompt",
@@ -400,7 +500,34 @@ export function DetectInput(text) {
         options: opts,
     };
     req.id = inputID(req);
-    return req;
+    return [req, DetectOK];
+}
+/**
+ * anchorSplit returns the startup dialog anchor present in text and the frame
+ * text that follows it. It mirrors DetectInputDetail's anchor chain — the two
+ * must agree on WHICH anchor matched, or a report would quote the wrong dialog.
+ */
+function anchorSplit(text) {
+    let anchor;
+    if (text.includes(trustAnchor))
+        anchor = trustAnchor;
+    else if (text.includes(trustAnchorAlt))
+        anchor = trustAnchorAlt;
+    else if (text.includes(bypassAnchor))
+        anchor = bypassAnchor;
+    else
+        return null;
+    return [anchor, text.slice(text.indexOf(anchor) + anchor.length)];
+}
+/**
+ * inputFingerprint hashes an anchor plus the raw candidate lines under it, the
+ * dedup key for the unrecognized-dialog report. Same shape as inputID.
+ */
+function inputFingerprint(anchor, lines) {
+    const sum = createHash("sha256")
+        .update([anchor, ...lines].join("\0"))
+        .digest();
+    return sum.subarray(0, 8).toString("hex");
 }
 /**
  * DetectQuestion recognizes the AskUserQuestion dialog Claude Code renders
@@ -583,7 +710,28 @@ function reviewAlias(label) {
         return "proceed";
     return aliasForLabel(label);
 }
-function parseMenuOptions(text) {
+/**
+ * parseMenuOptions extracts a dialog's choices, trying the two shapes claude
+ * renders in a fixed order:
+ *
+ *  1. The NUMBERED menu, over the whole frame (`text`) — byte-identical to what
+ *     this function always did. Numbered-first is deliberate: a numbered menu
+ *     also carries "❯", and its digit keys are ABSOLUTE (immune to a stale
+ *     highlight), so it must win whenever it parses.
+ *  2. The UNNUMBERED selector menu, over `after` (the text following the
+ *     anchor) — see parseSelectorMenu for why its scope is narrower.
+ */
+function parseMenuOptions(text, after) {
+    const numbered = parseNumberedMenu(text);
+    if (numbered.length > 0)
+        return numbered;
+    return parseSelectorMenu(after);
+}
+/**
+ * parseNumberedMenu extracts the numbered choices, de-duplicating by choice
+ * number so a redraw that paints the menu twice yields one option set.
+ */
+function parseNumberedMenu(text) {
     const opts = [];
     const seen = new Set();
     for (const m of text.matchAll(menuRE)) {
@@ -600,25 +748,6 @@ function parseMenuOptions(text) {
         });
     }
     return opts;
-}
-function cleanLabel(s) {
-    const i = s.indexOf("  ");
-    if (i >= 0)
-        s = s.slice(0, i);
-    return s.trim();
-}
-function aliasForLabel(label) {
-    const l = label.toLowerCase();
-    if (containsAny(l, "proceed", "accept", "trust", "yes", "continue")) {
-        return "proceed";
-    }
-    if (containsAny(l, "exit", "deny", "reject", "cancel", "no,", "no ", "don't", "do not")) {
-        return "deny";
-    }
-    return "";
-}
-function containsAny(s, ...subs) {
-    return subs.some((sub) => s.includes(sub));
 }
 function inputID(req) {
     const parts = [

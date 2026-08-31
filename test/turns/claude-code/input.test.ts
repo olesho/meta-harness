@@ -14,6 +14,7 @@ const dec = new TextDecoder();
 
 // claudecode.ts keeps these anchors module-private; mirror the literals here.
 const trustAnchor = "Do you trust the files in this folder?";
+const trustAnchorAlt = "Is this a project you created or one you trust?";
 
 const trustScreen = `╭─────────────────────────────────────────────────╮
 │ Do you trust the files in this folder?            │
@@ -25,6 +26,19 @@ const trustScreen = `╭──────────────────�
 │                                                   │
 │ Enter to confirm · Esc to exit                    │
 ╰─────────────────────────────────────────────────╯`;
+
+// The UNNUMBERED folder-trust dialog claude 2.1.251 renders (captured live,
+// tmux, 2026-08-29 — see PUPPET-236). No digits, and the default highlight is on
+// the NEGATIVE choice, so the affirmative row is reached with a DOWN arrow.
+const unnumberedTrustScreen =
+  "Accessing workspace:\n" +
+  "/private/tmp/trustrepo\n" +
+  "Quick safety check: Is this a project you created or one you trust? …\n" +
+  "Claude Code'll be able to read, edit, and execute files here.\n" +
+  "Security guide\n" +
+  " ❯ No, exit\n" +
+  "   Yes, I trust this folder\n" +
+  "Enter to confirm · Esc to cancel\n";
 
 const bypassScreen = `WARNING: Claude Code running in Bypass Permissions mode
 
@@ -103,6 +117,69 @@ describe("claude-code input", () => {
     );
     expect(res).not.toBeNull();
     expect(res!.input!.id).toBe(req!.input!.id);
+  });
+
+  // ── the unnumbered (selector-only) shape, claude 2.1.251 ─────────────────
+  //
+  // The numbered assertions above are the regression guard proving this branch
+  // did not steal the numbered path: a numbered menu also carries "❯", and its
+  // digit keys are absolute, so parseNumberedMenu must still win.
+
+  test("unnumbered trust dialog (2.1.251)", () => {
+    const req = claudecode.DetectInput(unnumberedTrustScreen);
+    expect(req).not.toBeNull();
+    expect(req!.kind).toBe("trust_prompt");
+    expect(req!.prompt).toBe(trustAnchorAlt);
+    const want: (Pick<InputOption, "id" | "alias" | "label"> & {
+      keys: string;
+      highlighted: boolean;
+    })[] = [
+      {
+        id: "0",
+        alias: "deny",
+        label: "No, exit",
+        keys: "\r",
+        highlighted: true,
+      },
+      {
+        id: "1",
+        alias: "proceed",
+        label: "Yes, I trust this folder",
+        keys: "\x1b[B\r",
+        highlighted: false,
+      },
+    ];
+    expect(req!.options!.length).toBe(want.length);
+    want.forEach((w, i) => {
+      const o = req!.options![i];
+      expect(o.id).toBe(w.id);
+      expect(o.alias).toBe(w.alias);
+      expect(o.label).toBe(w.label);
+      expect(dec.decode(o.keys)).toBe(w.keys);
+      expect(o.highlighted === true).toBe(w.highlighted);
+    });
+    expect(req!.id).not.toBe("");
+  });
+
+  // Stated on its own so a fixture edit cannot quietly lose it: claude
+  // highlights "No, exit", so answering "proceed" with a bare CR would confirm
+  // the DENY row and quit the CLI at startup.
+  test("unnumbered: the proceed option is never a bare CR", () => {
+    const req = claudecode.DetectInput(unnumberedTrustScreen);
+    const proceed = req!.options!.find((o) => o.alias === "proceed");
+    expect(proceed).toBeDefined();
+    expect(dec.decode(proceed!.keys)).not.toBe("\r");
+    expect(dec.decode(proceed!.keys)).toBe("\x1b[B\r");
+  });
+
+  test("OnScreen: the unnumbered dialog surfaces an InputRequested", () => {
+    const a = claudecode.New();
+    const ev = findKind(
+      a.onScreen(textSnap(unnumberedTrustScreen)),
+      InputRequested,
+    );
+    expect(ev).not.toBeNull();
+    expect(ev!.input!.options!.length).toBe(2);
   });
 });
 

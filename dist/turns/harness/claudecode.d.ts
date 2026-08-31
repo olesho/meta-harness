@@ -22,6 +22,12 @@ export declare class ClaudeCodeAdapter extends GenericAdapter implements Adapter
     private lastInterruptSeen;
     private lastInputID;
     private lastInput;
+    /**
+     * Dedups the unrecognized-dialog Errored event across redraws of the SAME
+     * unreadable dialog. Cleared whenever the screen leaves that state, so a later
+     * recurrence (a second untrusted repo in one session) still reports.
+     */
+    private lastUnparseableFingerprint;
     name(): string;
     /**
      * Implements turns.StreamInterleaved. Claude Code drives the interactive TUI
@@ -31,6 +37,24 @@ export declare class ClaudeCodeAdapter extends GenericAdapter implements Adapter
      */
     streamInterleaved(): boolean;
     onScreen(snap: Snapshot): Event[];
+    /**
+     * unparseableEvents reports a blocking dialog whose choices this build cannot
+     * read: one Errored naming the anchor and the raw candidate lines, deduped on
+     * a fingerprint of both so a redraw does not spam it.
+     *
+     * Two things it deliberately does NOT do. It never synthesizes an
+     * InputResolved, and never touches lastInputID/lastInput: no InputRequested
+     * was emitted for this screen, so there is no transition to close. (The
+     * `else if (this.lastInputID !== "")` branch above still runs and correctly
+     * resolves a PREVIOUSLY emitted request that has now vanished — that is a
+     * different screen and stays untouched.)
+     *
+     * And it is a belt, not the primary signal: non-Input events are dropped while
+     * no turn is in flight, so at startup — exactly when the folder-trust dialog
+     * fires — this may go nowhere. src/chat/ready.ts is what keeps the send path
+     * safe, and it does so anchor-only, without consulting this state at all.
+     */
+    private unparseableEvents;
     /** Implements turns.MessageExtractor. */
     extractMessage(snap: Snapshot): [string, boolean];
     /** Implements turns.BusyDetector. */
@@ -80,12 +104,57 @@ export declare class ClaudeCodeAdapter extends GenericAdapter implements Adapter
 /** Constructs a Claude Code adapter. */
 export declare function New(): ClaudeCodeAdapter;
 /**
+ * Detection is what DetectInputDetail saw. The four states exist because a
+ * single nullable return conflated two very different screens: "no dialog" and
+ * "a dialog whose choices this build cannot read". The second one is PERMANENT —
+ * it never clears on its own — so reporting it as the first left the harness
+ * blocked with nothing naming the cause (claude 2.1.251's unnumbered
+ * folder-trust dialog; see menuSelector.ts).
+ *
+ * Modelled as a string union with exported constants, following the codex
+ * adapter's exported-string-constant idiom rather than a TS `enum`.
+ */
+export type Detection = "none" | "pending" | "unparseable" | "ok";
+/** DetectNone: no dialog anchor on screen. */
+export declare const DetectNone: Detection;
+/**
+ * DetectPending: the anchor is up but nothing choice-shaped has painted yet — a
+ * mid-render frame. Not actionable, and deliberately silent.
+ */
+export declare const DetectPending: Detection;
+/**
+ * DetectUnparseable: the anchor is up AND choice-shaped lines are present, but
+ * no usable option set could be built. Blocking and permanent; callers must fail
+ * loudly rather than wait.
+ */
+export declare const DetectUnparseable: Detection;
+/** DetectOK: a usable request was built. */
+export declare const DetectOK: Detection;
+/**
  * DetectInput recognizes a blocking interactive dialog in the rendered screen
- * text and returns the structured request, or null when none is present.
- * Startup dialogs (trust/bypass) win over question dialogs; the two cannot
- * render simultaneously.
+ * text and returns the structured request, or null when no usable request could
+ * be built. Startup dialogs (trust/bypass) win over question dialogs; the two
+ * cannot render simultaneously.
+ *
+ * It is the nullable wrapper over DetectInputDetail kept for callers that only
+ * need "can I answer this?" (src/oneshot, the adapter's InputRequested path).
+ *
+ * Callers that must distinguish "no dialog" (DetectNone / DetectPending) from
+ * "a dialog I cannot read" (DetectUnparseable) must use DetectInputDetail
+ * instead: this form maps every non-ok state to null.
  */
 export declare function DetectInput(text: string): InputRequest | null;
+/**
+ * DetectInputDetail recognizes a blocking interactive dialog in the rendered
+ * screen text and reports which of the four Detection states it is in.
+ *
+ * Note the asymmetry with the Go original: src/chat/ready.ts does NOT consume
+ * this — its claudeBlockingDialog is anchor-only, so it already treats all four
+ * states as not-ready without parsing anything. That is why this port needs no
+ * ErrUnrecognizedDialog sentinel; the known cost is that an unreadable dialog
+ * fails here by waiting out the send deadline rather than fast-failing by name.
+ */
+export declare function DetectInputDetail(text: string): [InputRequest | null, Detection];
 /**
  * DetectQuestion recognizes the AskUserQuestion dialog Claude Code renders
  * when the model asks the user a clarifying question mid-turn (verified live
