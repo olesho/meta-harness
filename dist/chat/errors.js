@@ -25,6 +25,17 @@ export const ErrInputPending = defineSentinel("chat/input-pending", "chat: block
  * and error-path cases instead of hanging to the run deadline.
  */
 export const ErrAuthRequired = defineSentinel("chat/auth-required", "chat: harness requires authentication / onboarding");
+/**
+ * Thrown by waitReadyForSend when the harness is sitting on a blocking dialog whose
+ * choices this build cannot parse: the anchor is up and choice-shaped lines are
+ * painted, but no answerable option set could be built
+ * (claudecode.DetectUnparseable). Like ErrAuthRequired the condition never clears on
+ * its own — nothing can answer the dialog — so send() fails in seconds with a named
+ * cause instead of typing the prompt into the menu or waiting out the deadline. It
+ * fires only after the state survives a re-check of the live screen, because a
+ * half-painted frame can look unparseable for one repaint.
+ */
+export const ErrUnrecognizedDialog = defineSentinel("chat/unrecognized-dialog", "chat: harness is blocked on a dialog this build cannot parse");
 /** Returned by Answer when no interactive prompt is currently pending. */
 export const ErrNoInputPending = defineSentinel("chat/no-input-pending", "chat: no input request pending");
 /** Returned by Answer when the supplied request ID does not match the prompt. */

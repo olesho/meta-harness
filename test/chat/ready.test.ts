@@ -140,6 +140,27 @@ describe("readyForInput(claude-code)", () => {
     "Enter to confirm · Esc to cancel",
   ].join("\n");
 
+  // The same dialog with its second row missing: the selector block falls below
+  // menuSelector's minSelectorRows, so no option set can be built and
+  // claudecode.DetectInputDetail reports DetectUnparseable (PUPPET-302).
+  //
+  // Like the unnumbered pin above, this assertion PASSES BOTH BEFORE AND AFTER
+  // the send-path fast-fail, and that is the point: claudeBlockingDialog is
+  // ANCHOR-ONLY, so readiness never depended on the menu parsing and stays
+  // parser-independent. The fast-fail is layered on top of readiness in
+  // Conversation.awaitPromptReady, not wired into it — if this ever starts
+  // depending on the parser, an unreadable dialog would read as READY and Send
+  // would type the prompt into the menu.
+  const trustDialogUnparseable = [
+    "Accessing workspace:",
+    "/private/tmp/trustrepo",
+    "Quick safety check: Is this a project you created or one you trust? …",
+    "Claude Code'll be able to read, edit, and execute files here.",
+    "Security guide",
+    " ❯ No, exit",
+    "Enter to confirm · Esc to cancel",
+  ].join("\n");
+
   const startupSplash = [
     " ▐▛███▜▌   Claude Code v2.1.201",
     "",
@@ -176,6 +197,9 @@ describe("readyForInput(claude-code)", () => {
   });
   test("trust dialog (unnumbered 2.1.251 selector menu) not ready", () => {
     expect(readyForInput("claude-code", trustDialogUnnumbered)).toBe(false);
+  });
+  test("trust dialog (unparseable: lone selector row) not ready", () => {
+    expect(readyForInput("claude-code", trustDialogUnparseable)).toBe(false);
   });
   test("startup splash not ready", () => {
     expect(readyForInput("claude-code", startupSplash)).toBe(false);

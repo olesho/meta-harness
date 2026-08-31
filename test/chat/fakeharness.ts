@@ -567,6 +567,35 @@ export class Builder {
     );
   }
 
+  /**
+   * Paints the 2.1.251 folder-trust anchor with a choice-shaped "❯" row that has
+   * NO sibling, so no option set can be built: claudecode.DetectUnparseable — the
+   * state that used to be reported as "no dialog at all". It is
+   * TrustPromptUnnumbered minus the "Yes, I trust this folder" row, which drops the
+   * selector block below `minSelectorRows` (menuSelector.ts) while leaving the
+   * anchor and the "❯" in place.
+   *
+   * Idle-but-not-ready, like TrustPromptUnnumbered. There is no Await* pair for
+   * this one: the contract is that NOTHING is ever written to it.
+   */
+  TrustPromptUnparseable(delayMs: number): this {
+    return this.frame(
+      delayMs,
+      this.ccScreen(
+        " ▐▛███▜▌   " + ccHeader + " v2.1.251",
+        "",
+        "Accessing workspace:",
+        "/private/tmp/trustrepo",
+        "Quick safety check: Is this a project you created or one you trust? …",
+        "Claude Code'll be able to read, edit, and execute files here.",
+        "Security guide",
+        " ❯ No, exit",
+        "Enter to confirm · Esc to cancel",
+      ),
+      false,
+    );
+  }
+
   // --- claude-code AskUserQuestion vocabulary (shapes verified on 2.1.210) ---
 
   private static readonly qRule = "─".repeat(120);

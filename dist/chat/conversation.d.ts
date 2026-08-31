@@ -1253,6 +1253,19 @@ export declare class Conversation {
     private adapterBusy;
     private adapterQuitSequence;
     private adapterRawSessionID;
+    /**
+     * claudeDialogState reports what claude-code's blocking-dialog detector sees on
+     * this screen, and DetectNone for every other harness.
+     *
+     * It lives HERE, not in ready.ts, on purpose: ready.ts is turns-free by stated
+     * convention (ready.ts:1-12) and this needs claudecode.DetectInputDetail, which
+     * conversation.ts already imports. Go's sibling sits in pkg/chat/ready.go because
+     * that file has no such convention; the behaviour is identical, only the file
+     * differs. It is the claude-only sibling of readyForInput, which returns a plain
+     * bool shared with the codex and pi branches — widening that signature to carry a
+     * claude-specific enum would push the detail into two harnesses with no use for it.
+     */
+    private claudeDialogState;
     private waitReadyForSend;
     /**
      * Blocks until the composer prompt is ready for a message. Owns its screen

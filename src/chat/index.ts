@@ -53,6 +53,7 @@ export {
   ErrTurnInFlight,
   ErrClosed,
   ErrInputPending,
+  ErrUnrecognizedDialog,
   ErrNoInputPending,
   ErrStaleInputRequest,
   ErrUnknownOption,

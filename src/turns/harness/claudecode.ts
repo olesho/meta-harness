@@ -554,11 +554,16 @@ export function DetectInput(text: string): InputRequest | null {
  * DetectInputDetail recognizes a blocking interactive dialog in the rendered
  * screen text and reports which of the four Detection states it is in.
  *
- * Note the asymmetry with the Go original: src/chat/ready.ts does NOT consume
- * this — its claudeBlockingDialog is anchor-only, so it already treats all four
- * states as not-ready without parsing anything. That is why this port needs no
- * ErrUnrecognizedDialog sentinel; the known cost is that an unreadable dialog
- * fails here by waiting out the send deadline rather than fast-failing by name.
+ * Note the asymmetry with the Go original: src/chat/ready.ts still does NOT
+ * consume this — its claudeBlockingDialog is anchor-only, so it already treats all
+ * four states as not-ready without parsing anything, and it stays turns-free by
+ * that file's stated convention. The consumer is instead
+ * Conversation.claudeDialogState (src/chat/conversation.ts), which sits beside its
+ * only caller: the send path arms a stabilizer on DetectUnparseable and, when the
+ * state survives a re-check of the live screen after the dwell, fast-fails with
+ * chat.ErrUnrecognizedDialog rather than waiting out the send deadline. Go reaches
+ * the same behaviour from pkg/chat/ready.go, whose file has no such convention;
+ * only the file the helper sits in differs.
  */
 export function DetectInputDetail(
   text: string,
