@@ -268,9 +268,33 @@ describe("claude-code question dialogs", () => {
     ]);
     // Toggle keys: the bare digit, no CR.
     expect(dec.decode(req!.options![1].keys)).toBe("2");
-    // The toggled variant of the same dialog keeps the id.
+    // PUPPET-308: `toggle` is PER ROW and structural — it records whether the
+    // row rendered a "[ ]"/"[✔]" marker, not what its label says. On this pane
+    // "Type something" carries one (so it toggles) while "Chat about this",
+    // below the horizontal rule, does not: selecting it closes the dialog, so
+    // the chat layer must not append submitKeys after it.
+    expect(req!.options!.map((o) => o.toggle)).toEqual([
+      true,
+      true,
+      true,
+      true,
+      false,
+    ]);
+    // The toggled variant of the same dialog keeps the id, and an empty box
+    // marks a toggle exactly as a checked one does.
     const toggled = multiSelectScreen.replace("[✔]", "[ ]");
-    expect(claudecode.DetectInput(toggled)!.id).toBe(req!.id);
+    const reqToggled = claudecode.DetectInput(toggled)!;
+    expect(reqToggled.id).toBe(req!.id);
+    expect(reqToggled.options!.map((o) => o.toggle)).toEqual(
+      req!.options!.map((o) => o.toggle),
+    );
+  });
+
+  test("single-select and review options leave toggle undefined", () => {
+    for (const screen of [singleQuestionScreen, reviewScreen]) {
+      const req = claudecode.DetectInput(screen);
+      expect(req!.options!.every((o) => o.toggle === undefined)).toBe(true);
+    }
   });
 
   test("checkbox glyphs in a reply do not fire", () => {

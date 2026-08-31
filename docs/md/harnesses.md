@@ -100,8 +100,14 @@ The most fully-supported harness. Name `claude-code`, binary `claude`.
   live on 2.1.210) is detected as `question` / `question_review` requests — single- and
   multi-question, multi-select, with the UI's free-text ("Type something.", alias
   `other`) and "Chat about this" affordances parsed as options. Selection mechanics are
-  encoded in the option `keys`: a bare digit selects (or toggles, for multi-select;
-  `submitKeys` = Tab commits), while the two UI affordances need digit+CR. See
+  encoded in the option `keys` and are decided PER ROW, not per pane: on a
+  single-select pane a bare digit selects and the two UI affordances need digit+CR,
+  while on a multi-select pane a bare digit toggles the row's checkbox and
+  `submitKeys` (Tab) commits. Which rows are checkboxes is what the pane actually
+  renders, so it is read off the screen and reported as `InputOption.toggle`: "Type
+  something" _does_ carry a `[ ]` marker on a multi-select pane and toggles, whereas
+  "Chat about this" — the one row below the horizontal rule — does not, and selecting
+  it closes the dialog, so no commit key follows it. See
   [Guides › Handling input](guides/handling-input.md#clarifying-questions-question--question_review).
 - **Wrapper patterns.** Rich: API-error lines (with tree-glyph prefixes), session-limit
   banners (`… resets HH:MM (TZ)` → a `resumeAt` instant), plus cost/retry/prompt

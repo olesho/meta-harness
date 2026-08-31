@@ -82,7 +82,32 @@ export function questionRequest(): TurnsInputRequest {
   };
 }
 
-/** A multi-select clarifying-question request (checkbox rows + Tab commit). */
+/**
+ * A multi-select request shaped like the LIVE 2.1.251 pane
+ * (test/corpus/claude-code/question-multi): every checkbox row carries
+ * `toggle: true`, and the injected "Chat about this" row below the horizontal
+ * rule carries `toggle: false` because selecting it closes the whole dialog.
+ * Use this wherever the distinction matters; multiSelectQuestionRequest() is
+ * deliberately left without the flag, as the back-compat case.
+ */
+export function multiSelectQuestionRequestWithChat(): TurnsInputRequest {
+  const req = multiSelectQuestionRequest();
+  const options = (req.options ?? []).map((o) => ({ ...o, toggle: true }));
+  options.push({
+    id: "5",
+    alias: "",
+    label: "Chat about this",
+    keys: enc.encode("5"),
+    toggle: false,
+  });
+  return { ...req, options };
+}
+
+/**
+ * A multi-select clarifying-question request (checkbox rows + Tab commit).
+ * No option sets `toggle` — this is the shape produced by any adapter that
+ * predates it, and it must keep the toggle-every-option-then-commit behaviour.
+ */
 export function multiSelectQuestionRequest(): TurnsInputRequest {
   return {
     id: "q-ms-1",

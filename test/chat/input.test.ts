@@ -18,6 +18,7 @@ import {
 import {
   KeyRecorder,
   multiSelectQuestionRequest,
+  multiSelectQuestionRequestWithChat,
   newTestConv,
   questionRequest,
   trustRequest,
@@ -206,6 +207,54 @@ describe("Answer: question prompts", () => {
       c.handleInputRequested(questionRequest());
       const err = await caught(
         c.answer(Context.background(), "q-1", { optionIDs: ["1", "2"] }),
+      );
+      expect(isSentinel(err, ErrNotMultiSelect)).toBe(true);
+      expect(rec.data.length).toBe(0);
+    } finally {
+      release();
+    }
+  });
+
+  // PUPPET-308. "Chat about this" is the one multi-select row the dialog
+  // renders WITHOUT a checkbox marker: it closes the dialog and hands control
+  // back to the composer, so the Tab that commits a checkbox answer must not
+  // follow it — it would be typed into that composer.
+  test("a dialog-closing row is answered without the commit key", async () => {
+    const rec = new KeyRecorder();
+    const c = newTestConv({ harness: "claude-code" }, rec);
+    const release = await c.queue.acquire(Context.background());
+    try {
+      c.handleInputRequested(multiSelectQuestionRequestWithChat());
+      await c.answer(Context.background(), "q-ms-1", { optionID: "5" });
+      expect(rec.text()).toBe("5");
+    } finally {
+      release();
+    }
+  });
+
+  test("checkbox rows still commit with the submit key", async () => {
+    const rec = new KeyRecorder();
+    const c = newTestConv({ harness: "claude-code" }, rec);
+    const release = await c.queue.acquire(Context.background());
+    try {
+      c.handleInputRequested(multiSelectQuestionRequestWithChat());
+      await c.answer(Context.background(), "q-ms-1", {
+        optionIDs: ["1", "Olives"],
+      });
+      expect(rec.text()).toBe("13\t");
+    } finally {
+      release();
+    }
+  });
+
+  test("mixing a dialog-closing row with toggles is rejected", async () => {
+    const rec = new KeyRecorder();
+    const c = newTestConv({ harness: "claude-code" }, rec);
+    const release = await c.queue.acquire(Context.background());
+    try {
+      c.handleInputRequested(multiSelectQuestionRequestWithChat());
+      const err = await caught(
+        c.answer(Context.background(), "q-ms-1", { optionIDs: ["1", "5"] }),
       );
       expect(isSentinel(err, ErrNotMultiSelect)).toBe(true);
       expect(rec.data.length).toBe(0);

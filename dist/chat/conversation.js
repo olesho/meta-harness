@@ -1917,6 +1917,20 @@ export class Conversation {
             const chosen = ids.map((s) => findOption(req, s));
             if (ids.length === 0 || chosen.some((o) => o === null))
                 throw ErrUnknownOption;
+            // A row the dialog rendered WITHOUT a checkbox marker ("Chat about this",
+            // below the option rule) is not a toggle: selecting it closes the whole
+            // dialog and hands control back to the composer. Appending submitKeys
+            // after it would type a stray Tab into that composer, and combining it
+            // with real toggles is not an answer the widget can express — so it must
+            // be answered alone and committed by its own keys. `=== false` is
+            // deliberate: adapters that never set `toggle` keep the old path.
+            const closers = chosen.filter((o) => o.toggle === false);
+            if (closers.length > 0) {
+                if (chosen.length > 1)
+                    throw ErrNotMultiSelect;
+                this.writeKeys(closers[0].keys);
+                return Promise.resolve();
+            }
             for (const o of chosen)
                 this.writeKeys(o.keys);
             this.writeKeys(req.submitKeys);

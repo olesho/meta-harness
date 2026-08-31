@@ -90,6 +90,20 @@ describe("AskUserQuestion corpus (claude 2.1.251)", () => {
       ["5", "Type something", "5"],
       ["6", "Chat about this", "6"],
     ]);
+    // PUPPET-308: the keys above are UNCHANGED — whether a bare digit
+    // activates the non-checkbox "Chat about this" row or merely moves the
+    // highlight onto it is still an open live question. What the frame settles
+    // is which rows are checkbox TOGGLES, and that is asserted structurally:
+    // note that "Type something" DOES carry a marker here (unlike on the
+    // single-select pane) while "Chat about this", below the rule, does not.
+    expect(req!.options!.map((o) => o.toggle)).toEqual([
+      true,
+      true,
+      true,
+      true,
+      true,
+      false,
+    ]);
     // The "[✔]"/"[ ]" markers are stripped off the labels, and the widget's
     // bare "Submit" chrome row is not mistaken for an option or a description.
     expect(frameOf("question-multi")).toContain("[✔] Mushrooms");
@@ -113,6 +127,27 @@ describe("AskUserQuestion corpus (claude 2.1.251)", () => {
       "Type something",
       "Chat about this",
     ]);
+    // "[ ]" marks a toggle exactly as "[✔]" does, and the pane's request id is
+    // unaffected by either (inputID hashes kind/prompt/labels only).
+    expect(req!.options!.map((o) => o.toggle)).toEqual([
+      true,
+      true,
+      true,
+      true,
+      true,
+      false,
+    ]);
+    expect(req!.id).toBe(claudecode.DetectInput(frameOf("question-multi"))!.id);
+  });
+
+  test("single-select and review panes never set toggle", () => {
+    // The flag exists only to tell a multi-select checkbox row from an injected
+    // affordance. Every other pane must leave it undefined so the chat layer's
+    // `toggle === false` test keeps them on the pre-existing submit path.
+    for (const dir of ["question-single", "question-review"] as const) {
+      const req = claudecode.DetectInput(frameOf(dir));
+      expect(req!.options!.every((o) => o.toggle === undefined)).toBe(true);
+    }
   });
 
   test("review pane", () => {

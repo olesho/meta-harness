@@ -85,7 +85,11 @@ const questionSubmitTab = "✔ Submit";
 // "Type something" checkbox row in multi-select). Selecting it declines the
 // structured question and returns control to the composer.
 const questionOtherLabel = "Type something";
-// The UI-injected "Chat about this" affordance below the option rule.
+// The UI-injected "Chat about this" affordance below the option rule. It is
+// the one row that renders BELOW the horizontal rule and, on a multi-select
+// pane, the one row with no "[ ]" checkbox marker — so it is chrome that closes
+// the dialog, never a choice that accumulates into a multi-select answer. That
+// distinction is carried to the chat layer as InputOption.toggle (PUPPET-308).
 const questionChatLabel = "Chat about this";
 
 // questionTabRE matches the dialog's tab-strip line: optional "←", then a
@@ -578,7 +582,21 @@ export function DetectQuestion(text: string): InputRequest | null {
       const chat = o.label === questionChatLabel;
       let keys: string;
       if (multiSelect) {
-        keys = o.id; // digit toggles the checkbox row
+        // A bare digit TOGGLES a checkbox row in place — live-verified on
+        // 2.1.251 (test/corpus/claude-code/question-multi: pressing "1" turned
+        // "1. [ ] Mushrooms" into "1. [✔] Mushrooms" without advancing).
+        //
+        // PUPPET-308, OPEN: a multi-select pane also carries rows with NO
+        // checkbox marker below the horizontal rule ("Chat about this"), and
+        // whether a bare digit ACTIVATES such a row — as opposed to merely
+        // moving the ❯ highlight onto it, which is what it does on the
+        // single-select pane — has never been exercised live. The keys below
+        // are therefore left as they were; what IS settled is that such a row
+        // closes the dialog rather than accumulating into a selection, which
+        // is what `toggle: false` records so writeAnswer can stop appending
+        // submitKeys after it. Resolve the key question with a live capture
+        // before changing this branch.
+        keys = o.id;
       } else if (other || chat) {
         // UI affordances: the digit only moves the highlight onto them, so a
         // CR is required to select. Both close the whole dialog, so the CR
@@ -595,6 +613,15 @@ export function DetectQuestion(text: string): InputRequest | null {
         alias: other ? "other" : chat ? "" : aliasForLabel(o.label),
         label: o.label,
         keys: enc.encode(keys),
+        // Structural, not a label match: a row that rendered a checkbox marker
+        // accumulates into the answer, a row that did not is injected chrome
+        // that closes the dialog on its own. Note the asymmetry the pane
+        // actually shows — "Type something" DOES carry a marker on a
+        // multi-select pane ("5. [ ] Type something"), so it stays a toggle;
+        // only "Chat about this", below the rule, does not. Set on
+        // multi-select question options ONLY, so every other adapter, kind and
+        // pane keeps `toggle` undefined and the pre-existing behaviour.
+        ...(multiSelect ? { toggle: o.checkbox } : {}),
         ...(o.description !== "" ? { description: o.description } : {}),
       };
     }),
@@ -612,8 +639,20 @@ export function DetectQuestion(text: string): InputRequest | null {
 interface ParsedQuestionRegion {
   /** Non-blank lines before the first option row (the question text). */
   preamble: string;
-  options: { id: string; label: string; description: string }[];
-  /** True when any option row carried a "[ ]"/"[✔]" checkbox marker. */
+  /**
+   * `checkbox` is PER ROW: true when THAT row carried a "[ ]"/"[✔]" marker.
+   * It is not implied by the pane-level `multiSelect` — on a multi-select pane
+   * the widget also injects rows below the horizontal rule with no marker at
+   * all ("Chat about this"), and those are chrome that closes the dialog, not
+   * choices that toggle. See the key/toggle derivation in DetectQuestion.
+   */
+  options: {
+    id: string;
+    label: string;
+    description: string;
+    checkbox: boolean;
+  }[];
+  /** True when ANY option row carried a "[ ]"/"[✔]" checkbox marker. */
   multiSelect: boolean;
 }
 
@@ -624,7 +663,12 @@ function parseQuestionRegion(
   to: number,
 ): ParsedQuestionRegion {
   const preamble: string[] = [];
-  const options: { id: string; label: string; description: string }[] = [];
+  const options: {
+    id: string;
+    label: string;
+    description: string;
+    checkbox: boolean;
+  }[] = [];
   let multiSelect = false;
   const seen = new Set<string>();
 
@@ -640,13 +684,14 @@ function parseQuestionRegion(
     if (m) {
       const num = m[1];
       let label = cleanLabel(m[2]);
-      if (questionCheckboxRE.test(label)) {
+      const checkbox = questionCheckboxRE.test(label);
+      if (checkbox) {
         multiSelect = true;
         label = label.replace(questionCheckboxRE, "").trim();
       }
       if (num === "0" || seen.has(num) || label === "") continue;
       seen.add(num);
-      options.push({ id: num, label, description: "" });
+      options.push({ id: num, label, description: "", checkbox });
       continue;
     }
     if (options.length === 0) {

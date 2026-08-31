@@ -70,6 +70,10 @@ interface InputOption {
   label: string;
   keys: Uint8Array; // bytes to write to the PTY to choose this option
   description?: string; // explanatory text rendered under the label, when shown
+  toggle?: boolean; // multiSelect "question" ONLY: true = a checkbox row that
+  //   toggles into the answer; false = an injected affordance ("Chat about
+  //   this") that CLOSES the dialog, so no submitKeys must follow it.
+  //   Undefined on every other kind/harness — test `=== false`.
 }
 ```
 
