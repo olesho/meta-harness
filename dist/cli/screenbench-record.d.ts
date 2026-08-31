@@ -13,10 +13,24 @@ interface InterruptSpec {
     confirmText: string;
 }
 export declare const interruptSpecs: Record<string, InterruptSpec>;
+interface DialogSpec {
+    /** Any one of these on the settled frame means the dialog is up. */
+    anchors: string[];
+    /** Human name used in error/progress text. */
+    what: string;
+}
+export declare const dialogSpecs: Record<string, DialogSpec>;
 interface Scenario {
     prompts: string[];
     /** Interrupt the (single) prompt's reply once streaming is visible. */
     interrupt?: boolean;
+    /** Terminal state is a blocking dialog, not a TurnComplete. See dialogSpecs. */
+    dialog?: boolean;
+    /**
+     * The recording requires a directory the harness has NOT yet been trusted in.
+     * Suppresses the trust-accepting warmup pass and mints a unique cwd.
+     */
+    freshWorkdir?: boolean;
     notes: string;
     setup?: (cwd: string) => void;
 }
@@ -42,6 +56,16 @@ export declare function parseArgs(argv: string[]): ParsedArgs;
  * --binary-version cross-check compares against — the FIRST whitespace token.
  */
 export declare function normalizeVersion(raw: string): string;
+/**
+ * claudeTrustState reports whether claude has already recorded an accepted
+ * trust decision for `dir`. Returns null when the config cannot be read — an
+ * unreadable config is NOT evidence of trust, so the caller proceeds with a
+ * warning rather than blocking a legitimate recording.
+ *
+ * `configPath` is normally `~/.claude.json`; the caller resolves the TEST-ONLY
+ * META_HARNESS_CLAUDE_CONFIG override.
+ */
+export declare function claudeTrustState(dir: string, configPath: string): boolean | null;
 export declare function main(argv: string[]): Promise<number>;
 export {};
 //# sourceMappingURL=screenbench-record.d.ts.map

@@ -58,12 +58,37 @@ Scripted refreshes go through `make rebake-corpus` — see
 > defensive "recorder unexpectedly absent" guard).
 >
 > Scenario coverage is **per-harness** (`SCENARIOS` in the script): `claude-code`
-> records `multi-turn`, `tool-call`, `interrupted-mid-reply`; `codex` records
-> `multi-turn`, `tool-call` (interrupt excluded — no generic BusyDetector /
-> interrupt seam yet); `pi` is **deferred** (pinned, so rebake iterates it, but it
-> has no scripted scenario corpus and no interrupt-confirmation anchor — it is
-> skipped with a logged line). The Go command above is the interim reference for
-> the recorder's argument shape.
+> records `multi-turn`, `tool-call`, `interrupted-mid-reply`, `trust-dialog`;
+> `codex` records `multi-turn`, `tool-call` (interrupt excluded — no generic
+> BusyDetector / interrupt seam yet); `pi` is **deferred** (pinned, so rebake
+> iterates it, but it has no scripted scenario corpus and no
+> interrupt-confirmation anchor — it is skipped with a logged line). The Go
+> command above is the interim reference for the recorder's argument shape.
+
+### Untrusted-workdir scenarios
+
+`claude-code/trust-dialog` is the only cell whose terminal state is a **blocking
+dialog** rather than a completed turn: the recorder settles on claude's
+folder-trust dialog, captures it **unanswered**, and kills the harness. Three
+consequences worth knowing before re-recording it:
+
+- **It needs a directory claude has not been trusted in.** Trust is persisted per
+  absolute path (`~/.claude.json` → `projects[<path>].hasTrustDialogAccepted`),
+  so the recorder mints a fresh temp directory each run and skips the
+  trust-accepting warmup pass. Passing `--cwd`/`--workdir` opts out of that
+  guarantee; the recorder refuses outright if the directory it is handed is
+  already trusted, since the dialog would never fire.
+- **Any given directory is single-shot.** A second recording into the same path
+  captures a ready composer, not the dialog. Never reuse one.
+- **Use a profile that is already logged in.** A *fresh* claude config directory
+  paints the first-run onboarding wizard instead of the trust dialog, and
+  `readyForInput` correctly refuses that shape — so `CLAUDE_CONFIG_DIR`-style HOME
+  isolation is not a substitute. Log in first, then record.
+
+`meta.json` for this cell carries `workdir` (the captured frame renders the
+absolute path verbatim on its "Accessing workspace:" line, so a reader can tell
+the path is a recorder artifact rather than a transcription error) and
+`keystrokes: "none (dialog captured unanswered)"`.
 
 ### Hand-recorded scenarios (outside `SCENARIOS`)
 

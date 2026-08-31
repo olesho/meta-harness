@@ -1,0 +1,10 @@
+{
+  "projects": {
+    "/private/tmp/meta-harness-fixture-trusted": {
+      "hasTrustDialogAccepted": true
+    },
+    "/private/tmp/meta-harness-fixture-seen": {
+      "hasTrustDialogAccepted": false
+    }
+  }
+}

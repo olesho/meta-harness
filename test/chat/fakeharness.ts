@@ -527,6 +527,36 @@ export class Builder {
     );
   }
 
+  /**
+   * Paints claude 2.1.251's folder-trust dialog — the UNNUMBERED shape, with the
+   * highlight defaulting to "No, exit". Transcribed verbatim from PUPPET-296 §1.
+   *
+   * Deliberately a sibling of BypassPrompt rather than a variant of it:
+   * BypassPrompt paints the NUMBERED box ("❯ 1. No, exit"), which parseMenuOptions
+   * reads, and it must stay untouched. This shape is the one the digit-requiring
+   * menu regex CANNOT read — so `DetectInput` returns null on it while
+   * `readyForInput` still (correctly) reports not-ready via the anchor-only
+   * `claudeBlockingDialog`. That divergence is the whole point of the fixture.
+   */
+  ClaudeTrustPrompt(delayMs: number): this {
+    return this.frame(
+      delayMs,
+      this.ccScreen(
+        " ▐▛███▜▌   " + ccHeader + " v2.1.251",
+        "",
+        "Accessing workspace:",
+        "/private/tmp/trustrepo",
+        "Quick safety check: Is this a project you created or one you trust? …",
+        "Claude Code'll be able to read, edit, and execute files here.",
+        "Security guide",
+        " ❯ No, exit",
+        "   Yes, I trust this folder",
+        "Enter to confirm · Esc to cancel",
+      ),
+      false,
+    );
+  }
+
   // --- claude-code AskUserQuestion vocabulary (shapes verified on 2.1.210) ---
 
   private static readonly qRule = "─".repeat(120);
