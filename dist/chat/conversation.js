@@ -17,8 +17,9 @@ import { start as wrapperStart, } from "../wrapper/index.js";
 import { Context, isSentinel, wrap } from "../internal/async/index.js";
 import { ErrEmptySessionID, ErrSessionNotFound } from "../transcript/errors.js";
 import { stripIDEContextTags } from "../transcript/stripTags.js";
+import { answerKeys, findOption } from "./answerKeys.js";
 import { RoleUser, RoleAssistant, TurnStatePending, TurnStateComplete, TurnStateErrored, EventTurn, EventInputRequest, EventInputResolved, DispositionAnswer, DispositionDeny, HistorySourceTranscript, HistorySourceStore, ReasonAuthRequired, ReasonUsageLimited, newID, } from "./types.js";
-import { ErrInvalidOptions, ErrUnknownHarness, ErrNoControl, ErrTurnInFlight, ErrClosed, ErrInputPending, ErrAuthRequired, ErrNoInputPending, ErrStaleInputRequest, ErrUnknownOption, ErrNotMultiSelect, ErrQuitUnsupported, ErrPermissionsUnsupported, ErrCodexPermissionsDisabled, ErrCodexHomeNotIsolated, ErrCodexPermissionsRaced, ErrPermissionPresetUnavailable, ErrPermissionModeUnsupported, ErrPermissionModeUnreachable, ErrPermissionModeStalled, ErrResumeUnsupported, ErrNoHarnessSession, } from "./errors.js";
+import { ErrInvalidOptions, ErrUnknownHarness, ErrNoControl, ErrTurnInFlight, ErrClosed, ErrInputPending, ErrAuthRequired, ErrNoInputPending, ErrStaleInputRequest, ErrQuitUnsupported, ErrPermissionsUnsupported, ErrCodexPermissionsDisabled, ErrCodexHomeNotIsolated, ErrCodexPermissionsRaced, ErrPermissionPresetUnavailable, ErrPermissionModeUnsupported, ErrPermissionModeUnreachable, ErrPermissionModeStalled, ErrResumeUnsupported, ErrNoHarnessSession, } from "./errors.js";
 import { newControlQueue } from "./control.js";
 import { submitKeyForHarness, requiresPromptReadiness, readyForInput, authRequired, onboardingWall, usageLimitMessage, } from "./ready.js";
 import { cleanHarnessEnv } from "./env.js";
@@ -1901,30 +1902,11 @@ export class Conversation {
             const submit = submitKeyForHarness(this.opts.harness, preWriteScreen);
             return this.writeMessageAndSubmit(ans.text ?? "", preWriteScreen, submit);
         }
-        // Multi-select prompts: toggle every named option, then commit with the
-        // request's submit keys (a single optionID answer is normalized into the
-        // same toggle-and-commit path — a bare toggle would never resolve the
-        // prompt). Validation precedes any write so a bad id surfaces cleanly.
-        const ids = ans.optionIDs && ans.optionIDs.length > 0
-            ? ans.optionIDs
-            : ans.optionID
-                ? [ans.optionID]
-                : [];
-        if (req.multiSelect && req.submitKeys) {
-            const chosen = ids.map((s) => findOption(req, s));
-            if (ids.length === 0 || chosen.some((o) => o === null))
-                throw ErrUnknownOption;
-            for (const o of chosen)
-                this.writeKeys(o.keys);
-            this.writeKeys(req.submitKeys);
-            return Promise.resolve();
-        }
-        if (ids.length > 1)
-            throw ErrNotMultiSelect;
-        const opt = findOption(req, ids[0] ?? "");
-        if (!opt)
-            throw ErrUnknownOption;
-        this.writeKeys(opt.keys);
+        // answerKeys owns the option semantics (validate-all-then-write,
+        // multi-select toggle-then-commit) and throws synchronously; the recorder
+        // shares it so both write identical bytes.
+        for (const k of answerKeys(req, ans))
+            this.writeKeys(k);
         return Promise.resolve();
     }
     // ── Watcher pump & turn-state machine ────────────────────────────────────
@@ -3233,18 +3215,6 @@ function toClientInputRequest(req) {
     if (req.multiSelect)
         out.multiSelect = true;
     return out;
-}
-function findOption(req, s) {
-    if (s === "")
-        return null;
-    const ls = s.toLowerCase();
-    for (const o of req.options ?? []) {
-        if (o.id === s ||
-            o.alias.toLowerCase() === ls ||
-            o.label.toLowerCase() === ls)
-            return o;
-    }
-    return null;
 }
 function findOptionByAlias(req, alias) {
     for (const o of req.options ?? []) {
