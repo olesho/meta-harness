@@ -88,8 +88,9 @@ export declare function New(): ClaudeCodeAdapter;
 export declare function DetectInput(text: string): InputRequest | null;
 /**
  * DetectQuestion recognizes the AskUserQuestion dialog Claude Code renders
- * when the model asks the user a clarifying question mid-turn (verified live
- * against 2.1.210). Two panes exist:
+ * when the model asks the user a clarifying question mid-turn (re-verified
+ * live against 2.1.251 — PUPPET-301 — against the corpus recordings
+ * test/corpus/claude-code/question-{single,multi,review}). Two panes exist:
  *
  *   - a QUESTION pane (kind "question"): tab-strip line, question text,
  *     numbered options, "Enter to select ·…" footer. Digit keys select an

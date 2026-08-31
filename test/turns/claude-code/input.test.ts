@@ -106,7 +106,12 @@ describe("claude-code input", () => {
   });
 });
 
-// ── AskUserQuestion dialogs (screens verified live against 2.1.210) ─────────
+// ── AskUserQuestion dialogs ────────────────────────────────────────────────
+//
+// Screens verified live against 2.1.210, and re-verified against 2.1.251 by
+// PUPPET-301 — the real captures are replayed in question-corpus.test.ts.
+// These hand-written screens stay as the compact unit fixtures; they were
+// found byte-compatible with the 2.1.251 recordings.
 
 const singleQuestionScreen = `⏺ I'll ask you the question now.
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────

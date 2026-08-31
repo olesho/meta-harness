@@ -1,0 +1,4 @@
+   5.970s  keys       Use the AskUserQuestion tool once to ask me exactly TWO questions in a single call. Question 1: header "Color", text "Which color should I use?", options "Red" and "Blue". Question 2: header "Size", text "Which size should I use?", options "Small" and "Large". Do not do anything else first.
+   7.973s  keys       \x1b[13u
+  37.142s  keys       1
+  44.321s  keys       1

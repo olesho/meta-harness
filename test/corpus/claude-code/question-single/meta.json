@@ -1,0 +1,31 @@
+{
+  "harness": "claude-code",
+  "binary_version": "2.1.251",
+  "recorded_at": "2026-08-31T12:50:44.797Z",
+  "cols": 120,
+  "rows": 40,
+  "notes": "PUPPET-301. AskUserQuestion SINGLE-SELECT question pane, captured live against claude 2.1.251 to close the evidence gap PUPPET-296 left open (every shape in the tree was annotated 'verified live against 2.1.210'). VERDICT: the option rows are STILL NUMBERED on 2.1.251, so DetectQuestion's digit assumption holds and the selector parser was NOT ported (design §4, branch A).",
+  "prompt": "Use the AskUserQuestion tool to ask me exactly one question. The question text must be \"Which color should I use?\" with header \"Color\" and exactly two options labeled \"Red\" and \"Blue\". Do not do anything else first.",
+  "keystrokes": [
+    "<prompt text>",
+    "\\x1b[13u (submit)",
+    "(none after — the pane was left untouched and the recording detached with Ctrl-])"
+  ],
+  "outcome": "interactive-detached",
+  "findings": {
+    "q1_option_rows_numbered": "YES. Every option row matches questionOptionRE (/^[^\\S\\r\\n]*(?:❯[^\\S\\r\\n]+)?(\\d+)\\.[^\\S\\n]+(\\S[^\\n]*)$/u) — the rows render as '❯ 1. Red', '  2. Blue', … on 2.1.251. The digit assumption in src/turns/harness/claudecode.ts is RE-VERIFIED, not merely inherited. This is what selects branch A of the PUPPET-301 design.",
+    "q2_glyphs": "Highlight glyph is still ❯ (U+276F). Tab strip glyphs are still ☐/☒/✔ with ←/→ arrows on the multi-tab strip. Observed tab strip: ' ☐ Color' (single question, so no ←/→ and no '✔ Submit' tab)",
+    "q3_footer_and_review_anchor": "Footer still starts with 'Enter to select ·' — observed in full as: 'Enter to select · ↑/↓ to navigate · Esc to cancel'",
+    "q4_injected_affordances": "Still labeled 'Type something' / 'Chat about this' — matching questionOtherLabel and questionChatLabel.",
+    "q5_multiselect_checkboxes": "n/a — single-select pane, no '[ ]' markers, no bare 'Submit' chrome row. See question-multi.",
+    "q6_review_pane": "n/a — see question-review."
+  },
+  "detect_input_result": "kind 'question', prompt 'Which color should I use?', header 'Color', options 1..4 = Red / Blue / Type something. (alias 'other') / Chat about this, keys '1','2','3\\r','4\\r'. multiSelect absent.",
+  "mode": "hand-recorded-interactive",
+  "recorder": "test/corpus/tools/record-pty.ts --interactive, over the production PTY bridge (src/wrapper/internal/pty.ts). Keystrokes were fed to the tool's stdin through a FIFO rather than typed at a tty (an agent has no interactive terminal); record-pty's own code path is unchanged and every keystroke is timestamped in stdin.log as usual.",
+  "binary_version_full": "2.1.251 (Claude Code)",
+  "version_note": "`claude --version` was re-probed at capture time and reported 2.1.251 (Claude Code) — the version this ticket targets. No discrepancy to record.",
+  "trust_note": "The recording cwd was `git init`-ed and trust was granted in an EARLIER, discarded session, so the folder-trust dialog does not appear anywhere in this recording. bytes.raw starts at the alt-screen enter (ESC[?1049h) of a clean composer.",
+  "teardown_note": "bytes.raw is TRUNCATED at the last byte of the settled dialog frame, deliberately, before the Ctrl-] detach teardown. SIGTERM makes claude leave the alt screen (ESC[?1049l) and print 'Resume this session with: claude --resume <id>', and a stream ending there replays as the resume text instead of the dialog. Same trap documented in permission-mode-bypass/meta.json.",
+  "expected_note": "expected.txt was PRODUCED BY REPLAYING bytes.raw through src/screen's Screen at 120x40 and serializing as screenbench-record does (finalText.replace(/\\s+$/u, '') + '\\n'). It is not hand-typed."
+}

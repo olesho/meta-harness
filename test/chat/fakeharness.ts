@@ -520,7 +520,22 @@ export class Builder {
     );
   }
 
-  // --- claude-code AskUserQuestion vocabulary (shapes verified on 2.1.210) ---
+  // --- claude-code AskUserQuestion vocabulary ---
+  //
+  // Shapes first verified on 2.1.210 and RE-VERIFIED on 2.1.251 by PUPPET-301
+  // against real PTY captures (test/corpus/claude-code/question-single,
+  // question-multi, question-review). The painters below are byte-compatible
+  // with those captures: same "❯"/"  " row prefix, same "<n>. " numbering,
+  // same "Type something." / "Chat about this" affordance rows either side of
+  // the rule, same " ● <q>" / "   → <a>" review summary, same
+  // "Ready to submit your answers?" anchor. Nothing needed changing.
+  //
+  // One cosmetic difference the captures show and Question() does not model:
+  // on a dialog with more than one tab the footer tail reads "Tab/Arrow keys
+  // to navigate" rather than "↑/↓ to navigate". Detection anchors on the
+  // "Enter to select ·" prefix, so the painted tail is immaterial — and
+  // test/turns/claude-code/input.test.ts already carries a screen with the
+  // Tab/Arrow wording.
 
   private static readonly qRule = "─".repeat(120);
 

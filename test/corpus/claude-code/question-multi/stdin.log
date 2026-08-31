@@ -1,0 +1,3 @@
+   5.951s  keys       Use the AskUserQuestion tool to ask me exactly one MULTI-SELECT question (multiSelect true) with header "Toppings", question text "Which toppings do you want?" and exactly four options labeled "Mushrooms", "Olives", "Peppers" and "Onions". Do not do anything else first.
+   7.957s  keys       \x1b[13u
+  41.417s  keys       1

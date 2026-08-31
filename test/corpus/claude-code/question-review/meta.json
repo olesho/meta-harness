@@ -1,0 +1,32 @@
+{
+  "harness": "claude-code",
+  "binary_version": "2.1.251",
+  "recorded_at": "2026-08-31T12:52:56.472Z",
+  "cols": 120,
+  "rows": 40,
+  "notes": "PUPPET-301. AskUserQuestion REVIEW pane, captured live against claude 2.1.251 by asking TWO questions in one call and answering both. bytes.raw also contains, earlier in the stream, both multi-question QUESTION panes (Color then Size) — the '☒ Color  ☐ Size' transition after the first digit is direct live proof that a bare digit selects AND advances, with no CR needed and no CR leaking into the next pane. VERDICT: rows STILL NUMBERED — design §4 branch A.",
+  "prompt": "Use the AskUserQuestion tool once to ask me exactly TWO questions in a single call. Question 1: header \"Color\", text \"Which color should I use?\", options \"Red\" and \"Blue\". Question 2: header \"Size\", text \"Which size should I use?\", options \"Small\" and \"Large\". Do not do anything else first.",
+  "keystrokes": [
+    "<prompt text>",
+    "\\x1b[13u (submit)",
+    "'1' — answers question 1 (Red) and advances to question 2; tab strip flips to '☒ Color  ☐ Size'",
+    "'1' — answers question 2 (Small); the dialog advances to the review pane"
+  ],
+  "outcome": "interactive-detached",
+  "findings": {
+    "q1_option_rows_numbered": "YES. Every option row matches questionOptionRE (/^[^\\S\\r\\n]*(?:❯[^\\S\\r\\n]+)?(\\d+)\\.[^\\S\\n]+(\\S[^\\n]*)$/u) — the rows render as '❯ 1. Red', '  2. Blue', … on 2.1.251. The digit assumption in src/turns/harness/claudecode.ts is RE-VERIFIED, not merely inherited. This is what selects branch A of the PUPPET-301 design.",
+    "q2_glyphs": "Highlight glyph is still ❯ (U+276F). Tab strip glyphs are still ☐/☒/✔ with ←/→ arrows on the multi-tab strip. Observed tab strip: '←  ☐ Color  ☐ Size  ✔ Submit  →' before any answer, '←  ☒ Color  ☒ Size  ✔ Submit  →' on the review pane",
+    "q3_footer_and_review_anchor": "Footer still starts with 'Enter to select ·' — observed in full as: 'Enter to select · Tab/Arrow keys to navigate · Esc to cancel' on the two QUESTION panes (note: the navigation clause differs from the single-question pane's '↑/↓ to navigate', but the required anchor prefix 'Enter to select ·' is unchanged). The REVIEW pane has no such footer and anchors on 'Ready to submit your answers?', which is present verbatim.",
+    "q4_injected_affordances": "Still labeled 'Type something' / 'Chat about this' — matching questionOtherLabel and questionChatLabel.",
+    "q5_multiselect_checkboxes": "n/a — single-select questions. See question-multi.",
+    "q6_review_pane": "YES, unchanged. The review pane still renders exactly two rows, '❯ 1. Submit answers' and '  2. Cancel', under a 'Review your answers' summary block of '● <question>' / '→ <answer>' lines and the 'Ready to submit your answers?' anchor. reviewAlias still maps 'Submit answers' -> 'proceed' and 'Cancel' -> 'deny'."
+  },
+  "detect_input_result": "kind 'question_review', prompt = the summary block joined by newlines ending 'Ready to submit your answers?', options 1='Submit answers' (alias 'proceed', keys '1\\r') and 2='Cancel' (alias 'deny', keys '2\\r').",
+  "mode": "hand-recorded-interactive",
+  "recorder": "test/corpus/tools/record-pty.ts --interactive, over the production PTY bridge (src/wrapper/internal/pty.ts). Keystrokes were fed to the tool's stdin through a FIFO rather than typed at a tty (an agent has no interactive terminal); record-pty's own code path is unchanged and every keystroke is timestamped in stdin.log as usual.",
+  "binary_version_full": "2.1.251 (Claude Code)",
+  "version_note": "`claude --version` was re-probed at capture time and reported 2.1.251 (Claude Code) — the version this ticket targets. No discrepancy to record.",
+  "trust_note": "The recording cwd was `git init`-ed and trust was granted in an EARLIER, discarded session, so the folder-trust dialog does not appear anywhere in this recording. bytes.raw starts at the alt-screen enter (ESC[?1049h) of a clean composer.",
+  "teardown_note": "bytes.raw is TRUNCATED at the last byte of the settled dialog frame, deliberately, before the Ctrl-] detach teardown. SIGTERM makes claude leave the alt screen (ESC[?1049l) and print 'Resume this session with: claude --resume <id>', and a stream ending there replays as the resume text instead of the dialog. Same trap documented in permission-mode-bypass/meta.json.",
+  "expected_note": "expected.txt was PRODUCED BY REPLAYING bytes.raw through src/screen's Screen at 120x40 and serializing as screenbench-record does (finalText.replace(/\\s+$/u, '') + '\\n'). It is not hand-typed."
+}

@@ -63,12 +63,21 @@ const trustAnchor = "Do you trust the files in this folder?";
 const trustAnchorAlt = "Is this a project you created or one you trust?";
 const bypassAnchor = "Bypass Permissions mode";
 
-// AskUserQuestion dialog anchors (verified live against 2.1.210). The dialog
-// renders a tab-strip line ("☐ Color", or "←  ☒ Color  ☐ Size  ✔ Submit  →"
-// for multi-question/multi-select), the question text, a numbered option menu,
-// and a footer. The footer is the question pane's required anchor; the review
-// pane (after the last question) has no such footer and anchors on its own
+// AskUserQuestion dialog anchors (re-verified live against 2.1.251 by
+// PUPPET-301; first captured on 2.1.210). The dialog renders a tab-strip line
+// ("☐ Color", or "←  ☒ Color  ☐ Size  ✔ Submit  →" for
+// multi-question/multi-select), the question text, a numbered option menu, and
+// a footer. The footer is the question pane's required anchor; the review pane
+// (after the last question) has no such footer and anchors on its own
 // confirmation line instead.
+//
+// Ground truth for every anchor below lives in test/corpus/claude-code/
+// question-single, question-multi and question-review — real 2.1.251 PTY
+// recordings whose expected.txt is a replay of bytes.raw, not a hand-typed
+// shape. Between 2.1.210 and 2.1.251 the ONLY drift found was the question
+// pane's footer tail ("↑/↓ to navigate" on a single-question dialog vs
+// "Tab/Arrow keys to navigate" once there is more than one tab); the required
+// prefix below is unaffected.
 const questionFooterAnchor = "Enter to select ·";
 const questionReviewAnchor = "Ready to submit your answers?";
 const questionSubmitTab = "✔ Submit";
@@ -87,6 +96,16 @@ const questionChatLabel = "Chat about this";
 const questionTabRE = /^[^\S\r\n]*(?:←[^\S\r\n]+)?[☐☒][^\S\r\n]/u;
 // questionOptionRE matches one option row: optional "❯" highlight, a number,
 // then the label ("❯ 1. Red", "  2. [ ] Mushrooms").
+//
+// The digit is NOT an inherited assumption. PUPPET-296 found claude's
+// folder-trust dialog rendering its rows unnumbered on 2.1.251 and PUPPET-301
+// asked whether AskUserQuestion had drifted the same way. It has not:
+// test/corpus/claude-code/question-single/expected.txt, question-multi and
+// question-review are 2.1.251 captures and every option row in all three
+// matches this pattern. Selection is therefore still keyed by digit (see the
+// key derivation in DetectQuestion), and no selector-menu fallback is
+// warranted here. Re-verify with test/turns/claude-code/question-corpus.test.ts
+// before assuming it still holds on a later build.
 const questionOptionRE =
   /^[^\S\r\n]*(?:❯[^\S\r\n]+)?(\d+)\.[^\S\n]+(\S[^\n]*)$/u;
 // questionCheckboxRE strips the multi-select checkbox marker off a label.
@@ -474,8 +493,9 @@ export function DetectInput(text: string): InputRequest | null {
 
 /**
  * DetectQuestion recognizes the AskUserQuestion dialog Claude Code renders
- * when the model asks the user a clarifying question mid-turn (verified live
- * against 2.1.210). Two panes exist:
+ * when the model asks the user a clarifying question mid-turn (re-verified
+ * live against 2.1.251 — PUPPET-301 — against the corpus recordings
+ * test/corpus/claude-code/question-{single,multi,review}). Two panes exist:
  *
  *   - a QUESTION pane (kind "question"): tab-strip line, question text,
  *     numbered options, "Enter to select ·…" footer. Digit keys select an
