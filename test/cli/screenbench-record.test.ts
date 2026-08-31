@@ -6,7 +6,7 @@
 // test execs the real script against a fixture manifest + fake-on-PATH, then
 // restores the (overwritten) corpus dirs from git.
 
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import { spawnSync } from "node:child_process";
 import {
   chmodSync,
@@ -28,10 +28,12 @@ import {
   interruptSpecs,
   dialogSpecs,
   claudeTrustState,
+  recorderOwnedMeta,
   ExitOK,
   ExitError,
   ExitUsage,
 } from "../../src/cli/screenbench-record.ts";
+import { expandScenario, type Step } from "../../src/cli/recordSteps.ts";
 import { New, type Builder } from "../chat/fakeharness.ts";
 import { newScreen } from "../../src/screen/index.ts";
 import { NormalizedDistance } from "../corpus/tools/screenbench-metrics.ts";
@@ -213,6 +215,92 @@ describe("parseArgs", () => {
     ]);
     expect(clash.error).toBeDefined();
   });
+
+  // --- the scripted-step flags (PUPPET-312) ---
+
+  const base = ["--harness", "codex", "--out", "/x/y"];
+
+  test("--prompt is repeatable and keeps order", () => {
+    const p = parseArgs([...base, "--prompt", "one", "--prompt", "two"]);
+    expect(p.error).toBeUndefined();
+    expect(p.prompts).toEqual(["one", "two"]);
+  });
+
+  test("--keys accepts an embedded escape and is repeatable", () => {
+    const p = parseArgs([...base, "--keys", "1,\\t,\\x1b[Z", "--keys", "\\r"]);
+    expect(p.error).toBeUndefined();
+    expect(p.keys).toEqual(["1,\\t,\\x1b[Z", "\\r"]);
+  });
+
+  test("--keys with an empty burst is a usage error at PARSE time", () => {
+    // Not at write time: finding a typo after a live recording has started costs
+    // a paid session.
+    expect(parseArgs([...base, "--keys", "1,,2"]).error).toMatch(/empty key/);
+    expect(parseArgs([...base, "--keys", ""]).error).toMatch(/empty key/);
+    expect(parseArgs([...base, "--keys", "1,"]).error).toMatch(/empty key/);
+  });
+
+  test("--keys with a bad escape is a usage error", () => {
+    expect(parseArgs([...base, "--keys", "\\q"]).error).toMatch(
+      /unknown escape/,
+    );
+  });
+
+  test("--stop-on-input is bare, with an optional inline kind", () => {
+    const bare = parseArgs([...base, "--stop-on-input"]);
+    expect(bare.error).toBeUndefined();
+    expect(bare.stopOnInput).toBe(true);
+    expect(bare.stopOnInputKind).toBe("");
+
+    const kind = parseArgs([...base, "--stop-on-input=question"]);
+    expect(kind.stopOnInput).toBe(true);
+    expect(kind.stopOnInputKind).toBe("question");
+  });
+
+  test("bare --stop-on-input does not swallow the next flag", () => {
+    const p = parseArgs([...base, "--stop-on-input", "--keys", "1"]);
+    expect(p.error).toBeUndefined();
+    expect(p.stopOnInput).toBe(true);
+    expect(p.keys).toEqual(["1"]);
+  });
+
+  test("--launch-arg is repeatable and keeps order", () => {
+    const p = parseArgs([
+      ...base,
+      "--launch-arg",
+      "--dangerously-skip-permissions",
+      "--launch-arg",
+      "--verbose",
+    ]);
+    expect(p.launchArgs).toEqual([
+      "--dangerously-skip-permissions",
+      "--verbose",
+    ]);
+  });
+
+  test("--no-warmup and --allow-overwrite are bare booleans", () => {
+    const p = parseArgs([...base, "--no-warmup", "--allow-overwrite"]);
+    expect(p.error).toBeUndefined();
+    expect(p.noWarmup).toBe(true);
+    expect(p.allowOverwrite).toBe(true);
+    expect(parseArgs([...base, "--no-warmup=1"]).error).toBeDefined();
+    expect(parseArgs([...base, "--allow-overwrite=yes"]).error).toBeDefined();
+  });
+
+  test("--attempts defaults to 1 and must be a positive integer", () => {
+    expect(parseArgs(base).attempts).toBe(1);
+    expect(parseArgs([...base, "--attempts", "3"]).attempts).toBe(3);
+    expect(parseArgs([...base, "--attempts", "0"]).error).toBeDefined();
+    expect(parseArgs([...base, "--attempts", "x"]).error).toBeDefined();
+    expect(parseArgs([...base, "--attempts", "1.5"]).error).toBeDefined();
+  });
+
+  // The unknown-flag rejection must survive the new cases: a typo has to fail
+  // loudly rather than be absorbed as a scenario name.
+  test("an unknown flag still errors alongside the new ones", () => {
+    expect(parseArgs([...base, "--stop-on-inputs"]).error).toBeDefined();
+    expect(parseArgs([...base, "--key", "1"]).error).toBeDefined();
+  });
 });
 
 describe("normalizeVersion", () => {
@@ -236,12 +324,79 @@ describe("catalog invariants", () => {
     const sc = scenarios["trust-dialog"];
     expect(sc.dialog).toBe(true);
     expect(sc.freshWorkdir).toBe(true);
-    expect(sc.prompts.length).toBe(0);
+    // `prompts` is optional now that a scenario may script itself, so this reads
+    // the list rather than its length.
+    expect(sc.prompts).toEqual([]);
   });
 
   test("the startup dialog is claude-code-only", () => {
     expect(dialogSpecs["claude-code"]).toBeDefined();
     expect(dialogSpecs["codex"]).toBeUndefined();
+  });
+
+  // Every entry must declare exactly one driving shape. `prompts` is sugar for
+  // [prompt, await-turn] per entry; `steps` is an explicit script. Declaring
+  // both is a usage error rather than a silent precedence rule, so the catalog
+  // itself must never be in that state.
+  test("every entry declares prompts XOR steps", () => {
+    for (const [name, sc] of Object.entries(scenarios)) {
+      const hasPrompts = sc.prompts !== undefined;
+      const hasSteps = sc.steps !== undefined;
+      expect(
+        hasPrompts !== hasSteps,
+        `${name} must declare exactly one of prompts / steps`,
+      ).toBe(true);
+      // …and every entry must actually expand.
+      expect(() => expandScenario(sc)).not.toThrow();
+    }
+  });
+
+  // requiresHarness is refused for any OTHER harness, before any file write.
+  // Vacuous while no catalog entry declares it — the point is that adding one
+  // cannot skip the gate; the live refusal is exercised in "pre-write guards".
+  test("every requiresHarness entry names a harness that can drive it", () => {
+    for (const [name, sc] of Object.entries(scenarios)) {
+      if (sc.requiresHarness === undefined) continue;
+      expect(
+        ["claude-code", "codex", "pi", "opencode", "generic"],
+        `${name} requires an unknown harness`,
+      ).toContain(sc.requiresHarness);
+    }
+  });
+
+  // The three legacy entries must keep desugaring to EXACTLY the step list the
+  // pre-interpreter loop drove, or the shipped corpus silently changes meaning.
+  test("the legacy entries expand to the exact legacy step list", () => {
+    expect(expandScenario(scenarios["multi-turn"])).toEqual([
+      { kind: "prompt", text: "what is the capital of France" },
+      { kind: "await-turn" },
+      { kind: "prompt", text: "what is its population" },
+      { kind: "await-turn" },
+      { kind: "prompt", text: "how does that compare to Berlin" },
+      { kind: "await-turn" },
+    ]);
+    expect(expandScenario(scenarios["tool-call"])).toEqual([
+      {
+        kind: "prompt",
+        text: "Use the Read tool to read notes.txt and tell me exactly what it says",
+      },
+      { kind: "await-turn" },
+    ]);
+    expect(expandScenario(scenarios["interrupted-mid-reply"])).toEqual([
+      {
+        kind: "prompt",
+        text: "Write a detailed 500 word essay about the history of Paris",
+      },
+      { kind: "interrupt" },
+    ]);
+  });
+
+  // trust-dialog stops on the ANCHOR, not on an adapter event — the distinction
+  // the migration turns on, and it is legible from the expansion alone.
+  test("trust-dialog expands to the anchor stop condition, not await-input", () => {
+    expect(expandScenario(scenarios["trust-dialog"])).toEqual([
+      { kind: "await-dialog-anchor" },
+    ]);
   });
 
   // Guards a copy-paste divergence: the recorder's dialog anchors must be the
@@ -668,5 +823,724 @@ describe("rebake-corpus smoke", () => {
     } finally {
       spawnSync("git", ["restore", "--", ...clobbered], { cwd: root });
     }
+  }, 60_000);
+});
+
+// ---- recorderOwnedMeta (the overwrite guard's predicate) --------------------
+
+describe("recorderOwnedMeta", () => {
+  test("a meta.json this CLI wrote is owned", () => {
+    expect(
+      recorderOwnedMeta({
+        recorder: "src/cli/screenbench-record.ts (scripted steps)",
+      }),
+    ).toBe(true);
+  });
+
+  test("the pre-`recorder` shape this CLI used to write is owned", () => {
+    // Every recorder-written cell on disk today predates the `recorder` field.
+    // Without this the guard would refuse to re-record the cells rebake owns.
+    expect(
+      recorderOwnedMeta({
+        harness: "codex",
+        binary_version: "0.52.0",
+        recorded_at: "2026-01-01T00:00:00.000Z",
+        cols: 120,
+        rows: 40,
+        notes: "screenbench-record multi-turn: …",
+      }),
+    ).toBe(true);
+  });
+
+  test("a hand-captured meta.json is NOT owned", () => {
+    // The real shape from test/corpus/claude-code/permission-mode-cycle.
+    expect(
+      recorderOwnedMeta({
+        harness: "claude-code",
+        mode: "scripted-probe",
+        recorder: "test/corpus/tools/probe-shift-tab.ts (PTY bridge)",
+        measured_ring_length: 4,
+        not_measured: ["bypass"],
+      }),
+    ).toBe(false);
+    expect(
+      recorderOwnedMeta({
+        harness: "claude-code",
+        binary_version: "2.1.218",
+        cols: 120,
+        rows: 40,
+        notes: "…",
+        mode: "hand-recorded-interactive",
+      }),
+    ).toBe(false);
+  });
+
+  test("it fails CLOSED on anything it cannot recognize", () => {
+    expect(recorderOwnedMeta(null)).toBe(false);
+    expect(recorderOwnedMeta("nope")).toBe(false);
+    expect(recorderOwnedMeta([])).toBe(false);
+    expect(recorderOwnedMeta({ recorder: 42 })).toBe(false);
+  });
+});
+
+// ---- the real corpus, read as data ------------------------------------------
+
+describe("overwrite guard vs. the checked-in corpus", () => {
+  // The guard is only worth having if it draws the line in the right place on
+  // the ACTUAL artifacts: every hand-captured cell protected, every
+  // recorder-written cell still re-recordable by rebake.
+  test("hand-captured cells are protected, recorder cells are not", () => {
+    const handCaptured = [
+      "claude-code/permission-mode-cycle",
+      "claude-code/permission-mode-manual",
+      "codex/permission-mode-cycle",
+      "codex/status-box",
+    ];
+    for (const cell of handCaptured) {
+      const meta = JSON.parse(
+        readFileSync(join(root, "test", "corpus", cell, "meta.json"), "utf8"),
+      );
+      expect(recorderOwnedMeta(meta), `${cell} must be protected`).toBe(false);
+    }
+    for (const cell of ["codex/multi-turn", "claude-code/tool-call"]) {
+      const meta = JSON.parse(
+        readFileSync(join(root, "test", "corpus", cell, "meta.json"), "utf8"),
+      );
+      expect(recorderOwnedMeta(meta), `${cell} must be re-recordable`).toBe(
+        true,
+      );
+    }
+  });
+});
+
+// ---- pre-write guards (scripted steps) --------------------------------------
+//
+// Each case here must refuse BEFORE any file is written, so a rejected request
+// never leaves a partial scenario dir behind for `discover` to pick up. The
+// scenarios are injected into the exported catalog and removed again: this
+// ticket adds the interpreter, and the dialog-driving catalog entries land with
+// the hermetic dialog recordings in the next child.
+async function withScenario<T>(
+  name: string,
+  sc: (typeof scenarios)[string],
+  fn: () => Promise<T>,
+): Promise<T> {
+  scenarios[name] = sc;
+  try {
+    return await fn();
+  } finally {
+    delete scenarios[name];
+  }
+}
+
+describe("pre-write guards", () => {
+  test("a cycle step on a harness with no cycle keystroke is refused", async () => {
+    // pi's adapter implements no permissionCycleKeys(); claude-code's and
+    // codex's do. The bytes are never hard-coded here — the refusal is decided
+    // by the same structural probe the chat layer uses.
+    const out = outDir("cycle-guard");
+    const code = await withScenario(
+      "cycle-guard",
+      { steps: [{ kind: "cycle" }], notes: "guard" },
+      () =>
+        runRecorder(
+          [
+            "--harness",
+            "pi",
+            "--out",
+            out,
+            "--scenario",
+            "cycle-guard",
+            "--bin",
+            fakeHarness,
+          ],
+          codexScript(1),
+        ),
+    );
+    expect(code).toBe(ExitError);
+    expect(existsSync(out)).toBe(false);
+  });
+
+  test("a requiresHarness mismatch is refused", async () => {
+    const out = outDir("harness-guard");
+    const code = await withScenario(
+      "harness-guard",
+      {
+        prompts: ["hello"],
+        requiresHarness: "claude-code",
+        notes: "guard",
+      },
+      () =>
+        runRecorder(
+          [
+            "--harness",
+            "codex",
+            "--out",
+            out,
+            "--scenario",
+            "harness-guard",
+            "--bin",
+            fakeHarness,
+          ],
+          codexScript(1),
+        ),
+    );
+    expect(code).toBe(ExitError);
+    expect(existsSync(out)).toBe(false);
+  });
+
+  test("a dump step with a traversing filename is a usage error", async () => {
+    const out = outDir("dump-guard");
+    const code = await withScenario(
+      "dump-guard",
+      {
+        steps: [{ kind: "dump", file: "../escaped.txt" }],
+        notes: "guard",
+      },
+      () =>
+        runRecorder(
+          [
+            "--harness",
+            "codex",
+            "--out",
+            out,
+            "--scenario",
+            "dump-guard",
+            "--bin",
+            fakeHarness,
+          ],
+          codexScript(1),
+        ),
+    );
+    expect(code).toBe(ExitUsage);
+    expect(existsSync(out)).toBe(false);
+  });
+
+  test("a scenario declaring both prompts and steps is a usage error", async () => {
+    const out = outDir("both-guard");
+    const code = await withScenario(
+      "both-guard",
+      {
+        prompts: ["hello"],
+        steps: [{ kind: "await-turn" }],
+        notes: "guard",
+      },
+      () =>
+        runRecorder(
+          [
+            "--harness",
+            "codex",
+            "--out",
+            out,
+            "--scenario",
+            "both-guard",
+            "--bin",
+            fakeHarness,
+          ],
+          codexScript(1),
+        ),
+    );
+    expect(code).toBe(ExitUsage);
+    expect(existsSync(out)).toBe(false);
+  });
+
+  test("--prompt against a catalog scenario is a usage error", async () => {
+    const out = outDir("multi-turn");
+    const code = await runRecorder(
+      [
+        "--harness",
+        "codex",
+        "--out",
+        out,
+        "--scenario",
+        "multi-turn",
+        "--prompt",
+        "something else",
+        "--bin",
+        fakeHarness,
+      ],
+      codexScript(1),
+    );
+    expect(code).toBe(ExitUsage);
+    expect(existsSync(out)).toBe(false);
+  });
+
+  test("an unknown scenario WITH --prompt records as an ad-hoc script", async () => {
+    const out = outDir("adhoc");
+    const code = await runRecorder(
+      [
+        "--harness",
+        "codex",
+        "--out",
+        out,
+        "--scenario",
+        "adhoc",
+        "--prompt",
+        "what is the capital of France",
+        "--bin",
+        fakeHarness,
+      ],
+      codexScript(1),
+    );
+    expect(code).toBe(ExitOK);
+    const meta = JSON.parse(readFileSync(join(out, "meta.json"), "utf8"));
+    expect(meta.steps).toEqual([
+      { kind: "prompt", text: "what is the capital of France" },
+      { kind: "await-turn" },
+    ]);
+  }, 60_000);
+});
+
+// ---- the overwrite guard, end to end ----------------------------------------
+
+describe("overwrite guard", () => {
+  function handCaptured(dir: string): string {
+    mkdirSync(dir, { recursive: true });
+    const meta = join(dir, "meta.json");
+    writeFileSync(
+      meta,
+      JSON.stringify(
+        {
+          harness: "claude-code",
+          mode: "hand-recorded-interactive",
+          recorder: "test/corpus/tools/record-pty.ts --interactive",
+          notes: "the measured ring length and both probed encodings",
+        },
+        null,
+        2,
+      ),
+    );
+    return meta;
+  }
+
+  test("refuses to overwrite a hand-captured recording, writing nothing", async () => {
+    const out = outDir("tool-call");
+    const meta = handCaptured(out);
+    const before = readFileSync(meta, "utf8");
+    const code = await runRecorder(
+      ["--harness", "codex", "--out", out, "--bin", fakeHarness],
+      codexScript(1),
+    );
+    expect(code).toBe(ExitError);
+    // Nothing written: the prose is intact and no recording was started.
+    expect(readFileSync(meta, "utf8")).toBe(before);
+    expect(existsSync(join(out, "bytes.raw"))).toBe(false);
+    expect(existsSync(join(out, "expected.txt"))).toBe(false);
+  });
+
+  test("--allow-overwrite proceeds", async () => {
+    const out = outDir("tool-call");
+    handCaptured(out);
+    const code = await runRecorder(
+      [
+        "--harness",
+        "codex",
+        "--out",
+        out,
+        "--bin",
+        fakeHarness,
+        "--allow-overwrite",
+      ],
+      codexScript(1),
+    );
+    expect(code).toBe(ExitOK);
+    const meta = JSON.parse(readFileSync(join(out, "meta.json"), "utf8"));
+    expect(meta.mode).toBe("scripted");
+    expect(meta.recorder).toMatch(/^src\/cli\/screenbench-record\.ts/);
+  }, 60_000);
+
+  test("re-records over its OWN output without the flag", async () => {
+    const out = outDir("tool-call");
+    const args = ["--harness", "codex", "--out", out, "--bin", fakeHarness];
+    expect(await runRecorder(args, codexScript(1))).toBe(ExitOK);
+    expect(await runRecorder(args, codexScript(1))).toBe(ExitOK);
+  }, 60_000);
+});
+
+// ---- the step interpreter, against the hermetic fake -----------------------
+
+/** Captures everything the recorder writes to stderr during `fn`. */
+async function captureStderr(
+  fn: () => Promise<number>,
+): Promise<[number, string]> {
+  let text = "";
+  const spy = vi
+    .spyOn(process.stderr, "write")
+    .mockImplementation((chunk: unknown) => {
+      text += String(chunk);
+      return true;
+    });
+  try {
+    return [await fn(), text];
+  } finally {
+    spy.mockRestore();
+  }
+}
+
+describe("step interpreter", () => {
+  // The `keys` step drives the fake through AwaitSubmit without a `prompt`
+  // step: the fake deliberately does NOT echo keystrokes onto the screen it
+  // paints, so claude-code's "prompt was not echoed" assertion cannot be
+  // satisfied hermetically. Writing the submit key directly exercises the same
+  // interpreter path with none of that coupling.
+  const submitKeys = "\\x1b[13u";
+
+  test("records a scripted claude run: stdin.log, keystrokes, steps, no warmup", async () => {
+    const out = outDir("scripted");
+    const spawnLog = join(mkdtempSync(join(tmpdir(), "sbrec-spawn-")), "log");
+    const code = await withScenario(
+      "scripted",
+      {
+        steps: [
+          { kind: "keys", bytes: submitKeys, label: "submit" },
+          { kind: "await-turn" },
+          { kind: "dump", file: "screen-final.txt" },
+        ],
+        notes: "scripted keys + turn + dump",
+      },
+      () =>
+        runRecorder(
+          [
+            "--harness",
+            "claude-code",
+            "--out",
+            out,
+            "--scenario",
+            "scripted",
+            "--bin",
+            fakeHarness,
+            "--no-warmup",
+            "--launch-arg",
+            "--verbose",
+          ],
+          claudeScript((b) =>
+            b
+              .Idle()
+              .AwaitSubmit()
+              .Reply(40, "the answer is Paris", "Cerebrating", "3s")
+              // The /quit teardown writes "/quit" + CSI 13u, which this second
+              // AwaitSubmit consumes — so the fake exits on the quit instead of
+              // making the recorder wait out its 15 s grace.
+              .AwaitSubmit()
+              .Exit(0),
+          ),
+          FAKE_VERSION,
+          { FAKE_HARNESS_SPAWN_LOG: spawnLog },
+        ),
+    );
+    expect(code).toBe(ExitOK);
+
+    // --no-warmup proof: exactly one PTY launch (the --version probe exits
+    // before the ledger, so it never contributes a line).
+    expect(readFileSync(spawnLog, "utf8").trim().split("\n").length).toBe(1);
+
+    // stdin.log: one timestamped, printable()-rendered line per write.
+    const log = readFileSync(join(out, "stdin.log"), "utf8").trimEnd();
+    expect(log.split("\n").length).toBe(1);
+    expect(log).toMatch(/^\s*\d+\.\d{3}s {2}submit {5}\\x1b\[13u$/);
+
+    // The dump step wrote its screen inside --out.
+    expect(existsSync(join(out, "screen-final.txt"))).toBe(true);
+
+    const meta = JSON.parse(readFileSync(join(out, "meta.json"), "utf8"));
+    expect(meta.mode).toBe("scripted");
+    expect(meta.recorder).toMatch(/^src\/cli\/screenbench-record\.ts/);
+    expect(meta.launch_args).toEqual(["--verbose"]);
+    expect(meta.keystrokes).toEqual(["\\x1b[13u"]);
+    // The expanded script is recorded verbatim.
+    expect(meta.steps).toEqual([
+      { kind: "keys", bytes: submitKeys, label: "submit" },
+      { kind: "await-turn" },
+      { kind: "dump", file: "screen-final.txt" },
+    ]);
+  }, 60_000);
+
+  test("an answer step with no pending request fails by name, writing no meta", async () => {
+    const out = outDir("answer-nothing");
+    const [code, err] = await captureStderr(() =>
+      withScenario(
+        "answer-nothing",
+        {
+          steps: [{ kind: "answer", optionID: "1" }],
+          notes: "guard",
+        },
+        () =>
+          runRecorder(
+            [
+              "--harness",
+              "claude-code",
+              "--out",
+              out,
+              "--scenario",
+              "answer-nothing",
+              "--bin",
+              fakeHarness,
+              "--no-warmup",
+            ],
+            claudeScript((b) => b.Idle().StayAliveUntilStopped()),
+          ),
+      ),
+    );
+    expect(code).toBe(ExitError);
+    expect(err).toContain("no pending input request");
+    // A null deref would have produced a TypeError instead of this.
+    expect(err).toContain("must follow an `await-input` step");
+    // Partial bytes.raw is expected (today's behaviour); a meta.json is not.
+    expect(existsSync(join(out, "meta.json"))).toBe(false);
+    expect(existsSync(join(out, "expected.txt"))).toBe(false);
+  }, 60_000);
+
+  test("an answer step with an unknown option lists the available ids", async () => {
+    const out = outDir("answer-unknown");
+    const [code, err] = await captureStderr(() =>
+      withScenario(
+        "answer-unknown",
+        {
+          steps: [
+            { kind: "keys", bytes: submitKeys },
+            { kind: "await-input", timeoutMs: 30_000 },
+            { kind: "answer", optionID: "no-such-option" },
+          ],
+          notes: "guard",
+        },
+        () =>
+          runRecorder(
+            [
+              "--harness",
+              "claude-code",
+              "--out",
+              out,
+              "--scenario",
+              "answer-unknown",
+              "--bin",
+              fakeHarness,
+              "--no-warmup",
+            ],
+            claudeScript((b) =>
+              b
+                .Idle()
+                .AwaitSubmit()
+                .Question(40, " ☐ Colour", "Which colour?", [
+                  ["Red", "the warm one"],
+                  ["Blue", "the cool one"],
+                ])
+                .StayAliveUntilStopped(),
+            ),
+          ),
+      ),
+    );
+    expect(code).toBe(ExitError);
+    expect(err).toContain("no-such-option");
+    // The ids that WERE available — the whole point of surfacing this one.
+    expect(err).toMatch(/available option ids: [^\n]*1/);
+    expect(existsSync(join(out, "meta.json"))).toBe(false);
+  }, 60_000);
+});
+
+describe("step interpreter: answering and cycling", () => {
+  const submitKeys = "\\x1b[13u";
+
+  test("answers a question pane through the chat layer's own byte semantics", async () => {
+    const out = outDir("answered");
+    const code = await withScenario(
+      "answered",
+      {
+        steps: [
+          { kind: "keys", bytes: submitKeys },
+          { kind: "await-input", inputKind: "question", timeoutMs: 30_000 },
+          { kind: "answer", optionID: "1" },
+        ],
+        notes: "answers the first option",
+      },
+      () =>
+        runRecorder(
+          [
+            "--harness",
+            "claude-code",
+            "--out",
+            out,
+            "--scenario",
+            "answered",
+            "--bin",
+            fakeHarness,
+            "--no-warmup",
+          ],
+          claudeScript((b) =>
+            b
+              .Idle()
+              .AwaitSubmit()
+              .Question(40, " ☐ Colour", "Which colour?", [
+                ["Red", "the warm one"],
+                ["Blue", "the cool one"],
+              ])
+              // The answer is written as the option's OWN keys — never bytes
+              // this test picked — so this wait is what proves they landed.
+              .AwaitDigit()
+              .Reply(40, "Red it is", "Cerebrating", "2s")
+              .AwaitSubmit()
+              .Exit(0),
+          ),
+        ),
+    );
+    expect(code).toBe(ExitOK);
+    const meta = JSON.parse(readFileSync(join(out, "meta.json"), "utf8"));
+    // Two writes: the submit key, then the option's keys.
+    expect(meta.keystrokes.length).toBe(2);
+    expect(meta.keystrokes[0]).toBe("\\x1b[13u");
+    // stdin.log carries the same writes, labelled.
+    const log = readFileSync(join(out, "stdin.log"), "utf8");
+    expect(log).toMatch(/answer1/);
+  }, 60_000);
+
+  test("a cycle step dumps one screen per press and never hard-codes the bytes", async () => {
+    const out = outDir("cycled");
+    const code = await withScenario(
+      "cycled",
+      {
+        steps: [{ kind: "cycle", presses: 2 }],
+        notes: "two permission-mode presses",
+      },
+      () =>
+        runRecorder(
+          [
+            "--harness",
+            "claude-code",
+            "--out",
+            out,
+            "--scenario",
+            "cycled",
+            "--bin",
+            fakeHarness,
+            "--no-warmup",
+          ],
+          claudeScript((b) =>
+            b
+              .Idle()
+              // Each wait matches the adapter's OWN cycle encoding; a recorder
+              // that invented its own bytes would hang here.
+              .AwaitPermissionCycle()
+              .PermissionFooter(40, "plan")
+              .AwaitPermissionCycle()
+              .PermissionFooter(40, "acceptEdits")
+              .AwaitSubmit()
+              .Exit(0),
+          ),
+        ),
+    );
+    expect(code).toBe(ExitOK);
+    expect(existsSync(join(out, "screen-press-01.txt"))).toBe(true);
+    expect(existsSync(join(out, "screen-press-02.txt"))).toBe(true);
+    const meta = JSON.parse(readFileSync(join(out, "meta.json"), "utf8"));
+    expect(meta.keystrokes).toEqual(["\\x1b[Z", "\\x1b[Z"]);
+  }, 60_000);
+
+  // --stop-on-input + --keys compose into an ad-hoc script, in that order: the
+  // stop condition first, the scripted keys after it.
+  test("--stop-on-input and --keys compose into an ad-hoc script", async () => {
+    const out = outDir("adhoc-stop");
+    const code = await runRecorder(
+      [
+        "--harness",
+        "claude-code",
+        "--out",
+        out,
+        "--scenario",
+        "adhoc-stop",
+        "--bin",
+        fakeHarness,
+        "--no-warmup",
+        "--stop-on-input=question",
+        "--keys",
+        "1",
+      ],
+      claudeScript((b) =>
+        b
+          .Idle()
+          .Question(40, " ☐ Colour", "Which colour?", [
+            ["Red", "the warm one"],
+            ["Blue", "the cool one"],
+          ])
+          .AwaitDigit()
+          .Reply(40, "Red it is", "Cerebrating", "2s")
+          .AwaitSubmit()
+          .Exit(0),
+      ),
+    );
+    expect(code).toBe(ExitOK);
+    const meta = JSON.parse(readFileSync(join(out, "meta.json"), "utf8"));
+    expect(meta.steps).toEqual([
+      { kind: "await-input", inputKind: "question" },
+      { kind: "keys", bytes: "1" },
+    ]);
+    expect(meta.keystrokes).toEqual(["1"]);
+  }, 60_000);
+});
+
+describe("--attempts", () => {
+  // A half-answered dialog cannot be rewound, so a retry is always the WHOLE
+  // run: teardown, truncate bytes.raw, start over.
+  test("retries a timed-out await-input, and only that", async () => {
+    const out = outDir("retry");
+    const [code, err] = await captureStderr(() =>
+      withScenario(
+        "retry",
+        {
+          steps: [{ kind: "await-input", timeoutMs: 1_000 }],
+          notes: "never asks",
+        },
+        () =>
+          runRecorder(
+            [
+              "--harness",
+              "claude-code",
+              "--out",
+              out,
+              "--scenario",
+              "retry",
+              "--bin",
+              fakeHarness,
+              "--no-warmup",
+              "--attempts",
+              "2",
+            ],
+            claudeScript((b) => b.Idle().StayAliveUntilStopped()),
+          ),
+      ),
+    );
+    expect(code).toBe(ExitError);
+    expect(err).toContain("attempt 1/2");
+    expect(err).toContain("re-recording from scratch");
+    // The retry did not accumulate: no meta.json, and the second attempt's
+    // bytes.raw replaced the first's rather than being appended to it.
+    expect(existsSync(join(out, "meta.json"))).toBe(false);
+  }, 60_000);
+
+  test("does NOT retry a deterministic failure", async () => {
+    const out = outDir("no-retry");
+    const [code, err] = await captureStderr(() =>
+      withScenario(
+        "no-retry",
+        { steps: [{ kind: "answer", optionID: "1" }], notes: "guard" },
+        () =>
+          runRecorder(
+            [
+              "--harness",
+              "claude-code",
+              "--out",
+              out,
+              "--scenario",
+              "no-retry",
+              "--bin",
+              fakeHarness,
+              "--no-warmup",
+              "--attempts",
+              "3",
+            ],
+            claudeScript((b) => b.Idle().StayAliveUntilStopped()),
+          ),
+      ),
+    );
+    expect(code).toBe(ExitError);
+    expect(err).not.toContain("re-recording from scratch");
   }, 60_000);
 });

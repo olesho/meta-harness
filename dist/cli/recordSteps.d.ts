@@ -15,6 +15,9 @@ export type Step = {
     inputKind?: string;
     timeoutMs?: number;
 } | {
+    kind: "await-dialog-anchor";
+    timeoutMs?: number;
+} | {
     kind: "await-text";
     text: string;
     timeoutMs?: number;
@@ -39,7 +42,7 @@ export type Step = {
     file: string;
 };
 /** Every `Step["kind"]`, in union order. Exported for validation + messages. */
-export declare const stepKinds: readonly ["prompt", "await-turn", "await-input", "await-text", "answer", "keys", "cycle", "interrupt", "settle", "dump"];
+export declare const stepKinds: readonly ["prompt", "await-turn", "await-input", "await-dialog-anchor", "await-text", "answer", "keys", "cycle", "interrupt", "settle", "dump"];
 /**
  * The scenario fields this module reads.
  *
@@ -54,6 +57,12 @@ export interface StepScenario {
     steps?: Step[];
     /** Legacy sugar: replaces the LAST `await-turn` with `{ kind: "interrupt" }`. */
     interrupt?: boolean;
+    /**
+     * Legacy sugar: the scenario's terminal state is a blocking startup dialog
+     * detected by ANCHOR, not by the adapter. Appends a trailing
+     * `{ kind: "await-dialog-anchor" }`.
+     */
+    dialog?: boolean;
 }
 /**
  * Render bytes as a printable escape string for stdin.log ("\x1b[13u" etc.).
@@ -112,6 +121,13 @@ export declare function validateSteps(steps: Step[]): Step[];
  *
  *   `prompts: [a, b]` -> `[{prompt a}, {await-turn}, {prompt b}, {await-turn}]`
  *   `interrupt: true` -> the LAST `await-turn` becomes `{ kind: "interrupt" }`
+ *   `dialog: true`    -> a trailing `{ kind: "await-dialog-anchor" }`
+ *
+ * `dialog: true` does NOT desugar to `await-input`: the two are different stop
+ * conditions and both must stay legible in the expanded list. `await-input`
+ * resolves on an adapter `InputRequested` event; `await-dialog-anchor` resolves
+ * on a screen anchor, and must keep working on builds where the adapter cannot
+ * parse the dialog at all.
  *
  * Declaring both `prompts` and `steps` is a usage error rather than a silent
  * precedence rule (PUPPET-306 §7.1(7)): a scenario that means to script itself

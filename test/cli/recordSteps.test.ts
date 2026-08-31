@@ -337,3 +337,51 @@ describe("validateStep", () => {
     ).toThrow(/non-negative integer/);
   });
 });
+
+// `dialog: true` is the SECOND stop-condition spelling, and it must not become a
+// silent alias of `await-input`: it polls screen ANCHORS, so it still works on a
+// build whose DetectInput cannot parse the dialog at all — which is the entire
+// reason the trust-dialog cell exists.
+describe("expandScenario — dialog sugar", () => {
+  test("dialog: true appends a trailing await-dialog-anchor", () => {
+    expect(expandScenario({ dialog: true })).toEqual([
+      { kind: "await-dialog-anchor" },
+    ]);
+  });
+
+  test("an empty prompts list is legitimate ONLY with dialog: true", () => {
+    expect(expandScenario({ prompts: [], dialog: true })).toEqual([
+      { kind: "await-dialog-anchor" },
+    ]);
+    expect(() => expandScenario({ prompts: [] })).toThrow(/empty prompts/);
+  });
+
+  test("the dialog stop condition comes last, after any prompts", () => {
+    expect(expandScenario({ prompts: ["a"], dialog: true })).toEqual([
+      { kind: "prompt", text: "a" },
+      { kind: "await-turn" },
+      { kind: "await-dialog-anchor" },
+    ]);
+  });
+
+  test("it desugars to await-dialog-anchor, never to await-input", () => {
+    const steps = expandScenario({ dialog: true });
+    expect(steps.map((s) => s.kind)).not.toContain("await-input");
+  });
+
+  test("steps plus dialog: true is a usage error", () => {
+    expect(() =>
+      expandScenario({ steps: [{ kind: "await-turn" }], dialog: true }),
+    ).toThrow(/both steps and dialog/);
+  });
+
+  test("await-dialog-anchor validates its timeout like its siblings", () => {
+    expect(validateStep({ kind: "await-dialog-anchor" })).toEqual({
+      kind: "await-dialog-anchor",
+    });
+    expect(() =>
+      validateStep({ kind: "await-dialog-anchor", timeoutMs: 0 }),
+    ).toThrow(/positive integer/);
+    expect(stepKinds).toContain("await-dialog-anchor");
+  });
+});

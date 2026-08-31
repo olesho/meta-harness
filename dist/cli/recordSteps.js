@@ -20,6 +20,7 @@ export const stepKinds = [
     "prompt",
     "await-turn",
     "await-input",
+    "await-dialog-anchor",
     "await-text",
     "answer",
     "keys",
@@ -186,6 +187,10 @@ export function validateStep(step) {
             if (step.timeoutMs !== undefined)
                 positiveInt(step.timeoutMs, "timeoutMs", "await-input");
             break;
+        case "await-dialog-anchor":
+            if (step.timeoutMs !== undefined)
+                positiveInt(step.timeoutMs, "timeoutMs", "await-dialog-anchor");
+            break;
         case "await-text":
             nonEmptyString(step.text, "text", "await-text");
             if (step.timeoutMs !== undefined)
@@ -249,6 +254,13 @@ export function validateSteps(steps) {
  *
  *   `prompts: [a, b]` -> `[{prompt a}, {await-turn}, {prompt b}, {await-turn}]`
  *   `interrupt: true` -> the LAST `await-turn` becomes `{ kind: "interrupt" }`
+ *   `dialog: true`    -> a trailing `{ kind: "await-dialog-anchor" }`
+ *
+ * `dialog: true` does NOT desugar to `await-input`: the two are different stop
+ * conditions and both must stay legible in the expanded list. `await-input`
+ * resolves on an adapter `InputRequested` event; `await-dialog-anchor` resolves
+ * on a screen anchor, and must keep working on builds where the adapter cannot
+ * parse the dialog at all.
  *
  * Declaring both `prompts` and `steps` is a usage error rather than a silent
  * precedence rule (PUPPET-306 §7.1(7)): a scenario that means to script itself
@@ -263,20 +275,29 @@ export function expandScenario(scenario) {
         if (scenario.interrupt) {
             throw new Error('scenario declares both steps and interrupt: true; an explicit script uses an { kind: "interrupt" } step');
         }
+        if (scenario.dialog) {
+            throw new Error('scenario declares both steps and dialog: true; an explicit script uses an { kind: "await-dialog-anchor" } step');
+        }
         const steps = scripted.slice();
         if (steps.length === 0)
             throw new Error("scenario declares an empty steps list");
         validateSteps(steps);
         return steps;
     }
-    if (prompts === undefined) {
+    // `dialog: true` is the one shape whose whole script can be the stop
+    // condition: the trust-dialog cell sends no prompt at all, so an absent (or
+    // empty) prompts list is legitimate there and ONLY there.
+    if (prompts === undefined && !scenario.dialog) {
         throw new Error("scenario declares neither prompts nor steps");
     }
-    if (!Array.isArray(prompts) || prompts.length === 0) {
+    if (prompts !== undefined && !Array.isArray(prompts)) {
+        throw new Error("scenario declares an empty prompts list");
+    }
+    if (prompts !== undefined && prompts.length === 0 && !scenario.dialog) {
         throw new Error("scenario declares an empty prompts list");
     }
     const steps = [];
-    for (const text of prompts) {
+    for (const text of prompts ?? []) {
         nonEmptyString(text, "prompts entry", "prompt");
         steps.push({ kind: "prompt", text });
         steps.push({ kind: "await-turn" });
@@ -288,6 +309,10 @@ export function expandScenario(scenario) {
         }
         steps[last] = { kind: "interrupt" };
     }
+    // The dialog is the TERMINAL state, so its stop condition goes last — after
+    // whatever prompts the scenario sends (today: none).
+    if (scenario.dialog)
+        steps.push({ kind: "await-dialog-anchor" });
     validateSteps(steps);
     return steps;
 }

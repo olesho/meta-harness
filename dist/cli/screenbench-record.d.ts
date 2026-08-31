@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { type Step } from "./recordSteps.ts";
 export declare const ExitOK = 0;
 export declare const ExitError = 1;
 export declare const ExitUsage = 2;
@@ -21,7 +22,10 @@ interface DialogSpec {
 }
 export declare const dialogSpecs: Record<string, DialogSpec>;
 interface Scenario {
-    prompts: string[];
+    /** Legacy sugar: one `[prompt, await-turn]` pair per entry. */
+    prompts?: string[];
+    /** Explicit script. Mutually exclusive with `prompts`. */
+    steps?: Step[];
     /** Interrupt the (single) prompt's reply once streaming is visible. */
     interrupt?: boolean;
     /** Terminal state is a blocking dialog, not a TurnComplete. See dialogSpecs. */
@@ -31,6 +35,19 @@ interface Scenario {
      * Suppresses the trust-accepting warmup pass and mints a unique cwd.
      */
     freshWorkdir?: boolean;
+    /**
+     * Extra argv for the harness binary. `PtyProcess.spawn` used to be called with
+     * a hard-coded empty `args`, which made every launch-flag-dependent cell
+     * unrecordable. `--launch-arg` overrides this per run.
+     */
+    launchArgs?: string[];
+    /**
+     * The scenario is meaningful for exactly one harness; recording it for any
+     * other is refused before any file is written (same shape as the interrupt and
+     * dialog spec gates, but declared BY THE SCENARIO rather than by a spec map —
+     * it is a property of the script, not of a missing seam).
+     */
+    requiresHarness?: string;
     notes: string;
     setup?: (cwd: string) => void;
 }
@@ -45,6 +62,21 @@ export interface ParsedArgs {
     rows: number;
     binaryVersion: string;
     notes: string;
+    /** Ad-hoc prompts (repeatable `--prompt`); only for a non-catalog scenario. */
+    prompts: string[];
+    /** Raw `--keys` specs (repeatable), each a comma-separated burst list. */
+    keys: string[];
+    /** `--stop-on-input[=<kind>]`: the ad-hoc spelling of an `await-input` step. */
+    stopOnInput: boolean;
+    stopOnInputKind: string;
+    /** `--launch-arg` (repeatable): overrides the scenario's own launchArgs. */
+    launchArgs: string[];
+    /** `--no-warmup`: skip the claude trust-accepting warmup pass. */
+    noWarmup: boolean;
+    /** `--allow-overwrite`: proceed past the hand-captured-recording guard. */
+    allowOverwrite: boolean;
+    /** `--attempts <n>`: whole-run retries, but ONLY on an await-input timeout. */
+    attempts: number;
     help?: boolean;
     error?: string;
 }
@@ -66,6 +98,15 @@ export declare function normalizeVersion(raw: string): string;
  * META_HARNESS_CLAUDE_CONFIG override.
  */
 export declare function claudeTrustState(dir: string, configPath: string): boolean | null;
+/**
+ * True when `meta` describes a recording THIS CLI produced, and may therefore
+ * be regenerated without losing anything a human wrote.
+ *
+ * Fails CLOSED: unreadable, non-object, or unrecognized meta.json is treated as
+ * hand-captured. The cost of a wrong `false` is one `--allow-overwrite`; the
+ * cost of a wrong `true` is prose that cost a paid live session.
+ */
+export declare function recorderOwnedMeta(meta: unknown): boolean;
 export declare function main(argv: string[]): Promise<number>;
 export {};
 //# sourceMappingURL=screenbench-record.d.ts.map
