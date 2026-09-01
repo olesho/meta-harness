@@ -279,6 +279,38 @@ export class Builder {
     return this.waitInput(quoteMeta(SubmitCR), true, "submit-cr");
   }
 
+  /**
+   * Blocks until the wrapper types `text` — the PROMPT burst, which lands
+   * before the submit key.
+   *
+   * A sibling of AwaitSubmit for the pre-submit half of a send. It exists so a
+   * script can paint the composer echo the recorder's `prompt` step asserts:
+   * the fake does not echo keystrokes by itself (fakeharness.mjs mirrors a real
+   * TUI in raw mode), so without a gate here the echo frame would have to be
+   * painted on a bare delay and would race the write it is supposed to answer.
+   *
+   * `capture: false` — the text is already known to the caller, which passed it.
+   */
+  AwaitTyped(text: string): this {
+    return this.waitInput(quoteMeta(text), false, "typed");
+  }
+
+  /**
+   * Paints the claude composer with `text` sitting in it, pre-submit — the
+   * frame a real claude paints while a prompt is typed but not yet sent.
+   *
+   * NOT ready-for-input by design: `❯ <text>` is a non-empty composer row, so
+   * claudeComposerRE (src/chat/ready.ts) correctly does not match it. Pair it
+   * with a preceding Idle() for the readiness gate the send waits on.
+   */
+  ClaudeComposerTyped(delayMs: number, text: string): this {
+    return this.frame(
+      delayMs,
+      this.ccScreen(ccHeader, "", ccPrompt + text, "", this.resumeHint()),
+      false,
+    );
+  }
+
   /** Blocks until the wrapper writes a bare digit (question-option select). */
   AwaitDigit(): this {
     return this.waitInput("[0-9]", false, "digit");

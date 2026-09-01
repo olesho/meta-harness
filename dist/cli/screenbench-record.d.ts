@@ -99,6 +99,21 @@ export declare function normalizeVersion(raw: string): string;
  */
 export declare function claudeTrustState(dir: string, configPath: string): boolean | null;
 /**
+ * The substring of a prompt the composer-echo assertion actually looks for.
+ *
+ * The assertion exists to catch a SWALLOWED keystroke burst, and for the three
+ * legacy scenarios the whole prompt fits one row, so it looked for the whole
+ * prompt. The question cells' prompts do not: at 120 columns they are ~230
+ * characters and the composer WRAPS them across rows, inserting a line break
+ * (and, in claude's boxed composer, a gutter) that no `includes` of the full
+ * string can survive. So probe a prefix short enough to sit on one row of any
+ * realistic geometry. A prefix proves the burst landed exactly as well as the
+ * whole string does; a full-string check on a wrapped prompt proves only that
+ * the terminal is not 300 columns wide.
+ */
+export declare const echoProbeChars = 40;
+export declare function echoProbe(text: string): string;
+/**
  * True when `meta` describes a recording THIS CLI produced, and may therefore
  * be regenerated without losing anything a human wrote.
  *

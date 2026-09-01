@@ -38,6 +38,21 @@ if (spawnLog) {
   }
 }
 
+// Launch-argv assertion (test-only). When FAKE_HARNESS_REQUIRE_ARG names an
+// argument, the PTY launch EXITS NON-ZERO unless that argument was passed —
+// which is how a test proves a scenario's `launchArgs` actually reached the
+// harness's argv rather than merely being echoed into meta.json. Placed after
+// the --version branch so the version probe (which passes no scenario argv) is
+// never failed by it.
+const requiredArg = process.env.FAKE_HARNESS_REQUIRE_ARG;
+if (requiredArg && !process.argv.slice(2).includes(requiredArg)) {
+  process.stderr.write(
+    `fake-record-harness: missing required launch arg ${requiredArg}; ` +
+      `argv=${JSON.stringify(process.argv.slice(2))}\n`,
+  );
+  process.exit(9);
+}
+
 const ENV_VAR = "FAKEHARNESS_SCRIPT";
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 

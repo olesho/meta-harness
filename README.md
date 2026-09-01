@@ -170,7 +170,8 @@ tmux-detached subcommands — see [wrapper-cli](docs/md/modules/wrapper-cli.md))
 `meta-harness-structured-run` (one turn → one JSON line carrying reply **and**
 transcript, for sandboxed runners), `meta-harness-check-versions` (offline drift check),
 `meta-harness-hooks` (the out-of-process harness-hook entry point), and
-`meta-harness-screenbench-record` (the corpus recorder behind `rebake-corpus`).
+`meta-harness-screenbench-record` (the corpus recorder behind `rebake-corpus`, which
+also records scripted dialog scenarios — see below).
 
 ## Use over HTTP
 
@@ -271,9 +272,20 @@ was last verified against.
 `rebake-corpus` drives the `meta-harness-screenbench-record` bin (build the tree first,
 or point `META_HARNESS_SCREENBENCH_RECORD` at `dist/cli/screenbench-record.js`); it exits
 `3` when the recorder is absent. Coverage is per-harness: `claude-code` records
-_multi-turn_, _tool-call_, and _interrupted-mid-reply_; `codex` records the first two
-(it has no interrupt seam); `pi` is pinned but has no scripted corpus and is skipped by
-design.
+_multi-turn_, _tool-call_, _interrupted-mid-reply_ and _trust-dialog_; `codex` records
+the first two (it has no interrupt seam); `pi` is pinned but has no scripted corpus and
+is skipped by design.
+
+The recorder is not limited to prompt/reply cells. A scenario is a **scripted step
+list** — type a prompt, stop at a dialog (`await-input`), answer it through the chat
+layer's own byte semantics (`answer`), press scripted keys (`keys` / `cycle`), dump an
+intermediate screen (`dump`) — so a recording can end on an `AskUserQuestion` pane or on
+a permission-mode footer rather than on a completed turn. The same vocabulary is
+available ad hoc via `--prompt`, `--keys`, `--stop-on-input[=<kind>]` and `--launch-arg`,
+with `--cwd`/`--no-warmup` for a directory claude is already trusted in. The catalog
+carries nine such **dialog cells**; which of them `rebake-corpus` actually regenerates is
+a separate, deliberately narrower question — see
+[`test/corpus/README.md`](test/corpus/README.md).
 
 ## Autonomous pipeline
 

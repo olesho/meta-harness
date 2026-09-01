@@ -18,8 +18,14 @@
 //
 // Scenario coverage is a GROWING set, not a closed one — the catalog below is
 // the source of truth and each per-harness capability has its own spec map:
-// claude-code × {multi-turn, tool-call, interrupted-mid-reply, trust-dialog} and
-// codex × {multi-turn, tool-call} at the time of writing. Two flows have NO
+// claude-code × {multi-turn, tool-call, interrupted-mid-reply, trust-dialog,
+// question-{single,multi,review}, permission-mode-{manual,accept-edits,plan,
+// cycle,cycle-bypass,bypass}} and codex × {multi-turn, tool-call} at the time
+// of writing. What the CATALOG can drive and what `scripts/rebake-corpus.mjs`
+// actually rebakes are DIFFERENT sets: a dialog cell joins rebake's SCENARIOS
+// only once it has been driven against the real binary and its output shown to
+// replay identically to the hand-capture it would replace (test/corpus/README.md
+// carries the per-cell status). Two flows have NO
 // generic production seam and are therefore gated per harness:
 //
 //   * interrupt (`interruptSpecs`) — streaming detection, the interrupt
@@ -145,6 +151,25 @@ export const interruptSpecs = {
 export const dialogSpecs = {
     "claude-code": { anchors: claudeTrustAnchors, what: "folder-trust dialog" },
 };
+// --- AskUserQuestion prompts (PUPPET-301, verbatim) --------------------------
+//
+// The exact prompts that elicited each pane live against claude 2.1.251, copied
+// from each hand-capture's `meta.json.prompt`. They are wordy on purpose: the
+// model has to CHOOSE to call AskUserQuestion, and a vaguer prompt answers in
+// prose instead. Do not reword them — a prompt that no longer elicits the pane
+// makes the cell unrecordable, and the evidence that these ones do is a paid
+// live session.
+const questionSinglePrompt = "Use the AskUserQuestion tool to ask me exactly one question. The question " +
+    'text must be "Which color should I use?" with header "Color" and exactly ' +
+    'two options labeled "Red" and "Blue". Do not do anything else first.';
+const questionMultiPrompt = "Use the AskUserQuestion tool to ask me exactly one MULTI-SELECT question " +
+    '(multiSelect true) with header "Toppings", question text "Which toppings ' +
+    'do you want?" and exactly four options labeled "Mushrooms", "Olives", ' +
+    '"Peppers" and "Onions". Do not do anything else first.';
+const questionReviewPrompt = "Use the AskUserQuestion tool once to ask me exactly TWO questions in a " +
+    'single call. Question 1: header "Color", text "Which color should I use?", ' +
+    'options "Red" and "Blue". Question 2: header "Size", text "Which size ' +
+    'should I use?", options "Small" and "Large". Do not do anything else first.';
 export const scenarios = {
     "multi-turn": {
         prompts: [
@@ -177,6 +202,157 @@ export const scenarios = {
         },
         notes: "first launch in an untrusted git repo; settles on the folder-trust " +
             "dialog and ends InputRequested, never TurnComplete",
+    },
+    // --- dialog cells (claude-code only) ---------------------------------------
+    //
+    // Nine scripted cells whose terminal state is a DIALOG or a permission-mode
+    // footer rather than a TurnComplete. Every step list below is TRANSCRIBED from
+    // an existing hand-capture's `meta.json.keystrokes` + `stdin.log` — the
+    // PUPPET-301 question captures and the META-HARNESS-109/114 permission-mode
+    // captures — so replacing a hand-captured dir with a recorded one reproduces
+    // the same drive, not a new one. Nothing here was invented.
+    //
+    // All nine carry `requiresHarness: "claude-code"`: AskUserQuestion and the
+    // Shift+Tab permission ring are claude-code concepts, and the pre-write gate
+    // refuses them for any other harness before a byte is written.
+    "question-single": {
+        requiresHarness: "claude-code",
+        steps: [
+            { kind: "prompt", text: questionSinglePrompt },
+            { kind: "await-input", inputKind: "question" },
+        ],
+        notes: "AskUserQuestion SINGLE-SELECT question pane, captured UNANSWERED. " +
+            "Proves the option rows are still numbered, i.e. that DetectQuestion's " +
+            "digit assumption holds on the recorded build (PUPPET-301's verdict " +
+            "against 2.1.251). Steps transcribed from that capture's meta.json " +
+            "keystrokes + stdin.log: prompt, submit, nothing after. Replayed by " +
+            "test/turns/claude-code/question-corpus.test.ts; driven hermetically by " +
+            "test/cli/screenbench-record.dialog.test.ts.",
+    },
+    "question-multi": {
+        requiresHarness: "claude-code",
+        steps: [
+            { kind: "prompt", text: questionMultiPrompt },
+            { kind: "await-input", inputKind: "question" },
+            { kind: "dump", file: "expected-untoggled.txt" },
+            { kind: "keys", bytes: "1", label: "toggle" },
+            { kind: "settle", ms: 1500 },
+        ],
+        notes: "AskUserQuestion MULTI-SELECT (checkbox) pane. expected.txt is the " +
+            "POST-TOGGLE frame ('1' toggles option 1 in place without advancing or " +
+            "submitting, which is the live proof a bare digit is the right key for a " +
+            "checkbox row); expected-untoggled.txt is the same frame BEFORE the " +
+            "toggle. NOTE ON PROVENANCE: the hand-capture produced " +
+            "expected-untoggled.txt by replaying bytes.raw to a recorded byte " +
+            "PREFIX, and its meta.json documents that method. This entry produces " +
+            "the semantically identical artifact from a `dump` step placed before " +
+            "the toggle instead — same screen, and reproducible without carrying an " +
+            "offset that only means anything against one byte stream. Replayed by " +
+            "test/turns/claude-code/question-corpus.test.ts.",
+    },
+    "question-review": {
+        requiresHarness: "claude-code",
+        steps: [
+            { kind: "prompt", text: questionReviewPrompt },
+            { kind: "await-input", inputKind: "question" },
+            { kind: "keys", bytes: "1", label: "answer1" },
+            { kind: "await-input", inputKind: "question" },
+            { kind: "keys", bytes: "1", label: "answer2" },
+            { kind: "await-input", inputKind: "question_review" },
+        ],
+        notes: "AskUserQuestion REVIEW pane, reached by asking TWO questions in one " +
+            "call and answering both with bare digits. bytes.raw therefore also " +
+            "carries both QUESTION panes and the '☒ Color  ☐ Size' tab-strip " +
+            "transition — direct evidence that a digit selects AND advances with no " +
+            "CR, and none leaking into the next pane. Uses `keys` rather than " +
+            "`answer` deliberately: the hand-capture typed bare digits, and this " +
+            "cell must reproduce that byte stream rather than the chat layer's " +
+            "answerKeys() rendering of it. Replayed by " +
+            "test/turns/claude-code/question-corpus.test.ts.",
+    },
+    // The four permission-mode rung cells (META-HARNESS-109). Each parks the
+    // session on one rung of the Shift+Tab ring and records the footer that rung
+    // paints; test/chat/permission.test.ts replays all four. The launch mode is
+    // 'auto', so the press count IS the rung: 1 -> manual, 2 -> accept edits,
+    // 3 -> plan. `cycle` never hard-codes the keystroke — it asks the adapter.
+    "permission-mode-manual": {
+        requiresHarness: "claude-code",
+        steps: [{ kind: "cycle", presses: 1 }],
+        notes: "Permission-mode footer on the MANUAL rung — the load-bearing one of the " +
+            "four: manual is the ONLY footer with no '(shift+tab to cycle)' suffix, " +
+            "and it is the mode most sessions start in, so a parser requiring that " +
+            "suffix silently fails to see the commonest mode. One Shift+Tab from the " +
+            "launch mode 'auto'. Replayed by test/chat/permission.test.ts as the " +
+            "suffix-less regression.",
+    },
+    "permission-mode-accept-edits": {
+        requiresHarness: "claude-code",
+        steps: [{ kind: "cycle", presses: 2 }],
+        notes: "Permission-mode footer on the ACCEPT EDITS rung: two Shift+Tabs from " +
+            "the launch mode 'auto', through 'manual'. Replayed by " +
+            "test/chat/permission.test.ts, which asserts observed 'acceptEdits' / " +
+            "source 'footer' / raw 'accept edits on'.",
+    },
+    "permission-mode-plan": {
+        requiresHarness: "claude-code",
+        steps: [{ kind: "cycle", presses: 3 }],
+        notes: "Permission-mode footer on the PLAN rung: three Shift+Tabs from the " +
+            "launch mode 'auto'. This rung shares the ⏸ glyph with manual but DOES " +
+            "carry the '(shift+tab to cycle)' suffix, so the glyph alone does not " +
+            "identify a rung — which is why the parser keys on the '<words> on' " +
+            "fragment. Replayed by test/chat/permission.test.ts.",
+    },
+    "permission-mode-cycle": {
+        requiresHarness: "claude-code",
+        steps: [{ kind: "cycle", presses: 6 }],
+        notes: "The RING-LENGTH capture from a NORMAL launch (META-HARNESS-114): six " +
+            "Shift+Tab presses, one screen-press-NN.txt each, so the lap is visible " +
+            "in the artifacts rather than asserted. Measured ring: 4 — auto -> " +
+            "manual -> accept edits -> plan -> auto, closing on press 2 and " +
+            "repeating through press 6; 'bypass permissions' is NOT reachable by " +
+            "keystroke from a normal launch. NO CODE DEPENDS ON THE NUMBER (the " +
+            "chat-layer loop terminates by lap detection with a flat backstop), so " +
+            "it is corroboration only. The hand-capture also PROBED both plausible " +
+            "Shift+Tab encodings ('\\x1b[Z' and the kitty '\\x1b[9;2u') and found " +
+            "both advance one rung; that probe is a one-off and is NOT reproduced " +
+            "here — this cell presses whatever claudecode.ts's permissionCycleKeys() " +
+            "pins, which is the encoding the product actually uses.",
+    },
+    "permission-mode-cycle-bypass": {
+        requiresHarness: "claude-code",
+        launchArgs: ["--dangerously-skip-permissions"],
+        steps: [{ kind: "cycle", presses: 7 }],
+        notes: "The ring-length corroboration half (META-HARNESS-114): the same press " +
+            "probe launched with --dangerously-skip-permissions, where the measured " +
+            "ring is 5 and 'bypass permissions' IS on it — i.e. a bypass-enabling " +
+            "launch flag ADDS a rung rather than merely pre-selecting one. Seven " +
+            "presses, one screen-press-NN.txt each. This REFINES rather than " +
+            "contradicts permission-mode-bypass's 'bypass is not on the cycle', " +
+            "which was measured from a normal launch.",
+    },
+    "permission-mode-bypass": {
+        requiresHarness: "claude-code",
+        launchArgs: ["--permission-mode", "bypassPermissions"],
+        steps: [
+            { kind: "await-text", text: "bypass permissions on" },
+            { kind: "settle", ms: 1500 },
+        ],
+        notes: "Permission-mode footer on the BYPASS PERMISSIONS rung. Unlike the other " +
+            "three this rung is not reachable by Shift+Tab from a normal launch, so " +
+            "the session is LAUNCHED into it and presses no keys at all. Replayed by " +
+            "test/chat/permission.test.ts, which asserts observed 'bypass' / source " +
+            "'footer' / raw 'bypass permissions on'. THE SCRIPT IS THE HAPPY PATH ON " +
+            "PURPOSE: depending on prior acceptance state the build may first paint " +
+            "the Bypass Permissions ACCEPTANCE dialog (bypassAnchor, a trust_prompt " +
+            "request — claudecode.ts). That is deliberately NOT modelled as an " +
+            "optional step, because optional steps make a script unreadable; if the " +
+            "dialog is up, the await-text times out with it sitting in the screen " +
+            "tail, which is a clear enough diagnosis. Should it turn out to appear " +
+            "on every clean profile, the fix is a deliberate two-step script " +
+            "(await-input kind trust_prompt, answer, await-text) — chosen from " +
+            "observed behaviour, not guessed. NOT YET OBSERVED LIVE from this " +
+            "recorder: see test/corpus/README.md for the live-validation status of " +
+            "every cell in this group.",
     },
 };
 const USAGE = `usage: meta-harness-screenbench-record --harness <name> --out <dir> \\
@@ -594,6 +770,23 @@ const trustUnparseable = "folder-trust dialog is on screen but the adapter canno
     "options (unnumbered menu; needs PUPPET-296). Record in a pre-trusted " +
     "--cwd, or use the trust-dialog scenario, which captures the dialog " +
     "unanswered.";
+/**
+ * The substring of a prompt the composer-echo assertion actually looks for.
+ *
+ * The assertion exists to catch a SWALLOWED keystroke burst, and for the three
+ * legacy scenarios the whole prompt fits one row, so it looked for the whole
+ * prompt. The question cells' prompts do not: at 120 columns they are ~230
+ * characters and the composer WRAPS them across rows, inserting a line break
+ * (and, in claude's boxed composer, a gutter) that no `includes` of the full
+ * string can survive. So probe a prefix short enough to sit on one row of any
+ * realistic geometry. A prefix proves the burst landed exactly as well as the
+ * whole string does; a full-string check on a wrapped prompt proves only that
+ * the terminal is not 300 columns wide.
+ */
+export const echoProbeChars = 40;
+export function echoProbe(text) {
+    return text.length <= echoProbeChars ? text : text.slice(0, echoProbeChars);
+}
 /** Runs one expanded step list against a live PTY. Throws on the first failure. */
 async function runSteps(live, ctx, steps) {
     // `await-turn` numbering counts COMPLETIONS, not step indices, so the legacy
@@ -611,9 +804,13 @@ async function runSteps(live, ctx, steps) {
                 // claude-code echoes the prompt into the composer before submit; assert
                 // it to catch a swallowed keystroke. Other harnesses (codex) consume the
                 // text as a paste and do not echo pre-submit — skip the assertion there.
+                const probe = echoProbe(step.text);
                 if (ctx.harness === "claude-code" &&
-                    !live.screen.snapshot().text.includes(step.text)) {
-                    throw new Error(`prompt was not echoed into the composer: ${step.text}`);
+                    !live.screen.snapshot().text.includes(probe)) {
+                    throw new Error(`prompt was not echoed into the composer: ${step.text}` +
+                        (probe === step.text
+                            ? ""
+                            : ` (probed on ${JSON.stringify(probe)})`));
                 }
                 writeKeys(live, ctx, ctx.submit, "submit");
                 break;
@@ -766,6 +963,18 @@ async function runSteps(live, ctx, steps) {
                 if (!keys) {
                     throw new Error(`harness "${ctx.harness}" has no permission-mode cycle keystroke (gate missed)`);
                 }
+                // Wait for a READY composer before the first press, exactly as `prompt`
+                // does. Measured against claude 2.1.252: a permission-mode cell whose
+                // script opens with `cycle` writes at t≈0, before the TUI has put the
+                // tty into raw mode, so the escape sequence is ECHOED as literal text
+                // ("^[[Z") into whatever is on screen and the run still exits 0 with a
+                // garbage fixture. Readiness is also what refuses an untrusted --cwd:
+                // a blocking trust dialog is not-ready, so this times out by name
+                // instead of cycling into a modal. The hand-capture tool made the same
+                // wait explicit — probe-shift-tab.ts dumps a `screen-00-ready.txt`
+                // before its first press.
+                if (ctx.waitsForReady)
+                    await waitReady(live, ctx.harness, 90_000, true);
                 const n = step.presses ?? 1;
                 for (let k = 0; k < n; k++) {
                     writeKeys(live, ctx, keys, "cycle");

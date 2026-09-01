@@ -28,6 +28,21 @@
 // = 6 live cells. Harnesses absent from the map rebake nothing (logged, not
 // silently skipped). Enabling pi / extra codex scenarios is a map + catalog edit.
 //
+// WHAT IS DELIBERATELY NOT HERE: the recorder's catalog can also drive nine
+// claude-code DIALOG cells (question-{single,multi,review} and
+// permission-mode-*), and this map lists none of them. That gap is the point,
+// not an oversight. Those nine dirs on disk are HAND-CAPTURES whose meta.json
+// carries prose evidence a re-record destroys — measured Shift+Tab ring
+// lengths, both probed keystroke encodings, an explicit not_measured list — and
+// that evidence cost a paid live session. So a dialog cell is added here PER
+// SCENARIO, only after it has been driven end-to-end against the real binary
+// and its output shown to replay identically to the fixture it replaces. Adding
+// one also means passing --allow-overwrite for it (the recorder refuses to
+// overwrite a hand-captured dir without it) and --cwd/--no-warmup for a
+// pre-trusted directory. test/corpus/README.md carries the per-cell status and
+// the live findings that currently block all nine; test/cli/screenbench-record.
+// dialog.test.ts pins this map against the catalog so the two cannot drift.
+//
 // trust-dialog is the one cell with an UNTRUSTED-WORKDIR precondition: claude
 // persists folder trust per absolute path, so the recorder mints a fresh temp
 // directory per run and skips its trust-accepting warmup pass. Nothing is passed
