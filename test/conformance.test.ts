@@ -500,8 +500,10 @@ describe("conformance: permission-flag surface (CONFORMANCE=1)", () => {
         //    "bypassPermissions" (the bypass rung);
         //  - RECOGNIZED-BUT-NOT-EMITTED — "dontAsk". We never emit it, but a
         //    caller may pass it and isSupportedPermissionMode accepts it. It is
-        //    OFF the canonical ladder: claudeRung returns "" for it and it has
-        //    no footer, so it is a spelling we recognize, not a rung.
+        //    a second SPELLING of the manual rung, not a rung of its own:
+        //    claudeRung maps it to "manual" (claude ranks it equal to its
+        //    default) and it paints its own footer, "⏵⏵ don't ask on", which
+        //    src/chat/permission.ts reads back as manual too.
         //
         // Derived as: the three exported claude-native spellings ∪ the canonical
         // rungs claude spells identically. NOT permissionRungs(), which returns
@@ -1134,8 +1136,14 @@ describe("conformance: codex /status rows (CONFORMANCE=1)", () => {
 // `(shift+tab to cycle)` suffix, so a suffix-requiring regex regression in
 // parsePermissionMode has to fail loudly rather than be masked by a sibling.
 //
-// `dontAsk` is NOT here. It is flag-surface only: claudeRung returns "" for it,
-// it is off the canonical ladder and it paints no footer. Check 1 covers it.
+// `dontAsk` is NOT here, and the reason CHANGED: it does paint a footer
+// ("⏵⏵ don't ask on"), and claudeRung now maps it to the `manual` rung. It is
+// excluded because it is not its OWN rung — a sixth live launch would re-probe
+// the same `manual` answer the `manual` case already covers, at the cost of a
+// sixth cold claude launch. Its footer is pinned OFFLINE instead, against the
+// real 2.1.217 capture in test/corpus/permission-mode/claude-code/dont-ask
+// (test/permission_mode_corpus.test.ts) and against synthetic footers in
+// test/chat/permission.test.ts. Check 1 still covers its --help surface.
 //
 // SIDE EFFECT. These launches touch ~/.claude.json exactly as half 2 does (a
 // `projects` entry per working dir plus `hasTrustDialogAccepted`, which

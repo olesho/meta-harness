@@ -351,7 +351,9 @@ Codex argv is `-s <sandbox> [-a <policy>]` — flags, never `-c sandbox_mode=…
 
 **Native spellings are also accepted as input.** Claude Code additionally takes its own
 `acceptEdits` (same argv as `ask`), `bypassPermissions` (same argv as `bypass`) and
-`dontAsk`. Codex additionally takes its three native **sandbox** values — `read-only`,
+`dontAsk` (emitted verbatim as `--permission-mode dontAsk`, and **reported** as the
+`manual` rung — Claude ranks it equal to its own default, so it is a second spelling of an
+existing rung, not a sixth one). Codex additionally takes its three native **sandbox** values — `read-only`,
 `workspace-write`, `danger-full-access` — as a **single-axis** request: those emit
 `-s <value>` only, leaving the approval axis to whatever `~/.codex/config.toml` holds. A
 native sandbox value names half a posture, which is a valid request rather than an error.

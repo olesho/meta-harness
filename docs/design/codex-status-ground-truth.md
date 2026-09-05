@@ -119,8 +119,10 @@ the accepted `-a` values are `untrusted | on-request | never`. It therefore can 
 `observed: "unknown"` with the value in `raw`, like any other off-ladder state. This is the same
 reasoning as before the probe; nothing about it changed.
 
-The off-ladder `dontAsk` value was not observed in any `/status` or footer rendering during this
-probe. Probing it remains out of scope.
+Claude's `dontAsk` value was not observed in any `/status` or footer rendering during this
+probe, and probing it remains out of scope — it is a Claude Code spelling with no Codex
+counterpart. (Since this probe, Claude's own `⏵⏵ don't ask on` footer has been mapped to
+the `manual` rung; that is a Claude-side change and touches nothing here.)
 
 ## 7. Measured widths — and the `CODEX_STATUS_MIN_COLS` follow-up
 

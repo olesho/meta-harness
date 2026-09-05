@@ -49,7 +49,10 @@ export interface StructuredTurnResult {
      *     a lone -a, a `-c sandbox_mode=`/`approval_policy=` key). A pin that DOES
      *     name a posture resolves to its rung instead.
      *   • claude-code only: an off-ladder native --permission-mode spelling passed
-     *     through verbatim (at 2.1.217 the only such value is "dontAsk").
+     *     through verbatim. As of claude 2.1.261 there is NO such value: the last
+     *     one, "dontAsk", resolves to the "manual" rung (claude ranks it equal to
+     *     its default), so this branch is reserved for a spelling a newer claude
+     *     adds. A consumer must still handle it — see the opacity rule below.
      * ABSENT means no mode was requested AND the runner injected none — it does
      * NOT mean "default". A host that must tell "unset" from "the guest binary
      * predates this field" compares against its OWN request: request set AND this

@@ -188,9 +188,14 @@ export const ErrPermissionModeUnsupported: Sentinel = defineSentinel(
  *   - the target is off this harness's axis (a ladder rung on codex,
  *     `"default"` on claude);
  *   - the observed value is off-ladder but LEGIBLE — a non-empty `raw` with
- *     `observed: "unknown"` (a renamed mode such as `dontAsk`, or a codex
+ *     `observed: "unknown"` (a mode claude renames or adds, or a codex
  *     `Custom (…)` pair). The screen was read fine; the session is simply
  *     somewhere the ladder does not describe.
+ *
+ *     NOT `dontAsk`: claude's `don't ask on` footer reads as the `manual` rung
+ *     (it shares claude's own permissiveness rank with `default`), so a
+ *     `dontAsk` session is ON the ladder and cycles normally. See
+ *     claudeFooterRungs in src/chat/permission.ts.
  */
 export const ErrPermissionModeUnreachable: Sentinel = defineSentinel(
   "chat/permission-mode-unreachable",

@@ -83,17 +83,11 @@ const OFF_LADDER_RAW: Record<string, string> = {};
  * DISAGREES and goes red the moment it starts agreeing, which forces the entry
  * to be deleted in the very change that fixes the reader.
  *
- * TODO(PUPPET-512): claude's `dontAsk` paints a sixth footer word,
- * `⏵⏵ don't ask on`, on the EXISTING `manual` rung (harness-wrapper
- * origin/main d6eb85f promoted `claude-code/dont-ask` from `pending_parser` to
- * `"mode": "manual"`). `claudeFooterRungs` in src/chat/permission.ts has no
- * `"don't ask on"` key yet, so this repo reports the fragment verbatim as an
- * off-ladder reading. PUPPET-512 adds that key; do NOT add it here — this
- * ticket vendors bytes only.
+ * Empty today: the last entry, `claude-code/dont-ask`, was deleted in the change
+ * that taught `claudeFooterRungs` the `"don't ask on"` → `manual` row
+ * (PUPPET-510), exactly as the assertion below demands.
  */
-const TS_PENDING_PARSER: Record<string, { raw: string; ticket: string }> = {
-  "claude-code/dont-ask": { raw: "don't ask on", ticket: "PUPPET-512" },
-};
+const TS_PENDING_PARSER: Record<string, { raw: string; ticket: string }> = {};
 
 interface Meta {
   harness: string;

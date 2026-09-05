@@ -74,12 +74,26 @@ export type PermissionModeTarget = PermissionRung | CollaborationMode;
 export declare function parsePermissionMode(text: string, harness: string): PermissionModeReading | null;
 /**
  * normalizePermissionRung maps a ladder rung name OR a per-harness native
- * spelling to the ladder rung, or undefined when the value is off-ladder (e.g.
- * the flag-only `dontAsk`).
+ * spelling to the ladder rung, or undefined when the value is off-ladder (a
+ * spelling claude or codex accepts that names no rung).
  *
  * A `requested === observed` drift check is only valid when BOTH sides have been
  * through this function — the launch spelling and the screen spelling are
  * different vocabularies, so comparison MUST go through it.
+ *
+ * DELIBERATE ASYMMETRY, `dontAsk`. The OBSERVED side reads a `don't ask on`
+ * footer as `manual` (claudeFooterRungs above) and the wrapper's launch replay
+ * reports the same rung (claudeRung, src/wrapper/internal/permissionrungs.ts),
+ * but this REQUESTED-side map deliberately leaves `dontAsk` undefined. The two
+ * are answering different questions: the observed side reports the posture the
+ * screen shows, while this map decides which values a caller may compare with —
+ * and `dontAsk` is strictly MORE restrictive than `manual` in effect (its SDK
+ * schema is "deny if not pre-approved"), so equating the two here would let a
+ * caller conclude "requested === observed, nothing to do" about a session that
+ * is auto-denying. `requestedRaw` keeps the verbatim spelling for a caller that
+ * needs to tell them apart. Changing this would need the reading to carry the
+ * native spelling alongside the rung — an interface change across every
+ * adapter, explicitly out of scope here.
  */
 export declare function normalizePermissionRung(value: string, harness: string): PermissionRung | undefined;
 //# sourceMappingURL=permission.d.ts.map

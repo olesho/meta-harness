@@ -13,7 +13,14 @@ import {
 import { newScreen } from "../../src/screen/index.ts";
 import { corpusBytes } from "../turns/corpus.ts";
 
-/** The five real footers, captured live from claude 2.1.217. */
+/**
+ * The five real footers, captured live from claude 2.1.217.
+ *
+ * claude paints a SIXTH, `don't ask on` for `--permission-mode dontAsk`; it is
+ * exercised in its own block below rather than here, because it is the one
+ * footer whose key and rung name differ (it reports the EXISTING `manual` rung,
+ * so a `[rung, footer]` loop over this object could not express it).
+ */
 const footers = {
   auto: "⏵⏵ auto mode on (shift+tab to cycle) · ← for agents",
   manual: "⏸ manual mode on · ← for agents",
@@ -79,6 +86,90 @@ describe("parsePermissionMode: claude-code footers", () => {
     )!;
     expect(r.observed).toBe("unknown");
     expect(r.raw).toBe("dontAsk mode on");
+    expect(r.source).toBe("footer");
+  });
+
+  // ── claude's SIXTH footer word: `dontAsk` ──────────────────────────────────
+  //
+  // `--permission-mode dontAsk` paints "⏵⏵ don't ask on", which reports the
+  // EXISTING `manual` rung — claude's own permissiveness rank table ties
+  // dontAsk with default (= manual), so it is a second spelling of a rung the
+  // ladder already has, exactly as `acceptEdits` is. No sixth rung is added.
+  //
+  // Note the footer word is "don't ask on", the PROSE spelling. The camelCase
+  // flag spelling "dontAsk mode on" (the test above) is NOT a footer claude
+  // ever paints and stays off-ladder — the table is keyed on what the screen
+  // says, never on what the flag says.
+  test("the real dontAsk footer reports the manual rung", () => {
+    const r = parsePermissionMode(
+      screenWith("⏵⏵ don't ask on (shift+tab to cycle) · ← for agents"),
+      "claude-code",
+    )!;
+    expect(r.observed).toBe("manual");
+    expect(r.raw).toBe("don't ask on");
+    expect(r.source).toBe("footer");
+  });
+
+  test("the dontAsk footer parses without the (shift+tab to cycle) suffix", () => {
+    const r = parsePermissionMode(
+      screenWith("⏵⏵ don't ask on"),
+      "claude-code",
+    )!;
+    expect(r.observed).toBe("manual");
+    expect(r.raw).toBe("don't ask on");
+  });
+
+  test("the dontAsk footer parses behind the single ⏸ glyph too", () => {
+    const r = parsePermissionMode(screenWith("⏸ don't ask on"), "claude-code")!;
+    expect(r.observed).toBe("manual");
+  });
+
+  test("a typographic apostrophe (U+2019) in the dontAsk footer still reports manual", () => {
+    // The live 2.1.217 capture uses ASCII U+0027, but the fragment is claude's
+    // to render: a font/terminal-driven swap to U+2019 must not silently drop
+    // the session to `unknown`. Normalised before the table lookup rather than
+    // carried as a second key, so the closed table stays one row per footer.
+    const r = parsePermissionMode(
+      screenWith("⏵⏵ don’t ask on (shift+tab to cycle)"),
+      "claude-code",
+    )!;
+    expect(r.observed).toBe("manual");
+    // `raw` is VERBATIM — normalisation is a lookup detail, never a rewrite of
+    // what the screen said.
+    expect(r.raw).toBe("don’t ask on");
+  });
+
+  test("the dontAsk footer sharing its 120-col row with the effort marker still reports manual", () => {
+    // The fragment stops at the trailing " on" and never runs to end-of-line,
+    // so a right-aligned neighbour on the same physical row is invisible to it.
+    const row =
+      "⏵⏵ don't ask on (shift+tab to cycle)".padEnd(100, " ") +
+      "○ low · /effort";
+    const r = parsePermissionMode(screenWith(row), "claude-code")!;
+    expect(r.observed).toBe("manual");
+    expect(r.raw).toBe("don't ask on");
+  });
+
+  test("the permission DIALOG row 'Yes, and don\'t ask again' is not a footer and stays unknown", () => {
+    // The anti-spoof gate: no ⏵⏵ / ⏸ glyph, so the prose never reaches the
+    // rung table at all. This is the negative pin that keeps the new row from
+    // widening the parse surface.
+    const r = parsePermissionMode(
+      screenWith("2. Yes, and don't ask again for npm commands"),
+      "claude-code",
+    )!;
+    expect(r.observed).toBe("unknown");
+    expect(r.source).toBe("no_footer");
+    expect(r.raw).toBeUndefined();
+  });
+
+  test("an unknown SEVENTH mode still degrades to unknown + raw — the table stays closed", () => {
+    const r = parsePermissionMode(
+      screenWith("⏵⏵ frobnicate mode on (shift+tab to cycle)"),
+      "claude-code",
+    )!;
+    expect(r.observed).toBe("unknown");
+    expect(r.raw).toBe("frobnicate mode on");
     expect(r.source).toBe("footer");
   });
 

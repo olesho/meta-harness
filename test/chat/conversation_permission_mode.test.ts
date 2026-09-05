@@ -542,6 +542,33 @@ describe("requested is normalized on the way in", () => {
     expect(r.observed).toBe("auto");
   });
 
+  test("a dontAsk session's two halves are DELIBERATELY different: observed manual, requested undefined + raw dontAsk", async () => {
+    // The asymmetry pinned on purpose, both halves in one place.
+    //
+    //   OBSERVED  claude paints "⏵⏵ don't ask on" and that reads as the
+    //             `manual` rung — dontAsk shares claude's own permissiveness
+    //             rank with default (= manual), so it is a second spelling of
+    //             an existing rung, never a sixth one.
+    //   REQUESTED normalizePermissionRung still leaves it undefined, because
+    //             dontAsk is strictly MORE restrictive than manual in effect
+    //             ("deny if not pre-approved"): equating them would let a
+    //             caller conclude "requested === observed, nothing to do"
+    //             about a session that is auto-denying. The verbatim spelling
+    //             survives in requestedRaw for a caller that must tell them
+    //             apart.
+    //
+    // If a later change makes these two agree, it must be because the reading
+    // grew a native-spelling field — not because this asymmetry was "tidied".
+    const dontAskFooter = AUTO_FOOTER.replace("auto mode on", "don't ask on");
+    const c = await claudeConv(dontAskFooter, "dontAsk");
+    const r = c.permissionMode();
+    expect(r.observed).toBe("manual");
+    expect(r.raw).toBe("don't ask on");
+    expect(r.source).toBe("footer");
+    expect(r.requested).toBeUndefined();
+    expect(r.requestedRaw).toBe("dontAsk");
+  });
+
   test("codex's native -s spelling normalizes too, on EVERY source", async () => {
     const { c } = await build({ permissionMode: "danger-full-access" });
     const r = c.permissionMode();

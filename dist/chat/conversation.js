@@ -462,8 +462,15 @@ export class Conversation {
         // Normalized on the way in: without this a session launched with the native
         // spelling `bypassPermissions` would report requested "bypassPermissions"
         // against observed "bypass", and a caller diffing the two gets a false drift
-        // alarm. An off-ladder value (e.g. `dontAsk`) yields undefined, keeping the
-        // verbatim spelling in requestedRaw.
+        // alarm. An off-ladder value yields undefined, keeping the verbatim spelling
+        // in requestedRaw.
+        //
+        // `dontAsk` is the one value where that undefined is a DELIBERATE
+        // asymmetry rather than an inability to see: such a session's footer now
+        // reads `observed: "manual"`, but normalizePermissionRung still leaves
+        // `requested` undefined because dontAsk is strictly more restrictive than
+        // manual in effect. See normalizePermissionRung's docstring
+        // (src/chat/permission.ts) for the full argument.
         const requested = requestedRaw
             ? normalizePermissionRung(requestedRaw, this.opts.harness)
             : undefined;
@@ -833,6 +840,33 @@ export class Conversation {
      * writing a single cycle keystroke, and without touching the queue beyond the
      * held() precondition. Idempotent by construction — two consecutive calls
      * press at most once.
+     *
+     * ## ACCEPTED RESIDUAL: `setPermissionMode("manual")` on a `dontAsk` session
+     *
+     * DOCUMENTED, NOT FIXED. A session launched `--permission-mode dontAsk` reads
+     * `observed: "manual"` — claude ranks `dontAsk` EQUAL to its default, so that
+     * is the honest rung — which makes a `"manual"` target a no-op by the rule
+     * just above: start === target, so this method returns successfully having
+     * written ZERO keystrokes.
+     *
+     * The session then reports `manual` and keeps AUTO-DENYING (dontAsk's actual
+     * behaviour is "deny if not pre-approved") instead of surfacing approval
+     * requests. Permissiveness-wise that is safe in the only direction that
+     * matters — equal rank, strictly more restrictive in effect, so nothing is
+     * ever allowed that `manual` would not allow. What a caller loses is
+     * approvals: an inputPolicy written to answer permission prompts silently
+     * gets none, and reads the quiet as "the model asked for nothing".
+     *
+     * Not fixed here because the fix is not local: this method would have to know
+     * the session is in `dontAsk` rather than `manual`, which means the mode
+     * detector carrying the NATIVE SPELLING alongside the rung — a
+     * PermissionModeReading shape change propagating through every adapter. A
+     * stateful workaround (remembering the launch spelling and pressing anyway)
+     * is explicitly NOT the answer: it would press blind against a ring whose
+     * start it cannot verify, which is the silent-wrong-mode failure this whole
+     * method exists to prevent. A caller that must leave a `dontAsk` posture
+     * relaunches, or targets a DIFFERENT rung (`plan` / `acceptEdits` / `auto`),
+     * which cycles normally.
      */
     async setPermissionMode(ctx, target) {
         // Gates 1-4. Note the ORDER matters for the caller's diagnosis: "closed"
@@ -906,10 +940,20 @@ export class Conversation {
                         `no cycle keystroke was written`);
                 }
             }
-            // Gate 6, second half: the START value must be on-axis. A session launched
-            // e.g. `--permission-mode dontAsk` (valid, flag-only, NOT on the ring)
-            // reads `unknown` + a non-empty `raw`, so `start` is not a comparable
-            // value and lap detection could never close — refuse, ZERO keystrokes.
+            // Gate 6, second half: the START value must be on-axis. A session whose
+            // footer names a mode this ladder cannot (a rename, or a mode a future
+            // claude adds) reads `unknown` + a non-empty `raw`, so `start` is not a
+            // comparable value and lap detection could never close — refuse, ZERO
+            // keystrokes.
+            //
+            // `--permission-mode dontAsk` is NO LONGER such a session. Its footer
+            // reads `manual`, so `start` is comparable and the traversal runs
+            // normally on a ring of the usual FOUR (plan / manual / accept edits /
+            // auto) — claude's own ring function omits `dontAsk`, so the launch
+            // spelling never appears as a ring stop. `bypass` is not on that ring
+            // either: a dontAsk launch carries no bypass-enabling flag, so the
+            // bypassEnabledAtLaunch fast-fail above rejects a `bypass` target before
+            // a single keystroke, rather than lapping to find out.
             //
             // On codex the entry value comes from an internal `/status` probe, NOT
             // from the prime-time cache: that cache is unbounded-stale (and

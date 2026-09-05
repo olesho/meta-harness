@@ -304,14 +304,34 @@ describe("reportedPermissionRung (StructuredTurnResult.permission_mode)", () => 
     ).toBe("ask");
   });
 
-  test('claude dontAsk passes through VERBATIM — never "normalised" away', () => {
-    // The one off-ladder native spelling at 2.1.217. The runner knows the rung
-    // precisely; a sentinel would erase that, and absence would conflate it with
-    // "unset". Frozen so nobody folds it into ask/auto later.
+  test("claude dontAsk reports the manual rung — the OBSERVED half of the split", () => {
+    // dontAsk is a second SPELLING of the manual rung, not a sixth rung:
+    // claude's own permissiveness rank table ties it with default (= manual) at
+    // rank 1, and its SDK schema ("deny if not pre-approved") makes it strictly
+    // MORE restrictive than manual — so reporting manual can never under-report
+    // permissiveness, the one direction this field must never fail in.
+    //
+    // Both argv spellings and the knob agree, because all three go through
+    // effectiveLaunchRung. `permission_mode` is therefore a RUNG, never a raw
+    // flag operand: the argvPermissionPin "native" passthrough below is what is
+    // left for a spelling claude adds NEXT and this ladder cannot yet name.
     expect(
       rung("claude-code", { harnessArgs: ["--permission-mode", "dontAsk"] }),
-    ).toBe("dontAsk");
-    expect(rung("claude-code", { permissionMode: "dontAsk" })).toBe("dontAsk");
+    ).toBe("manual");
+    expect(
+      rung("claude-code", { harnessArgs: ["--permission-mode=dontAsk"] }),
+    ).toBe("manual");
+    expect(rung("claude-code", { permissionMode: "dontAsk" })).toBe("manual");
+  });
+
+  test("an UNKNOWN claude-native spelling still passes through VERBATIM", () => {
+    // The `native` pin is not dead code now that dontAsk has a rung: it is the
+    // path a spelling claude adds after 2.1.261 takes. The runner knows the
+    // posture precisely even though the ladder cannot name it, so a sentinel
+    // would erase that and absence would conflate it with "unset".
+    expect(
+      rung("claude-code", { harnessArgs: ["--permission-mode", "frobnicate"] }),
+    ).toBe("frobnicate");
   });
 
   test('a valueless or empty --permission-mode is "override" — never "" and never absent', () => {

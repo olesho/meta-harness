@@ -137,6 +137,13 @@ export const PermissionCycleCSI = "\x1b[Z";
  * the parser's fragment stops at the trailing " on" and never runs to
  * end-of-line — so it is painted here to match the wider (and documented) of
  * the two real spellings.
+ *
+ * FIVE RUNGS, SIX FOOTERS: this map is keyed by RUNG, so claude's sixth footer
+ * word — "⏵⏵ don't ask on", painted for `--permission-mode dontAsk` — has no
+ * entry. It is not a sixth rung; it reads back as `manual` (claude ranks it
+ * equal to its default), and `manual` already has its own footer here. A
+ * scenario that needs the dontAsk spelling on screen paints it literally; the
+ * real capture lives in test/corpus/permission-mode/claude-code/dont-ask.
  */
 export const ClaudeModeFooters: Readonly<Record<PermissionRung, string>> = {
   auto: "⏵⏵ auto mode on (shift+tab to cycle) · ← for agents",

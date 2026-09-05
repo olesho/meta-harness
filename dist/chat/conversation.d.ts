@@ -593,6 +593,33 @@ export declare class Conversation {
      * writing a single cycle keystroke, and without touching the queue beyond the
      * held() precondition. Idempotent by construction — two consecutive calls
      * press at most once.
+     *
+     * ## ACCEPTED RESIDUAL: `setPermissionMode("manual")` on a `dontAsk` session
+     *
+     * DOCUMENTED, NOT FIXED. A session launched `--permission-mode dontAsk` reads
+     * `observed: "manual"` — claude ranks `dontAsk` EQUAL to its default, so that
+     * is the honest rung — which makes a `"manual"` target a no-op by the rule
+     * just above: start === target, so this method returns successfully having
+     * written ZERO keystrokes.
+     *
+     * The session then reports `manual` and keeps AUTO-DENYING (dontAsk's actual
+     * behaviour is "deny if not pre-approved") instead of surfacing approval
+     * requests. Permissiveness-wise that is safe in the only direction that
+     * matters — equal rank, strictly more restrictive in effect, so nothing is
+     * ever allowed that `manual` would not allow. What a caller loses is
+     * approvals: an inputPolicy written to answer permission prompts silently
+     * gets none, and reads the quiet as "the model asked for nothing".
+     *
+     * Not fixed here because the fix is not local: this method would have to know
+     * the session is in `dontAsk` rather than `manual`, which means the mode
+     * detector carrying the NATIVE SPELLING alongside the rung — a
+     * PermissionModeReading shape change propagating through every adapter. A
+     * stateful workaround (remembering the launch spelling and pressing anyway)
+     * is explicitly NOT the answer: it would press blind against a ring whose
+     * start it cannot verify, which is the silent-wrong-mode failure this whole
+     * method exists to prevent. A caller that must leave a `dontAsk` posture
+     * relaunches, or targets a DIFFERENT rung (`plan` / `acceptEdits` / `auto`),
+     * which cycles normally.
      */
     setPermissionMode(ctx: Context, target: PermissionModeTarget): Promise<PermissionModeReading>;
     /**

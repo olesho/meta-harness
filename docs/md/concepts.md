@@ -125,8 +125,10 @@ two-check shape `effort` uses.
 
 Fidelity is not uniform, and the ladder is a translation rather than an identity. Claude
 Code names each rung in a single native value, so its side is exact — it also accepts its
-own native spellings as input, including `dontAsk`, which is Claude-only and sits off the
-ladder entirely. Codex has no single-token spelling at all: permissions and collaboration
+own native spellings as input, including `dontAsk`, which is Claude-only. `dontAsk` is a
+second spelling of the **`manual`** rung rather than a sixth rung: Claude ranks it equal
+to its own default, and it is strictly more restrictive in effect ("deny if not
+pre-approved"), so reporting `manual` for it can never under-report permissiveness. Codex has no single-token spelling at all: permissions and collaboration
 are two orthogonal axes there, so the wrapper emits a pair of flags. On Codex, `bypass`
 lands **good**; `manual` / `ask` / `auto` are **approximations** of the Claude Code rung;
 and `plan` is **partial** — it pins the permissions axis only, leaving the collaboration

@@ -100,11 +100,21 @@ const noFooterFrame = paint("Claude Code", "", "❯", "");
 const unparsedFooterFrame = ccFrame("⏸ ??? ???");
 
 /**
- * An OFF-LADDER but perfectly legible footer: claude's flag-only `dontAsk`,
- * which is not on the Shift+Tab ring. Parses to observed "unknown" WITH a
- * non-empty raw — "somewhere the ladder can't name", not "we couldn't see".
+ * An OFF-LADDER but perfectly legible footer. Parses to observed "unknown" WITH
+ * a non-empty raw — "somewhere the ladder can't name", not "we couldn't see".
+ *
+ * The fragment is a HYPOTHETICAL renamed/added mode, deliberately not any
+ * spelling claude ships. `dontAsk` used to play this role and no longer can:
+ * its real footer ("⏵⏵ don't ask on") reads back as the `manual` rung, so a
+ * dontAsk session's start value IS comparable and does not exercise this gate.
  */
-const dontAskFrame = ccFrame("⏸ dontAsk mode on (shift+tab to cycle)");
+const offLadderFrame = ccFrame("⏸ frobnicate mode on (shift+tab to cycle)");
+
+/**
+ * The REAL `--permission-mode dontAsk` footer, which reads back as `manual`.
+ * Used by the accepted-residual test at the bottom of this file.
+ */
+const dontAskFrame = ccFrame("⏵⏵ don't ask on (shift+tab to cycle)");
 
 /** claude's Bypass Permissions acceptance screen: blocking, and no rung footer. */
 const bypassDialogFrame = paint(
@@ -820,8 +830,8 @@ describe("setPermissionMode: reading failures", () => {
   // An off-ladder START refuses BEFORE the first press: `start` is not a
   // comparable value, so lap detection could never close.
   test("an off-ladder start is Unreachable, quoting raw, with zero keystrokes", async () => {
-    const r = newRing({ opts: { permissionMode: "dontAsk" } });
-    await r.screen.write(dontAskFrame);
+    const r = newRing({ opts: { permissionMode: "frobnicate" } });
+    await r.screen.write(offLadderFrame);
     const release = await r.conv.acquireControl(Context.background());
     try {
       const before = r.bytes();
@@ -829,7 +839,61 @@ describe("setPermissionMode: reading failures", () => {
         r.conv.setPermissionMode(Context.background(), "plan"),
       );
       expect(isSentinel(err, ErrPermissionModeUnreachable)).toBe(true);
-      expect(String(err)).toContain("dontAsk mode on");
+      expect(String(err)).toContain("frobnicate mode on");
+      expect(r.bytes() - before).toBe(0);
+      expect(r.presses()).toBe(0);
+    } finally {
+      release();
+    }
+  });
+
+  // ── The dontAsk session: on the ring, and the accepted residual ────────────
+
+  test("a dontAsk session is ON the ring: a DIFFERENT rung cycles normally", async () => {
+    // The point of the parser fix, from setPermissionMode's side: before it,
+    // a dontAsk footer read `unknown` and the gate above refused every target
+    // with zero keystrokes. Now `start` is the comparable `manual`, so a
+    // caller can actually leave the posture.
+    const r = newRing({
+      presses: ["plan"],
+      opts: { permissionMode: "dontAsk" },
+    });
+    await r.screen.write(dontAskFrame);
+    const release = await r.conv.acquireControl(Context.background());
+    try {
+      const reading = await r.conv.setPermissionMode(
+        Context.background(),
+        "plan",
+      );
+      expect(reading.observed).toBe("plan");
+      expect(r.presses()).toBeGreaterThan(0);
+    } finally {
+      release();
+    }
+  });
+
+  test("ACCEPTED RESIDUAL: setPermissionMode('manual') on a dontAsk session is a silent no-op", async () => {
+    // DOCUMENTED, NOT FIXED — see setPermissionMode's docstring. start ===
+    // target === "manual", so this returns successfully having pressed nothing,
+    // and the session keeps AUTO-DENYING rather than surfacing approvals. Safe
+    // permissiveness-wise (equal rank, strictly more restrictive in effect);
+    // the cost is that an inputPolicy expecting approval requests gets none.
+    //
+    // Pinned so the behaviour cannot change silently: fixing it requires the
+    // reading to carry the native spelling alongside the rung, which is an
+    // interface change across every adapter — at which point this test is the
+    // one that has to be rewritten, deliberately.
+    const r = newRing({ opts: { permissionMode: "dontAsk" } });
+    await r.screen.write(dontAskFrame);
+    const release = await r.conv.acquireControl(Context.background());
+    try {
+      const before = r.bytes();
+      const reading = await r.conv.setPermissionMode(
+        Context.background(),
+        "manual",
+      );
+      expect(reading.observed).toBe("manual");
+      expect(reading.raw).toBe("don't ask on"); // still the dontAsk footer
       expect(r.bytes() - before).toBe(0);
       expect(r.presses()).toBe(0);
     } finally {

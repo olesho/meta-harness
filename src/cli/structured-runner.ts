@@ -357,8 +357,10 @@ export function readUsage(
  * something unnameable"; argvPermissionPin tells those apart, because absence
  * here means "nothing was requested" and must never be read as "pinned, posture
  * unknown". A pinned-but-unnameable posture reports "override"; a pin naming a
- * spelling with no canonical rung (claude's dontAsk) passes through verbatim
- * rather than being erased.
+ * spelling with no canonical rung passes through verbatim rather than being
+ * erased. As of claude 2.1.261 no shipped spelling takes that last path —
+ * `dontAsk`, which used to, now resolves to "manual" — so it is the path a
+ * spelling a NEWER claude adds will take.
  */
 export function reportedPermissionRung(
   harness: string,
@@ -383,7 +385,7 @@ export function reportedPermissionRung(
   if (pin.kind === "native") return pin.value;
   if (pin.kind === "opaque") return "override";
   // Nothing in argv. A requested mode this harness has no canonical rung for
-  // (again dontAsk) was still injected verbatim, so report it verbatim — but
+  // was still injected verbatim, so report it verbatim — but
   // ONLY when the injector would in fact have injected it. isSupportedPermission
   // Mode is that exact predicate: a harness with no permission axis, or a
   // spelling this harness does not accept, leaves argv untouched, so reporting
