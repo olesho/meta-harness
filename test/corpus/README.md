@@ -7,11 +7,27 @@ covers the tree — each subtree documents its own:
 | --- | --- | --- | --- |
 | **PTY bake-off** | `<harness>/<scenario>/` | recorded PTY byte streams (`bytes.raw` + `meta.json` [+ `expected.txt`]) | emulator bake-off / adapter replay / drift pipeline |
 | **Wire** | [`wire/`](./wire/) | cross-language gateway-DTO / StructuredTurnResult / exit-code goldens | `test/wire_corpus.test.ts` |
+| **Permission mode** | [`permission-mode/`](./permission-mode/) | captured footer / `/status` screens paired with the posture a parser must read off them (`bytes.raw` + `meta.json` + `screen.txt`) | `test/permission_mode_corpus.test.ts` |
 
-> The **wire** corpus (and, when it lands here, an **auth** corpus alongside it)
-> is an **OFFLINE** golden check — vendored fixtures compared to the pure
-> converters. It is DISTINCT from `test/conformance.test.ts`, the gated *live*
-> suite that drives real installed binaries. See [`wire/README.md`](./wire/README.md).
+> The **wire** and **permission-mode** corpora (and, when it lands here, an
+> **auth** corpus alongside them) are **OFFLINE** golden checks — vendored
+> fixtures compared to the pure converters/parsers. They are DISTINCT from
+> `test/conformance.test.ts`, the gated *live* suite that drives real installed
+> binaries. See [`wire/README.md`](./wire/README.md).
+
+> **`permission-mode/` is VENDORED, and this repo is not its canonical side.**
+> The screens are captured in **harness-wrapper** and mirrored here
+> byte-identically by that repo's
+> `scripts/sync-permission-mode-corpus.sh --to <this repo>`. The two repos are
+> *in sync* iff their committed `permission-mode/MANIFEST.sha256` are
+> **byte-equal**, so never hand-edit a file under `permission-mode/` and never
+> regenerate its manifest from this side — change it in harness-wrapper and
+> re-mirror, or the invariant breaks in both repos at once.
+>
+> Its manifest follows the **third** convention in the family (see
+> `scripts/sync-conformance.sh`'s header, which enumerates all three): every
+> file under the corpus root except `MANIFEST.sha256` is hashed, so unlike the
+> wire corpus **`README.md` IS hashed**.
 
 The rest of this file documents the **PTY bake-off** corpus.
 
@@ -101,6 +117,13 @@ are inert to `rebake` (which only iterates `SCENARIOS`) and to `screenbench`
 | --- | --- |
 | `claude-code/model-picker` | needs the `/model` picker open |
 | `claude-code/permission-mode-{manual,accept-edits,plan,bypass}` | needs Shift+Tab keystrokes; `src/cli/screenbench-record.ts` has no scripted-keystroke seam (same gap that excludes codex interrupt) |
+
+> Not to be confused with the **vendored** `permission-mode/` corpus in the
+> table at the top of this file: these four are locally hand-recorded PTY
+> scenarios in the `<harness>/<scenario>/` layout, while `permission-mode/` is a
+> mirrored screen corpus this repo does not own. The vendored tree is where the
+> `dontAsk` footer (`⏵⏵ don't ask on`, claude 2.1.217) is pinned; there is no
+> local `permission-mode-dont-ask` recording.
 
 The permission-mode set gives `src/chat/permission.ts` corpus coverage for the
 four rungs the `auto` recordings cannot reach. Each `meta.json` records the live
