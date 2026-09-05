@@ -36,7 +36,12 @@ export function walkFiles(
  * path** (byte order, matching `LC_ALL=C sort` in scripts/sync-corpus.sh so the
  * script and this helper produce byte-identical manifests), trailing newline.
  * `exclude` holds root-relative paths to leave out — always the manifest itself,
- * plus any non-frozen docs (e.g. README.md).
+ * plus any non-frozen docs. Whether README.md is frozen is PER CORPUS, decided
+ * by the canonical generator on the harness-wrapper side: `permission-mode` (and
+ * `auth`) HASH their README, so their consumers pass only
+ * `new Set(["MANIFEST.sha256"])`; `wire` and friends exclude it as well. See
+ * scripts/sync-corpus.sh::readme_hashed, which is the same policy for the bash
+ * generator.
  */
 export function computeManifest(root: string, exclude: Set<string>): string {
   const entries = walkFiles(root, exclude).map((f) => {
