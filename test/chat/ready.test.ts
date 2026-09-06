@@ -123,6 +123,59 @@ describe("readyForInput(claude-code)", () => {
     "   2. No, exit",
   ].join("\n");
 
+  // Live 2.1.263 wording: the trust dialog is UNNUMBERED there and defaults to
+  // "No, exit". Anchored by the created-or-trust sentence, so it stays rejected
+  // by the blocking-dialog early-return, not by the composer predicate.
+  const trustDialog263 = [
+    " Claude Code",
+    "",
+    " Quick safety check: Is this a project you created or one you trust?",
+    "",
+    " \u276f No, exit",
+    "   Yes, I trust this folder",
+  ].join("\n");
+
+  // Pristine (pre-first-turn) composer captured live from 2.1.263 via tmux on
+  // 2026-09-06 — PUPPET-519. The placeholder hint never clears while the
+  // session has taken no turn, and its body rotates (see src/chat/ready.ts).
+  const readyComposerPlaceholder263 = [
+    " \u2590\u259b\u2588\u2588\u2588\u259b\u2588   Claude Code v2.1.263",
+    "\u259d\u259c\u2588\u2588\u2588\u2588\u2588\u2588\u2580  Opus 5 (1M context) with medium effort \u00b7 API Usage Billing",
+    "  \u259d\u259d \u259d\u259d    /\u2026/scratchpad/probe",
+    "",
+    "                                     \u25d0 medium \u00b7 /effort",
+    "\u2500".repeat(64),
+    '\u276f Try "write a test for <filepath>"',
+    "\u2500".repeat(64),
+    "  \u23f5\u23f5 auto mode on (shift+tab to cycle) \u00b7 \u2190 for agents",
+  ].join("\n");
+
+  // Same shape, the OTHER hint observed live in the same session — the body
+  // rotates over an eight-entry table, so a fixture pinning one string would
+  // pass while the predicate stayed version-fragile.
+  const readyComposerPlaceholderAlt = readyComposerPlaceholder263.replace(
+    'Try "write a test for <filepath>"',
+    'Try "how does <filepath> work?"',
+  );
+
+  // A turn in flight whose echoed user prompt is ITSELF the placeholder shape.
+  // The one screen the widened regex would misread; the busy guard rejects it.
+  const busyTurnTryEcho = [
+    " \u2590\u259b\u2588\u2588\u2588\u259c\u258c   Claude Code v2.1.263",
+    "",
+    '\u276f Try "write a test for foo.ts"',
+    "",
+    "\u273b Pondering\u2026 (3s \u00b7 esc to interrupt)",
+  ].join("\n");
+
+  // An echoed user prompt that merely STARTS with the hint shape: text after
+  // the closing quote must keep it out of the placeholder alternative.
+  const echoTryWithTail = [
+    " \u2590\u259b\u2588\u2588\u2588\u259c\u258c   Claude Code v2.1.263",
+    "",
+    '\u276f Try "write a test for foo.ts" please',
+  ].join("\n");
+
   const startupSplash = [
     " ▐▛███▜▌   Claude Code v2.1.201",
     "",
@@ -162,6 +215,71 @@ describe("readyForInput(claude-code)", () => {
   });
   test("busy turn (past prompt echoes ❯) not ready", () => {
     expect(readyForInput("claude-code", busyTurn)).toBe(false);
+  });
+
+  // --- PUPPET-519: the pristine composer carries a placeholder hint ---
+
+  test("pristine placeholder composer 2.1.263 is ready", () => {
+    expect(readyForInput("claude-code", readyComposerPlaceholder263)).toBe(
+      true,
+    );
+  });
+  test("placeholder composer with a rotated hint body is ready", () => {
+    expect(readyForInput("claude-code", readyComposerPlaceholderAlt)).toBe(
+      true,
+    );
+  });
+  test("submit key on the placeholder composer stays CSI 13 u", () => {
+    expect(
+      dec.decode(
+        submitKeyForHarness("claude-code", readyComposerPlaceholder263),
+      ),
+    ).toBe("\x1b[13u");
+  });
+  test("echoed `Try \"…\"` prompt mid-turn is not ready (busy guard)", () => {
+    expect(readyForInput("claude-code", busyTurnTryEcho)).toBe(false);
+  });
+  test("echoed `Try \"…\"` prompt with a tail is not ready", () => {
+    expect(readyForInput("claude-code", echoTryWithTail)).toBe(false);
+  });
+  test("trust dialog (2.1.263 unnumbered variant) not ready", () => {
+    expect(readyForInput("claude-code", trustDialog263)).toBe(false);
+  });
+});
+
+// PUPPET-519 regression, pinned to a REAL recording rather than a hand-typed
+// frame: interrupted-mid-reply is a live claude 2.1.201 capture whose boot paint
+// contains the placeholder composer. Replaying the stream PREFIX up to the end
+// of that paint reproduces the pristine composer exactly as claude drew it.
+// (Replaying the whole stream lands on the post-turn screen, which paints the
+// bare "❯" and matched even before this fix.)
+describe("readyForInput(claude-code) — recorded corpus", () => {
+  /** Byte-wise indexOf, so the prefix cut lands on the recorded paint. */
+  function indexOfBytes(hay: Uint8Array, needle: Uint8Array): number {
+    return Buffer.from(hay).indexOf(Buffer.from(needle));
+  }
+
+  test("recorded boot composer (corpus prefix replay) is ready", async () => {
+    const bytes = corpusBytes("claude-code", "interrupted-mid-reply");
+    expect(bytes).not.toBeNull();
+    const needle = new TextEncoder().encode('Try "write a test for <filepath>"');
+    const at = indexOfBytes(bytes!, needle);
+    expect(at).toBeGreaterThan(0);
+    const scr = newScreen(120, 40);
+    await scr.write(bytes!.subarray(0, at + needle.length));
+    const text = scr.snapshot().text;
+    expect(text).toContain('Try "write a test for <filepath>"');
+    expect(readyForInput("claude-code", text)).toBe(true);
+  });
+
+  // The negative half over the same tree: the widened predicate must not leak.
+  // model-picker is a menu, not a composer, and stays NOT ready.
+  test("recorded model-picker final screen stays not ready", async () => {
+    const bytes = corpusBytes("claude-code", "model-picker");
+    expect(bytes).not.toBeNull();
+    const scr = newScreen(120, 40);
+    await scr.write(bytes!);
+    expect(readyForInput("claude-code", scr.snapshot().text)).toBe(false);
   });
 });
 

@@ -16,11 +16,41 @@ const claudeTrustAnchor = "Do you trust the files in this folder?";
 const claudeTrustAnchorAlt = "Is this a project you created or one you trust?";
 const claudeBypassAnchor = "Bypass Permissions mode";
 
-// claudeComposerRE matches the idle composer prompt line: a "❯" alone on its
-// own line (only whitespace after). While a turn is in flight the composer is
-// replaced by the spinner, past prompts render as "❯ <text>" (non-empty), and
-// blocking dialogs render "❯ 1. Yes…" menu rows — none of which match.
+// claudeBusyMarker is shown ONLY while a turn is in flight (mirrored from the
+// turns claudecode adapter's busyMarker, per this file's convention).
+const claudeBusyMarker = "esc to interrupt";
+
+// claudeComposerRE matches the SETTLED idle composer prompt line: a "❯" alone
+// on its own line (only whitespace after), which claude paints from the second
+// turn on. While a turn is in flight the composer is replaced by the spinner,
+// past prompts render as "❯ <text>" (non-empty), and blocking dialogs render
+// "❯ 1. Yes…" menu rows — none of which match.
 const claudeComposerRE = /^[^\S\r\n]*❯[^\S\r\n]*$/m;
+
+// claudePlaceholderComposerRE matches the PRISTINE (pre-first-turn) composer,
+// which claude paints with a rotating placeholder hint after the "❯" and an
+// NBSP: `❯ Try "write a test for <filepath>"`. The hint body rotates over an
+// eight-entry table and interpolates a real repo filename, so only `Try "` and
+// the closing quote are stable — but the quote plus the end-of-line anchor are
+// what keep this from matching an ordinary echoed user prompt. Verified live on
+// claude 2.1.263 (2026-09-06) and against the recorded 2.1.201 boot frame in
+// test/corpus/claude-code/interrupted-mid-reply. Requiring a BARE "❯" here was
+// the PUPPET-519 hang: readyForInput was false for a healthy composer, so
+// awaitPromptReady blocked every first send to the caller's deadline.
+const claudePlaceholderComposerRE =
+  /^[^\S\r\n]*❯[^\S\r\n]*Try "[^"\n]*"[^\S\r\n]*$/m;
+
+// claudeComposerReady accepts either shape. The placeholder shape additionally
+// requires no in-flight turn: a user prompt that is itself `Try "…"` echoes as
+// that exact line while the turn runs, and typing into a busy composer is worse
+// than one extra not-ready beat. The bare shape is intentionally NOT busy-gated
+// — a busyMarker in scrollback prose must never pin a real composer not-ready.
+function claudeComposerReady(text: string): boolean {
+  if (claudeComposerRE.test(text)) return true;
+  return (
+    claudePlaceholderComposerRE.test(text) && !text.includes(claudeBusyMarker)
+  );
+}
 
 function claudeBlockingDialog(text: string): boolean {
   return (
@@ -143,10 +173,12 @@ export function readyForInput(harness: string, text: string): boolean {
       // "❯" selector + "Claude Code" header and would otherwise look ready —
       // reject those outright, mirroring the codex interstitial handling.
       if (claudeBlockingDialog(text)) return false;
-      // Positive signal: the EMPTY composer line ("❯" alone on its own line),
-      // not merely header + "❯" anywhere — verified against the live 2.1.201
-      // ready screen and the 2.1.185 corpus.
-      return text.includes("Claude Code") && claudeComposerRE.test(text);
+      // Positive signal: a real composer line, not merely header + "❯"
+      // anywhere — either the EMPTY composer ("❯" alone on its own line,
+      // verified against the live 2.1.201 ready screen and the 2.1.185 corpus)
+      // or the pristine pre-first-turn composer carrying only claude's rotating
+      // `Try "…"` placeholder hint (verified live on 2.1.263, PUPPET-519).
+      return text.includes("Claude Code") && claudeComposerReady(text);
     case "codex":
       // The never-signed-in onboarding menu ("Sign in with ChatGPT") renders a
       // "›"-highlighted row and would look ready; it is a stuck sign-in wall, so
