@@ -7,8 +7,7 @@
 // against genuine chat behavior without spawning a PTY-backed harness.
 
 import { afterEach, describe, expect, test } from "vitest";
-import { mkdtempSync, readFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { createServer, type Server as HTTPServer } from "node:http";
@@ -43,9 +42,11 @@ import type { Snapshot } from "../../src/screen/screen.ts";
 import {
   New,
   PromptRef,
+  argvOutPath,
   fakeHarnessBin,
   fakeLaunchEnv,
   openFake,
+  readArgv,
 } from "../chat/fakeharness.ts";
 
 // ── A faithful fake Conversation ─────────────────────────────────────────────
@@ -959,29 +960,6 @@ describe("permission_mode (POST /v1/conversations + POST /v1/turns)", () => {
     }).then((live) => ({ ...live, seen: () => calls }));
   }
 
-  function argvPath(): string {
-    return join(mkdtempSync(join(tmpdir(), "gw-argv-")), "argv.json");
-  }
-
-  /**
-   * Read the argv dump, waiting for it to appear. The fake harness writes it as
-   * its FIRST act, but that is still a freshly spawned node process: POST
-   * /v1/conversations answers 201 as soon as Open returns, which can beat the
-   * child to its own first line. Poll rather than sleep so the fast path stays
-   * fast and a genuine "never launched" failure still fails, on the timeout.
-   */
-  async function readArgv(path: string): Promise<string[]> {
-    const deadline = Date.now() + 10_000;
-    for (;;) {
-      try {
-        return JSON.parse(readFileSync(path, "utf8")) as string[];
-      } catch (err) {
-        if (Date.now() >= deadline) throw err;
-        await new Promise((r) => setTimeout(r, 25));
-      }
-    }
-  }
-
   /**
    * Assert `flag` appears exactly `count` times and each occurrence is followed
    * by `value`. Adjacency matters: run.ts prepends effort/model/permission args
@@ -1152,7 +1130,7 @@ describe("permission_mode (POST /v1/conversations + POST /v1/turns)", () => {
       .Reply(40, "ok", "Baked", "1s")
       .StayAliveUntilStopped()
       .Build();
-    const argvOut = argvPath();
+    const argvOut = argvOutPath("gw-argv-");
     const { base } = await start();
     const r = await req(base, "POST", "/v1/turns", {
       harness: "claude",
@@ -1176,7 +1154,7 @@ describe("permission_mode (POST /v1/conversations + POST /v1/turns)", () => {
       .Reply(40, "ok", "Baked", "1s")
       .StayAliveUntilStopped()
       .Build();
-    const argvOut = argvPath();
+    const argvOut = argvOutPath("gw-argv-");
     const { base } = await start();
     const r = await req(base, "POST", "/v1/turns", {
       harness: "claude",
@@ -1196,7 +1174,7 @@ describe("permission_mode (POST /v1/conversations + POST /v1/turns)", () => {
     // the spy, which observes Options one hop EARLIER than the cfg literal that
     // actually launches the wrapper.
     const script = New("claude-code").Idle().StayAliveUntilStopped().Build();
-    const argvOut = argvPath();
+    const argvOut = argvOutPath("gw-argv-");
     const { base } = await start();
     const open = await req(base, "POST", "/v1/conversations", {
       harness: "claude-code",

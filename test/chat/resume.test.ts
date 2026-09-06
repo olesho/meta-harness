@@ -5,7 +5,6 @@
 // back the stored session's history — and that both surface the right sentinels.
 
 import { afterEach, describe, expect, test } from "vitest";
-import { readFileSync } from "node:fs";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -26,9 +25,11 @@ import {
 } from "../../src/chat/index.ts";
 import {
   New,
+  argvOutPath,
   fakeHarnessBin,
   fakeLaunchEnv,
   openFake,
+  readArgv,
   testIdleGap,
   testMarkerGap,
 } from "./fakeharness.ts";
@@ -46,31 +47,12 @@ function track(conv: Conversation): Conversation {
   return conv;
 }
 
-function argvOutPath(): string {
-  return join(mkdtempSync(join(tmpdir(), "fakeharness-argv-")), "argv.json");
-}
-
-// Polls the argv-dump file the fake writes at startup; the write races the Open
-// return, so retry before reading. The budget must tolerate a cold child-process
-// spawn (fresh `node` + ESM resolution) which a loaded/cold vitest worker can
-// push to ~3 s, so poll for ~10 s (still returns immediately once the file lands).
-async function readArgv(path: string): Promise<string[]> {
-  for (let i = 0; i < 500; i++) {
-    try {
-      return JSON.parse(readFileSync(path, "utf8"));
-    } catch {
-      await new Promise((r) => setTimeout(r, 20));
-    }
-  }
-  throw new Error(`argv dump never appeared at ${path}`);
-}
-
 const uuid = "11111111-2222-3333-4444-555555555555";
 
 describe("resume plumbing (Phase 1)", () => {
   test("Open with resume prepends claude-code resume args + seeds harnessSessionID", async () => {
     const store = newMemStore();
-    const argvPath = argvOutPath();
+    const argvPath = argvOutPath("fakeharness-argv-");
     const conv = track(
       await openFake(New("claude-code").Idle().Build(), {
         resume: uuid,
@@ -90,7 +72,7 @@ describe("resume plumbing (Phase 1)", () => {
   }, 20000);
 
   test("Open with resume prepends codex resume args", async () => {
-    const argvPath = argvOutPath();
+    const argvPath = argvOutPath("fakeharness-argv-");
     track(
       await openFake(New("codex").Idle().Build(), {
         resume: uuid,
@@ -143,7 +125,7 @@ describe("Reopen helper (Phase 2)", () => {
     };
     await store.appendTurn(prior);
 
-    const argvPath = argvOutPath();
+    const argvPath = argvOutPath("fakeharness-argv-");
     const conv = track(
       await Reopen(undefined, {
         sessionID: storedID,

@@ -7,9 +7,6 @@
 // builds and must not clobber the seeded id (first-write-wins).
 
 import { afterEach, describe, expect, test } from "vitest";
-import { mkdtempSync, readFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 
 import { Context, isSentinel } from "../../src/internal/async/index.ts";
 import {
@@ -18,7 +15,13 @@ import {
   newMemStore,
   type Conversation,
 } from "../../src/chat/index.ts";
-import { New, fakeHarnessBin, openFake } from "./fakeharness.ts";
+import {
+  New,
+  argvOutPath,
+  fakeHarnessBin,
+  openFake,
+  readArgv,
+} from "./fakeharness.ts";
 
 const open = new Set<Conversation>();
 afterEach(async () => {
@@ -33,21 +36,6 @@ function track(conv: Conversation): Conversation {
   return conv;
 }
 
-function argvOutPath(): string {
-  return join(mkdtempSync(join(tmpdir(), "cc-argv-")), "argv.json");
-}
-
-async function readArgv(path: string): Promise<string[]> {
-  for (let i = 0; i < 100; i++) {
-    try {
-      return JSON.parse(readFileSync(path, "utf8"));
-    } catch {
-      await new Promise((r) => setTimeout(r, 20));
-    }
-  }
-  throw new Error(`argv dump never appeared at ${path}`);
-}
-
 const uuidRE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 function ccScript() {
@@ -57,7 +45,7 @@ function ccScript() {
 describe("claude-code create session", () => {
   test("Open (create) seeds a minted --session-id", async () => {
     const store = newMemStore();
-    const argvPath = argvOutPath();
+    const argvPath = argvOutPath("cc-argv-");
     const conv = track(
       await openFake(ccScript(), { store, argvOut: argvPath }),
     );
@@ -113,7 +101,7 @@ describe("claude-code create session", () => {
     }
 
     test("positional after -- is not rejected", async () => {
-      const argvPath = argvOutPath();
+      const argvPath = argvOutPath("cc-argv-");
       const conv = track(
         await openFake(ccScript(), {
           store: newMemStore(),

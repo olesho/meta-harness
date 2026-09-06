@@ -6,7 +6,14 @@
 // end — the timing-sensitive completion path unit tests calling maybeIdleComplete
 // directly cannot reach.
 
-import { chmodSync, mkdtempSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -926,6 +933,73 @@ export function fakeLaunchEnv(script: Script, argvOut?: string): string[] {
     `${EnvVar}=${scriptPath}`,
     ...(argvOut ? [`${ArgvOutVar}=${argvOut}`] : []),
   ];
+}
+
+/**
+ * ArgvDumpBudgetMs — how long readArgv waits for the fake harness's argv dump.
+ *
+ * The fake writes the dump as its FIRST act, but that is still a cold `node`
+ * spawn, and vitest.config.ts records that one such spawn can reach ~3 s on a
+ * CPU-contended gate host. The old per-file budgets (as low as 100 x 20 ms =
+ * 2 s) sat BELOW that, so the reader gave up before the child had misbehaved
+ * (PUPPET-318). 15 s clears several stacked spawns and still lands well inside
+ * the 30 s testTimeout, so a harness that genuinely never launched fails with
+ * readArgv's own diagnostic rather than as an opaque vitest timeout. Do not
+ * raise it to >= testTimeout: that inverts the relationship and loses the
+ * diagnostic.
+ */
+export const ArgvDumpBudgetMs = 15_000;
+
+/** argvOutPath mints a fresh temp path for one launch's argv dump. */
+export function argvOutPath(prefix = "fh-argv-"): string {
+  return join(mkdtempSync(join(tmpdir(), prefix)), "argv.json");
+}
+
+/** byteLen reports the size of `p`, or -1 if it cannot be stat'd. */
+function byteLen(p: string): number {
+  try {
+    return statSync(p).size;
+  } catch {
+    return -1;
+  }
+}
+
+/**
+ * readArgv waits for the fake harness to dump its launch argv and returns it.
+ *
+ * The dump write races the caller: the fake writes it as its first act, but
+ * Open (and the gateway's POST /v1/conversations, which answers 201 as soon as
+ * Open returns) can beat the child to its own first line. So poll rather than
+ * read once — and poll against a WALL-CLOCK DEADLINE, not an iteration count:
+ * setTimeout fires late exactly when the machine is loaded, which is the same
+ * moment the spawn is slow, so a loop counter is not a time budget at all.
+ *
+ * The fast path (dump already on disk) returns on the first iteration with no
+ * sleep, so no test gets slower in the common case. The fake renames the dump
+ * into place atomically, so a torn read cannot be observed; the retry on parse
+ * failure stays as defence in depth.
+ */
+export async function readArgv(
+  path: string,
+  budgetMs = ArgvDumpBudgetMs,
+): Promise<string[]> {
+  const deadline = Date.now() + budgetMs;
+  let last: unknown;
+  for (;;) {
+    try {
+      return JSON.parse(readFileSync(path, "utf8")) as string[];
+    } catch (err) {
+      last = err;
+      if (Date.now() >= deadline) {
+        throw new Error(
+          `fake harness never dumped its argv to ${path} within ${budgetMs}ms ` +
+            `(dir exists: ${existsSync(dirname(path))}, file exists: ` +
+            `${existsSync(path)}, bytes: ${byteLen(path)}): ${String(last)}`,
+        );
+      }
+      await new Promise((r) => setTimeout(r, 25));
+    }
+  }
 }
 
 export async function openFake(

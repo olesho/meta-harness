@@ -3,10 +3,6 @@
 // keeps an unattended Open from wedging on the "Bypass Permissions mode" dialog.
 
 import { afterEach, describe, expect, test } from "vitest";
-import { existsSync, mkdtempSync, readFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-
 import { launchInputPolicy } from "../../src/chat/conversation.ts";
 import {
   DispositionAnswer,
@@ -16,26 +12,9 @@ import {
 import { Context } from "../../src/internal/async/index.ts";
 import type { Conversation } from "../../src/chat/index.ts";
 import { KeyRecorder, newTestConv, trustRequest } from "./helpers.ts";
-import { New, openFake } from "./fakeharness.ts";
+import { New, argvOutPath, openFake, readArgv } from "./fakeharness.ts";
 
 const open = new Set<Conversation>();
-
-/**
- * The fake dumps its argv from its own `run()`, which can land AFTER Open
- * resolves (claude-code seeds its session id from initSession rather than
- * scraping the screen, so Open does not wait on the child painting anything).
- * Poll rather than read once.
- */
-async function readArgv(path: string): Promise<string[]> {
-  for (let i = 0; i < 100; i++) {
-    if (existsSync(path)) {
-      const raw = readFileSync(path, "utf8");
-      if (raw !== "") return JSON.parse(raw) as string[];
-    }
-    await new Promise((r) => setTimeout(r, 50));
-  }
-  throw new Error(`fake harness never dumped its argv to ${path}`);
-}
 
 afterEach(async () => {
   for (const conv of open) {
@@ -149,7 +128,7 @@ describe("launchInputPolicy — claude bypass trust_prompt default", () => {
 
 describe("permissionMode reaches the wrapper Config", () => {
   test("Open forwards it: `ask` launches claude with --permission-mode acceptEdits", async () => {
-    const argvOut = join(mkdtempSync(join(tmpdir(), "pm-argv-")), "argv.json");
+    const argvOut = argvOutPath("pm-argv-");
     const script = New("claude-code").Idle().StayAliveUntilStopped().Build();
 
     const conv = await openFake(script, {
@@ -164,7 +143,7 @@ describe("permissionMode reaches the wrapper Config", () => {
   }, 20000);
 
   test("an unset permissionMode injects nothing", async () => {
-    const argvOut = join(mkdtempSync(join(tmpdir(), "pm-argv-")), "argv.json");
+    const argvOut = argvOutPath("pm-argv-");
     const script = New("claude-code").Idle().StayAliveUntilStopped().Build();
 
     const conv = await openFake(script, { argvOut });
