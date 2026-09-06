@@ -175,7 +175,9 @@ export function readyForInput(harness: string, text: string): boolean {
 // see test/corpus/auth for the captured screen each one matches):
 //   - claude-code: "Not logged in · Please run /login" (logged out); "Invalid API
 //     key · Fix external API key" (bad external key); the first-run onboarding
-//     "Choose the text style" theme picker and the "Select login method" screen.
+//     "Choose the text style" theme picker, the "Select login method" screen, and
+//     the OAuth browser sign-in screen the latter advances into ("Use the url
+//     below to sign in" / "Paste code here if prompted").
 //   - codex:       "401 Unauthorized: missing bearer or basic authentication"
 //     (bad/expired key); `codex login status` / a logged-out TUI say "Not logged
 //     in"; codex's own remediation is "run `codex login`"; the never-signed-in
@@ -197,6 +199,14 @@ export function readyForInput(harness: string, text: string): boolean {
 const claudeOnboardingRE = [
   /choose the text style/i, // theme picker
   /select login method/i, // login-method screen
+  // The OAuth sign-in page the login-method menu advances into: the browser
+  // handoff / paste-the-code screen. It is a WALL — it never becomes a composer
+  // — and the "Select login method" anchor is gone from the screen by the time
+  // it paints, so without these anchors it matches nothing and awaitPromptReady
+  // blocks to the run deadline (PUPPET-315). Claude's counterpart to codex's
+  // "finish signing in via your browser".
+  /use the url below to sign in/i,
+  /paste code here if prompted/i,
 ];
 const codexOnboardingRE = [
   /sign in with chatgpt/i, // never-signed-in menu

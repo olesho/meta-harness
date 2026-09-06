@@ -1,10 +1,14 @@
 // Port of pkg/chat/ready_test.go — per-harness submit key + pi send-readiness.
 import { describe, expect, test } from "vitest";
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   submitKeyForHarness,
   requiresPromptReadiness,
   readyForInput,
   authRequired,
+  onboardingWall,
   usageLimitMessage,
 } from "../../src/chat/ready.ts";
 import { newScreen } from "../../src/screen/index.ts";
@@ -388,6 +392,101 @@ describe("authRequired", () => {
   });
   test("unknown harness never fires", () => {
     expect(authRequired("some-other-harness", "Not logged in")).toBe(false);
+  });
+
+  // claude-code 2.1.263 OAuth browser sign-in (PUPPET-315): the wall the
+  // login-method menu advances into. "Select login method" is GONE from this
+  // screen, so before the fix nothing matched it and send hung to the deadline.
+  // Both prose lines are anchors; either alone suffices.
+  test("claude: detects the OAuth browser sign-in wall", () => {
+    expect(
+      authRequired(
+        "claude-code",
+        " Browser didn't open? Use the url below to sign in (c to copy)",
+      ),
+    ).toBe(true);
+    expect(
+      authRequired("claude-code", " Paste code here if prompted >"),
+    ).toBe(true);
+  });
+
+  // The anchors are deliberately the full UI phrasings, not /paste code/: an
+  // assistant reply merely saying "paste code" must not be gated.
+  test("claude: a reply mentioning 'paste code' is not gated", () => {
+    expect(
+      authRequired(
+        "claude-code",
+        "⏺ Copy the snippet and paste code into main.ts.",
+      ),
+    ).toBe(false);
+  });
+});
+
+// The claude 2.1.263 pre-reply screens, as measured live on 2026-09-06
+// (PUPPET-315), read straight off the corpus fixtures the Go repo shares. The
+// OAuth browser sign-in screen is the one that used to match nothing: it is a
+// WALL (onboardingWall true, so awaitPromptReady throws ErrAuthRequired
+// IMMEDIATELY rather than after the 2s debounce — the CLI can replace this frame
+// within one paint), and it is never ready for input. The logged-out composer is
+// the deliberate contrast: authRequired true but readyForInput ALSO true, because
+// a real composer carrying a stale banner is usable.
+describe("claude-code 2.1.263 pre-reply screens (corpus)", () => {
+  const corpusScreen = (fixture: string): string =>
+    readFileSync(
+      resolve(
+        dirname(fileURLToPath(import.meta.url)),
+        "../corpus/auth/claude-code",
+        fixture,
+        "screen.txt",
+      ),
+      "utf8",
+    );
+
+  const cases: [string, boolean, boolean, boolean][] = [
+    // fixture, onboardingWall, readyForInput, authRequired
+    ["oauth-browser-signin", true, false, true],
+    ["login-method-2.1.263", true, false, true],
+    ["not-logged-in-2.1.263", false, true, true],
+  ];
+  for (const [fixture, wall, ready, auth] of cases) {
+    test(fixture, () => {
+      const screen = corpusScreen(fixture);
+      expect(onboardingWall("claude-code", screen)).toBe(wall);
+      expect(readyForInput("claude-code", screen)).toBe(ready);
+      expect(authRequired("claude-code", screen)).toBe(auth);
+    });
+  }
+});
+
+// Chat-layer cross-check for the PUPPET-452 class of regression: 2.1.261 dropped
+// the folder-trust dialog's numbered options, which broke the turns-layer menu
+// matcher. The chat layer matches by literal substring, not menu shape, so the
+// dialog is still not-ready on 2.1.263 — and it is not an auth screen. Frame body
+// captured live 2026-09-06.
+describe("claude-code 2.1.263 folder-trust dialog", () => {
+  const trustDialog = [
+    " Accessing workspace:",
+    "",
+    " /tmp/probe/wd4",
+    "",
+    " Quick safety check: Is this a project you created or one you trust? (Like your own code, a well-known open source",
+    " project, or work from your team). If not, take a moment to review what's in this folder first.",
+    "",
+    " Claude Code'll be able to read, edit, and execute files here.",
+    "",
+    " Security guide",
+    "",
+    " ❯ No, exit",
+    "   Yes, I trust this folder",
+    "",
+    " Enter to confirm · Esc to cancel",
+    "",
+  ].join("\n");
+
+  test("not ready, not a wall, not auth", () => {
+    expect(readyForInput("claude-code", trustDialog)).toBe(false);
+    expect(onboardingWall("claude-code", trustDialog)).toBe(false);
+    expect(authRequired("claude-code", trustDialog)).toBe(false);
   });
 });
 

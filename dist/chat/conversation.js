@@ -897,6 +897,10 @@ export class Conversation {
                         return "deadline";
                     throw err;
                 });
+                if (w === "auth") {
+                    throw permissionStalled(`the harness is sitting on a login / onboarding wall and can never ` +
+                        `reach a ready prompt; no cycle keystroke was written`);
+                }
                 if (w === "deadline") {
                     throw permissionStalled(`the harness never reached a ready prompt before the deadline; ` +
                         `no cycle keystroke was written`);
@@ -3086,19 +3090,39 @@ export class Conversation {
         }
     }
     /**
-     * Same readiness loop as awaitPromptReady but with an extra, NON-throwing exit:
-     * when deadlinePromise resolves before the prompt is ready it returns the
-     * "deadline" sentinel instead of throwing. The screen subscription is owned in
-     * one try/finally so it never leaks on the timeout path (unlike racing a live
+     * Same readiness loop as awaitPromptReady but with two extra, NON-throwing
+     * exits: when deadlinePromise resolves before the prompt is ready it returns
+     * the "deadline" sentinel instead of throwing, and when the screen is an
+     * onboarding/sign-in WALL it returns "auth" immediately instead of burning the
+     * caller's whole bound and reporting a generic not-ready outcome (PUPPET-315:
+     * on the OAuth browser sign-in screen that is exactly what happened, hiding
+     * the auth cause behind a timeout). The screen subscription is owned in one
+     * try/finally so it never leaks on the timeout path (unlike racing a live
      * awaitPromptReady against a timer, which would abandon a subscribed waiter).
      * ctx cancellation still throws ctx.err(); close still throws ErrClosed;
      * a client-facing prompt still throws ErrInputPending.
+     *
+     * Only the WALL is reported, not the softer logged-out banner: a wall never
+     * becomes ready, while a banner can sit above a composer that is (or is about
+     * to be) perfectly usable — which is why awaitPromptReady debounces the latter
+     * and fires the former at once. Callers that do not care may keep treating
+     * anything other than "ready" as not-ready; that is behaviour-preserving,
+     * because such a screen would previously have run out the bound anyway.
      */
     async awaitPromptReadyUntil(ctx, deadlinePromise) {
         const [notify, unsubscribe] = this.screen.subscribe();
-        try {
-            if (readyForInput(this.opts.harness, this.screen.snapshot().text))
+        const classify = () => {
+            const txt = this.screen.snapshot().text;
+            if (readyForInput(this.opts.harness, txt))
                 return "ready";
+            if (onboardingWall(this.opts.harness, txt))
+                return "auth";
+            return "wait";
+        };
+        try {
+            const first = classify();
+            if (first !== "wait")
+                return first;
             for (;;) {
                 const which = await Promise.race([
                     ctx.done().then(() => "ctx"),
@@ -3119,8 +3143,9 @@ export class Conversation {
                     return "deadline";
                 if (this.inputAwaitingClient())
                     throw ErrInputPending;
-                if (readyForInput(this.opts.harness, this.screen.snapshot().text))
-                    return "ready";
+                const c = classify();
+                if (c !== "wait")
+                    return c;
             }
         }
         finally {
