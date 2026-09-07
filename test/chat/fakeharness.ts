@@ -503,8 +503,9 @@ export class Builder {
   /**
    * Paints claude's Bypass Permissions acceptance dialog — the blocking screen
    * `bypassAnchor` (src/turns/harness/claudecode.ts) detects as
-   * `kind: "trust_prompt"` and `claudeBypassAnchor` (src/chat/ready.ts:17)
-   * treats as not-ready-for-input.
+   * `kind: "bypass_acceptance"` (its own kind since PUPPET-526, distinct from
+   * the folder-trust dialog's `trust_prompt`) and `claudeBypassAnchor`
+   * (src/chat/ready.ts) treats as not-ready-for-input.
    *
    * Parked MID-RING by a scenario, this proves a cycle loop re-checks for a
    * pending input request between presses instead of reporting a stall: the

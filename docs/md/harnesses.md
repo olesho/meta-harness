@@ -55,7 +55,7 @@ harnesses with `ErrInvalidConfig`. The per-rung argv lives once, in
 | `SessionForkResumer`                                |                      no-fork                      |                 ✓ (false)⁷                  | no-fork |    —     |    —    |
 | `TranscriptReader`                                  |                         ✓                         |                      ✓                      |    ✓    |    —     |    —    |
 | Startup interstitial auto-dismiss                   |                         —                         |                     ✓⁸                      |    —    |    —     |    —    |
-| Input requests detected                             | ✓ `trust_prompt` · `question` · `question_review` | ✓ `approval_prompt` · `permissions_prompt`⁹ |    —    |    —     |    —    |
+| Input requests detected                             | ✓ `trust_prompt` · `bypass_acceptance` · `question` · `question_review` | ✓ `approval_prompt` · `permissions_prompt`⁹ |    —    |    —     |    —    |
 
 ⁶ Codex ≤ 0.141 emitted a "Token usage:" footer chat could scrape; 0.142+ has no screen
 signal, so completion falls back to [status-driven mapping](#the-generic-fallback).
@@ -94,9 +94,11 @@ The most fully-supported harness. Name `claude-code`, binary `claude`.
   `--from-pr`, `--no-session-persistence`); chat bans them from your `args`.
 - **History.** [`ClaudeCodeReader`](modules/transcript.md#claudecodereader) reads
   `~/.claude/projects/<encoded-cwd>/<uuid>.jsonl` (tool-aware, returns `Event[]`).
-- **Interactive prompts.** Folder-trust / "bypass permissions" dialogs are detected as
-  `trust_prompt` input requests — the [one-shot loop](modules/oneshot.md) auto-accepts
-  them via `AutoAcceptTrust`. The mid-turn `AskUserQuestion` dialog (shapes verified
+- **Interactive prompts.** The folder-trust dialog is detected as a `trust_prompt` input
+  request and the `--dangerously-skip-permissions` ("Bypass Permissions mode") acceptance
+  screen as a `bypass_acceptance` one — separate kinds, so a policy can answer folder trust
+  without also accepting a skip-all-permissions launch. The
+  [one-shot loop](modules/oneshot.md) auto-accepts both via `AutoAcceptTrust`. The mid-turn `AskUserQuestion` dialog (shapes verified
   live on 2.1.210) is detected as `question` / `question_review` requests — single- and
   multi-question, multi-select, with the UI's free-text ("Type something.", alias
   `other`) and "Chat about this" affordances parsed as options. Selection mechanics are

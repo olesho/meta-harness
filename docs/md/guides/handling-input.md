@@ -14,7 +14,8 @@ The client-surfaced `kind` values, and which harness produces each:
 
 | `kind`               | Prompt                                                                                                     | Surfaced by |
 | -------------------- | ---------------------------------------------------------------------------------------------------------- | ----------- |
-| `trust_prompt`       | Folder-trust / "bypass permissions" startup dialog.                                                        | Claude Code |
+| `trust_prompt`       | Folder-trust startup dialog ("Do you trust the files in this folder?").                                     | Claude Code |
+| `bypass_acceptance`  | The `--dangerously-skip-permissions` ("Bypass Permissions mode") acceptance screen.                         | Claude Code |
 | `menu_select`        | A numbered menu.                                                                                           | any         |
 | `confirm`            | A y/n confirmation.                                                                                        | any         |
 | `text_input`         | A free-text prompt (no `options`).                                                                         | any         |
@@ -74,12 +75,19 @@ const conv = await Open(ctx, {
   inputPolicy: {
     byKind: {
       trust_prompt: { kind: DispositionAnswer, optionID: "proceed" },
+      // The acceptance screen is its OWN kind, so "trust this folder, but never
+      // silently accept a skip-all-permissions launch" is expressible:
+      bypass_acceptance: { kind: DispositionDeny },
       confirm: { kind: DispositionDeny }, // pick the option aliased "deny"
     },
     default: DispositionAnswer, // fallback for unlisted kinds (optional)
   },
 });
 ```
+
+`trust_prompt` and `bypass_acceptance` are **separate kinds**. Answering one does not
+answer the other — a bare `default` covers both, but a `byKind` entry covers only the
+screen it names.
 
 `byKind[req.kind]` wins over `default`; an explicit `{ kind: DispositionAsk }` entry means
 "surface this one to me even though a default exists."
@@ -148,6 +156,8 @@ const conv = await Open(ctx, {
   /* … */
   onInputRequest: (req) => {
     if (req.kind === "trust_prompt") return [{ optionID: "proceed" }, true];
+    // Trusting a folder is not accepting a skip-all-permissions launch:
+    if (req.kind === "bypass_acceptance") return [{ optionID: "deny" }, true];
     return [{}, false]; // not handled → falls through to surfacing
   },
 });

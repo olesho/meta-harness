@@ -117,7 +117,9 @@ export interface TurnConfig {
    * / dontAsk, codex its read-only / workspace-write / danger-full-access
    * sandbox values. Empty leaves the harness default. When this is a claude
    * `bypass` and `inputPolicy` is absent, chat installs its default
-   * trust_prompt→proceed policy so the run is not wedged on the bypass dialog.
+   * bypass_acceptance→proceed policy so the run is not wedged on the bypass
+   * dialog. (That kind is the acceptance screen's own, split out of
+   * `trust_prompt` by PUPPET-526.)
    */
   permissionMode?: string;
   /** Submitted as one user message. */

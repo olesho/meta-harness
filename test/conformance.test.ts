@@ -2346,14 +2346,15 @@ describe("conformance: claude mid-session switch (CONFORMANCE=1)", () => {
   //
   // THE ACCEPTANCE SCREEN. On an already-accepted machine it is skipped; on a
   // fresh HOME claude paints "Bypass Permissions mode", which the turns layer
-  // reports as `trust_prompt`. setPermissionMode refuses while ANY input is
+  // reports as `bypass_acceptance` (its own kind since PUPPET-526, split out of
+  // the folder-trust dialog's `trust_prompt`). setPermissionMode refuses while ANY input is
   // pending — INCLUDING one an inputPolicy is mid-way through auto-resolving —
   // so the honest outcomes are BOTH accepted: either the traversal completes, or
   // it raises ErrInputPending NAMING the kind. What is never acceptable is
   // ErrPermissionModeStalled, which would mean the session was left parked in a
   // modal with the ring reported dead.
   test.skipIf(skip)(
-    "claude-code: `bypass` on a bypass-enabled session is reachable (or reports the trust_prompt)",
+    "claude-code: `bypass` on a bypass-enabled session is reachable (or reports the bypass_acceptance)",
     async () => {
       const version = info.detectedVersion || "?";
       const rig = newRig();
@@ -2406,10 +2407,10 @@ describe("conformance: claude mid-session switch (CONFORMANCE=1)", () => {
             expect(
               isSentinel(err, ErrInputPending) &&
                 ((err as { message?: string }).message ?? "").includes(
-                  "trust_prompt",
+                  "bypass_acceptance",
                 ),
               `claude ${version}: traversing back onto \`bypass\` failed with something ` +
-                `other than a NAMED trust_prompt: ${describeError(err)}. A stall here would ` +
+                `other than a NAMED bypass_acceptance: ${describeError(err)}. A stall here would ` +
                 `mean the session is parked in the acceptance modal with the ring reported ` +
                 `dead.\n` +
                 claudeReport(conv, rig, "bypass-enabled: step back"),

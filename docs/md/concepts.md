@@ -305,8 +305,10 @@ a mid-turn clarifying question), the turns layer reports an **`InputRequest`**:
 write. The `id` is a content hash — stable across redraws of the _same_ prompt,
 different for a new one.
 
-The client-surfaced `kind` vocabulary is `trust_prompt` (folder-trust / bypass dialog),
-`menu_select` (a numbered menu), `confirm` (a y/n confirmation), `text_input` (a
+The client-surfaced `kind` vocabulary is `trust_prompt` (the folder-trust dialog),
+`bypass_acceptance` (Claude Code's `--dangerously-skip-permissions` acceptance screen —
+its own kind, so a policy can trust a folder without also accepting a
+skip-all-permissions launch), `menu_select` (a numbered menu), `confirm` (a y/n confirmation), `text_input` (a
 free-text prompt), `question` / `question_review` (Claude Code's clarifying-question
 dialog, below), `approval_prompt` (Codex's command / apply-patch approval dialog), and
 `permissions_prompt` (Codex's `/permissions` model-permissions picker).

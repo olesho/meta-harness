@@ -12,6 +12,11 @@
 // the old header+selector heuristic mistook for a ready composer.
 const claudeTrustAnchor = "Do you trust the files in this folder?";
 const claudeTrustAnchorAlt = "Is this a project you created or one you trust?";
+// claudeBypassAnchor gates READINESS only — this is a boolean predicate that
+// stamps no kind. The turns layer reports the same screen as its own input kind
+// `bypass_acceptance` (claudecode.KindBypassAcceptance), distinct from the two
+// folder-trust anchors above; do not infer from this shared list that the kinds
+// are shared too.
 const claudeBypassAnchor = "Bypass Permissions mode";
 // claudeBusyMarker is shown ONLY while a turn is in flight (mirrored from the
 // turns claudecode adapter's busyMarker, per this file's convention).

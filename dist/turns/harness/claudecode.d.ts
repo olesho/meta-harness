@@ -2,6 +2,22 @@ import type { Snapshot } from "../../screen/index.ts";
 import { type HookProvider } from "../../hooks/index.ts";
 import { GenericAdapter } from "../generic.ts";
 import type { Adapter, Event, InputRequest, Turn } from "../types.ts";
+/**
+ * Input kinds this adapter stamps on InputRequest.kind. They are the keys a
+ * declarative policy matches on (chat's InputPolicy.byKind), so they are
+ * exported: a consumer that wants to answer one screen and refuse the other
+ * should name these constants rather than repeat the string literals.
+ *
+ * KindTrustPrompt is the folder-trust dialog, in either phrasing.
+ */
+export declare const KindTrustPrompt = "trust_prompt";
+/**
+ * KindBypassAcceptance is the --dangerously-skip-permissions acceptance
+ * screen. Split out of KindTrustPrompt so a policy can trust a folder without
+ * also accepting a skip-all-permissions launch. Twin of harness-wrapper's
+ * claudecode.KindBypassAcceptance (PUPPET-507).
+ */
+export declare const KindBypassAcceptance = "bypass_acceptance";
 /** Adapter implements turns.Adapter for Claude Code. */
 export declare class ClaudeCodeAdapter extends GenericAdapter implements Adapter {
     /** Overrides ~/.claude/projects for the on-disk transcript reader. */
@@ -84,6 +100,10 @@ export declare function New(): ClaudeCodeAdapter;
  * text and returns the structured request, or null when none is present.
  * Startup dialogs (trust/bypass) win over question dialogs; the two cannot
  * render simultaneously.
+ *
+ * The startup dialogs carry TWO distinct kinds: the folder-trust dialog (either
+ * phrasing) is KindTrustPrompt, and the --dangerously-skip-permissions
+ * acceptance screen is KindBypassAcceptance.
  */
 export declare function DetectInput(text: string): InputRequest | null;
 /**

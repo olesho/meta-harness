@@ -104,7 +104,12 @@ describe("fake-harness permission-cycle scaffolding", () => {
     expect(third.raw).toBe("plan mode on");
   }, 20000);
 
-  test("claude: the bypass dialog parks mid-ring as a pending trust_prompt", async () => {
+  // FLIPPED BY PUPPET-526, not deleted: this pinned the acceptance screen as a
+  // pending `trust_prompt`, which is exactly the coupling that ticket retired.
+  // The screen now carries its own kind. The test still proves what it was
+  // written for — the cycle loop re-checks for a pending input request between
+  // presses instead of reporting a stall.
+  test("claude: the bypass dialog parks mid-ring as a pending bypass_acceptance", async () => {
     const script = New("claude-code")
       .PermissionFooter(0, ClaudeDefaultRung)
       .AwaitPermissionCycle()
@@ -120,10 +125,10 @@ describe("fake-harness permission-cycle scaffolding", () => {
     );
 
     press(conv, PermissionCycleCSI);
-    const req = await until("the bypass trust_prompt", 5000, () => {
+    const req = await until("the bypass acceptance request", 5000, () => {
       return conv.pendingInput() ?? undefined;
     });
-    expect(req.kind).toBe("trust_prompt");
+    expect(req.kind).toBe("bypass_acceptance");
     expect(req.prompt).toBe("Bypass Permissions mode");
     expect(req.options?.map((o) => o.label)).toEqual([
       "No, exit",

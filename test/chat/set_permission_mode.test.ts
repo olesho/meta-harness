@@ -1015,10 +1015,12 @@ describe("setPermissionMode: gating", () => {
       onPress: (_i, conv, screen) => {
         void (async () => {
           await screen.write(bypassDialogFrame);
-          // What the turns layer reports for this screen.
+          // What the turns layer reports for this screen. PUPPET-526 gave it
+          // its own kind, split out of the folder-trust dialog's
+          // `trust_prompt`; this synthetic request follows the detector.
           conv.handleInputRequested({
             id: "req-bypass",
-            kind: "trust_prompt",
+            kind: "bypass_acceptance",
             prompt: "Bypass Permissions mode",
             options: [
               { id: "1", alias: "", label: "No, exit", keys: new Uint8Array() },
@@ -1041,7 +1043,7 @@ describe("setPermissionMode: gating", () => {
       );
       expect(isSentinel(err, ErrInputPending)).toBe(true);
       expect(isSentinel(err, ErrPermissionModeStalled)).toBe(false);
-      expect(String(err)).toContain("trust_prompt");
+      expect(String(err)).toContain("bypass_acceptance");
       expect(r.presses()).toBe(1);
     } finally {
       release();

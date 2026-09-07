@@ -508,7 +508,8 @@ export declare class Conversation {
      * A dialog can also appear MID-TRAVERSAL: on a bypass-enabled claude session
      * with a fresh HOME, a ring traversal that lands on `bypass` surfaces the
      * acceptance screen ("Bypass Permissions mode"), which the turns layer reports
-     * as `kind: "trust_prompt"`. The loop therefore re-checks `currentInput`
+     * as `kind: "bypass_acceptance"` (its own kind, distinct from the
+     * folder-trust dialog's `trust_prompt`). The loop therefore re-checks `currentInput`
      * before every press and on every frame of every settle, and aborts with
      * ErrInputPending naming the kind — NOT with a stall while leaving the session
      * parked in a modal. The caller clears it with answer().
@@ -1313,8 +1314,8 @@ export declare class Conversation {
 }
 /**
  * launchInputPolicy returns the InputPolicy the Conversation is constructed
- * with: the caller's, except that a claude `bypass` launch with no trust_prompt
- * disposition gets a built-in "proceed" answer.
+ * with: the caller's, except that a claude `bypass` launch with no disposition
+ * for the acceptance screen gets a built-in "proceed" answer.
  *
  * Why: selecting the bypass rung sets no env, so on a fresh HOME claude paints
  * its blocking "Bypass Permissions mode" screen (claudeBypassAnchor → a
@@ -1325,17 +1326,43 @@ export declare class Conversation {
  * that would contradict the "env is forwarded verbatim" contract buildGuestEnv
  * states — so the default is a policy, not an env edit.
  *
+ * THE KIND THIS TARGETS is `claudecode.KindBypassAcceptance`, not
+ * `trust_prompt`. Before PUPPET-526 the detector stamped the acceptance screen
+ * `trust_prompt`, and so did this default; the kinds are split now, and had the
+ * gate been left on `trust_prompt` this default would have become INERT — a
+ * bypass launch with no caller policy would wedge on the acceptance modal.
+ *
  * Precedence — the CALLER'S POLICY ALWAYS WINS, mirroring how
  * autoSkipCodexUpdateNotice yields to an explicit codex_update_notice entry.
- * The default fires only when resolvePolicy(opts.inputPolicy, "trust_prompt")
- * is null, i.e. the caller supplied neither a byKind.trust_prompt entry nor a
- * bare `default` disposition. optionID "proceed" resolves through findOption's
- * alias match: claude's parseMenuOptions sets `id` to the menu number and
- * `alias` to "proceed", exactly as AutoAcceptTrust already relies on.
+ * Resolution order, which is byte-identical to the pre-split behaviour for
+ * every existing caller:
+ *
+ *   1. resolvePolicy(policy, KindBypassAcceptance) non-null → return the
+ *      caller's policy untouched. Covers an explicit `bypass_acceptance` entry
+ *      AND a bare `default` disposition (resolvePolicy falls back to it for any
+ *      kind).
+ *   2. else, if the caller supplied an explicit `byKind.trust_prompt`
+ *      disposition, copy THAT SAME disposition onto `bypass_acceptance`. This
+ *      is a COMPATIBILITY SHIM for the pre-split spelling: before the split a
+ *      caller's `trust_prompt` entry stood this default down and then answered
+ *      the acceptance screen itself, so a caller who wrote
+ *      `trust_prompt: deny` specifically to refuse a bypass launch still gets a
+ *      refusal rather than a silent "proceed". The disposition is copied
+ *      VERBATIM (not normalised to an alias) precisely so the answer is the one
+ *      that screen would have received. Retire this rule once callers have
+ *      migrated to naming `bypass_acceptance`.
+ *   3. else → inject `{kind: DispositionAnswer, optionID: "proceed"}` on
+ *      `bypass_acceptance`, as before the split. optionID "proceed" resolves
+ *      through findOption's alias match: claude's parseMenuOptions sets `id` to
+ *      the menu number and `alias` to "proceed", exactly as AutoAcceptTrust
+ *      already relies on.
+ *
+ * Rules 2 and 3 return a NEW policy object; only rule 1 returns the caller's by
+ * identity.
  *
  * Gated on the HARNESS as well as the rung: a codex bypass would otherwise
- * install a trust_prompt disposition no codex dialog ever produces — inert, but
- * it makes the intent unreadable.
+ * install a bypass_acceptance disposition no codex dialog ever produces —
+ * inert, but it makes the intent unreadable.
  *
  * openWithSession backs both Open and Reopen, so a resumed session inherits the
  * same default.

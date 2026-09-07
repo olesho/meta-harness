@@ -76,9 +76,13 @@ export interface Session {
 export interface InputRequest {
     id: string;
     /**
-     * "trust_prompt" | "question" (the harness asked a clarifying question
-     * mid-turn) | "question_review" (the submit/cancel confirmation after the
-     * last question of a multi-question/multi-select dialog) | harness kinds.
+     * "trust_prompt" (the folder-trust dialog) | "bypass_acceptance"
+     * (claude-code's --dangerously-skip-permissions acceptance screen — its own
+     * kind, so a policy can answer folder trust without also accepting a
+     * skip-all-permissions launch) | "question" (the harness asked a clarifying
+     * question mid-turn) | "question_review" (the submit/cancel confirmation
+     * after the last question of a multi-question/multi-select dialog) | harness
+     * kinds.
      */
     kind: string;
     prompt: string;

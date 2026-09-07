@@ -14,6 +14,8 @@ const dec = new TextDecoder();
 
 // claudecode.ts keeps these anchors module-private; mirror the literals here.
 const trustAnchor = "Do you trust the files in this folder?";
+const trustAnchorAlt = "Is this a project you created or one you trust?";
+const bypassAnchor = "Bypass Permissions mode";
 
 const trustScreen = `╭─────────────────────────────────────────────────╮
 │ Do you trust the files in this folder?            │
@@ -67,6 +69,70 @@ describe("claude-code input", () => {
     expect(req!.options!.length).toBe(2);
     expect(req!.options![0].alias).toBe("proceed");
     expect(req!.options![1].alias).toBe("deny");
+  });
+
+  // ── PUPPET-526: the folder-trust dialog and the bypass-acceptance screen
+  // carry DISTINCT kinds ────────────────────────────────────────────────────
+  //
+  // Every policy surface keys on `kind` alone (chat's InputPolicy.byKind), so
+  // while both screens were stamped "trust_prompt" the sentence "trust this
+  // folder, but never silently accept a skip-all-permissions launch" was
+  // inexpressible — a folder-trust entry accepted a bypass launch as a side
+  // effect. Twin of harness-wrapper's
+  // TestDetectInput_TrustAndBypassHaveDistinctKinds (PUPPET-507, 8184c2e).
+
+  const altTrustScreen = `╭─────────────────────────────────────────────────╮
+│ Is this a project you created or one you trust?   │
+│                                                   │
+│ ❯ 1. Yes, proceed                                 │
+│   2. No, exit                                     │
+╰─────────────────────────────────────────────────╯`;
+
+  test.each([
+    ["folder trust", trustScreen, claudecode.KindTrustPrompt, trustAnchor],
+    [
+      "folder trust (alt phrasing)",
+      altTrustScreen,
+      claudecode.KindTrustPrompt,
+      trustAnchorAlt,
+    ],
+    [
+      "bypass acceptance",
+      bypassScreen,
+      claudecode.KindBypassAcceptance,
+      bypassAnchor,
+    ],
+  ])("distinct kinds: %s", (_name, screen, wantKind, wantPrompt) => {
+    const req = claudecode.DetectInput(screen);
+    expect(req).not.toBeNull();
+    expect(req!.kind).toBe(wantKind);
+    expect(req!.prompt).toBe(wantPrompt);
+  });
+
+  test("the two startup kinds are not the same string", () => {
+    expect(claudecode.KindTrustPrompt).not.toBe(
+      claudecode.KindBypassAcceptance,
+    );
+    expect(claudecode.KindTrustPrompt).toBe("trust_prompt");
+    expect(claudecode.KindBypassAcceptance).toBe("bypass_acceptance");
+  });
+
+  test("both anchors on one screen still resolve to trust", () => {
+    // The anchor chain's ORDER is the guarantee here: trust wins. Pinned so a
+    // future "tidy the branches" refactor cannot silently flip it.
+    const req = claudecode.DetectInput(trustScreen + "\n" + bypassScreen);
+    expect(req).not.toBeNull();
+    expect(req!.kind).toBe(claudecode.KindTrustPrompt);
+    expect(req!.prompt).toBe(trustAnchor);
+  });
+
+  test("the folder-trust request id is unchanged by the split", () => {
+    // inputID hashes kind + prompt + option labels, so splitting the kind
+    // CHANGES the bypass screen's id (a5b8b42533f7ecec → cde27c2e74008d4f, the
+    // same churn the Go twin recorded). The trust path must be untouched: this
+    // literal is the id as computed before PUPPET-526.
+    expect(claudecode.DetectInput(trustScreen)!.id).toBe("83b0c9b0513878a4");
+    expect(claudecode.DetectInput(bypassScreen)!.id).toBe("cde27c2e74008d4f");
   });
 
   test("stable id across redraw", () => {

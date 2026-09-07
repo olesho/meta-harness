@@ -1,6 +1,7 @@
 // TurnConfig.permissionMode must reach the wrapper Config. runTurn forwards a
 // possibly-undefined cfg.inputPolicy, so a claude `bypass` here is also the case
-// where chat's default trust_prompt policy kicks in (see launchInputPolicy).
+// where chat's default bypass_acceptance policy kicks in (see
+// launchInputPolicy; PUPPET-526 split that kind out of `trust_prompt`).
 
 import { describe, expect, test } from "vitest";
 import { runTurn } from "../../src/harness/internal/runTurn.ts";
