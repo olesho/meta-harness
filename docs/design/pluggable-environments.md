@@ -257,7 +257,18 @@ Shipped implementations (implementations, not the abstraction):
 
 Redaction, cleanup, and the leak probe stay core hooks because they are workspace-lifecycle concerns an orchestrator cannot retrofit from outside the abstraction.
 
-**Leak probe as a shared utility.** One canonical sensitive-env-name list, one probe implementation (run in-guest, count sensitive names, fail the run on nonzero). Today that list is duplicated between loomcli `internal/driver/env.go:82` (`trustedLocalProviderCredentials`) and `daytona-task-runner.ts:1056` with a comment demanding manual sync — and the predicted drift has **already happened**: `CLAUDE_CODE_OAUTH_TOKEN` is in the Go list but absent from the TS probe. This design kills that class of drift.
+**Leak probe as a shared utility.** One canonical sensitive-env-name list, one probe implementation (run in-guest, count sensitive names, fail the run on nonzero). The list *was* duplicated as a hand-copied literal across four sites in two repos — loomcli `internal/driver/env.go:82` (`trustedLocalProviderCredentials`), `daytona-task-runner.ts:1056`, its `.test.mjs` copy, and our own probe — with a comment demanding manual sync, and the predicted drift **did happen**: `CLAUDE_CODE_OAUTH_TOKEN` was in the Go list and in our probe but absent from loomcli's, so a leak of that token counted as zero and the run proceeded.
+
+That is now closed (PUPPET-316), by data artifact rather than by runtime sharing:
+
+- **`contract/sensitive-env-names.json`** is the canonical list, split into the roles `runner_infra` and `provider_credentials`. Its union, in that order, *is* `CREDENTIAL_SENSITIVE_ENV_NAMES`.
+- loomcli **vendors it byte-identically** at `internal/driver/testdata/sensitive-env-names.json`, frozen by `contract/MANIFEST.sha256` — the same pattern as the vendored wire/auth/conformance corpora.
+- Each repo gates its own literals against its own copy, offline and in the default test run: `test/env/sensitive_env_contract.test.ts` here; `internal/driver/sensitive_env_contract_test.go` and the `daytona-task-runner.test.mjs` probe assertions there.
+- `scripts/sync-sensitive-env-names.sh` (`--check` / `--to DIR`) refreezes the manifest and mirrors the artifact.
+
+A runtime import was **not** available and is not the goal: loomcli's Go half can never import a TS module, its meta-harness leaf integration lives only on an unmerged branch, and making a security gate depend on a cross-repo build pin fails worse than a stale list (a broken pin means *no* probe).
+
+**What the gate does not cover.** Each repo's in-tree test proves only that *that* repo is self-consistent with its own copy of the artifact. Repo-to-repo divergence — two internally consistent but unequal copies — is caught only by running `scripts/sync-sensitive-env-names.sh --check` with `$LOOMCLI_REPO` pointing at a checkout, or by re-mirroring with `--to`. CI has no sibling checkout, so that half is a deliberate silent skip there. This is the identical, documented limitation of `scripts/sync-conformance.sh`; see `contract/README.md`.
 
 ---
 

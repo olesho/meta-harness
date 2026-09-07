@@ -7,8 +7,10 @@ export declare const CREDENTIAL_SENSITIVE_ENV_NAMES: string[];
  * Designed to run inside a sandbox via exec(). If the count is nonzero,
  * a secret reached the sandbox and the run should fail.
  *
- * Uses the same pattern as loomcli's sandboxLeakProbeCommand to ensure
- * consistency across runtimes.
+ * Each name is emitted SPLIT on "_" — `['DAYTONA','API','KEY']`, rejoined by the
+ * guest at runtime — so the probe's own source text carries no literal secret
+ * name for a scanner (or a curious guest process listing) to pick up. Same shape
+ * as loomcli's sandboxLeakProbeCommand, so the two stay diffable.
  */
 export declare function credentialLeakProbe(): string;
 //# sourceMappingURL=leak-probe.d.ts.map
