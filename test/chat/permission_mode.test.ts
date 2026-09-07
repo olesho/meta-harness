@@ -233,7 +233,7 @@ describe("a byKind policy can trust a folder without accepting bypass", () => {
     // nothing answers it, and it parks as a pending input request. Verified
     // both ways — this fails with the gate on the old kind.
     const script = New("claude-code")
-      .Idle(0)
+      .Idle()
       .BypassPrompt(300)
       .StayAliveUntilStopped()
       .Build();
