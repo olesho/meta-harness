@@ -155,7 +155,7 @@ We **emit** only `-s`/`-a`. We **guard** considerably more:
 | harness | guarded (suppresses injection)                                                                                                                                                                          | emitted                      |
 | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------- |
 | codex   | `-s`, `--sandbox`, `-a`, `--ask-for-approval`, `-p`, `--profile`, `--dangerously-bypass-approvals-and-sandbox`, **and** the config keys `sandbox_mode` / `approval_policy` (in all four `-c` spellings) | `-s <sandbox> [-a <policy>]` |
-| claude  | `--permission-mode`, `--dangerously-skip-permissions`, `--allow-dangerously-skip-permissions` — and **never `-p`**                                                                                      | `--permission-mode <value>`  |
+| claude  | `--permission-mode`, `--dangerously-skip-permissions` — and **never `-p`**, and **never** the unlock-only `--allow-dangerously-skip-permissions`                                                        | `--permission-mode <value>`  |
 
 Two things a future reader must not misread:
 
@@ -169,6 +169,13 @@ Two things a future reader must not misread:
   the single most common invocation shape there is. Guarding it would suppress permission-mode
   injection for effectively every non-interactive claude launch. The asymmetry is intentional and
   is a property of the two CLIs, not of our design.
+- **`--allow-dangerously-skip-permissions` is not guarded either, and it is not a second bypass
+  spelling.** claude's `--help` describes it as "Enable bypassing all permission checks as an
+  option, without it being enabled by default": it puts the bypass rung on the Shift+Tab ring
+  without selecting it. It pins no rung, so the requested `--permission-mode` is still injected
+  next to it and `effectiveLaunchRung` reads the rung from that. The flag counts only where
+  _reachability_ is decided (`ClaudeBypassReachableFlags` / `bypassReachableAtLaunch`, mirroring
+  Go's `BypassReachableFlags`, harness-wrapper PR #48).
 
 ## 6. The standing three-site rule
 
@@ -232,9 +239,11 @@ claude-code 2.1.217**. Three statements settle what that means for this repo:
 3. **Below the floor, the extra guard entries are inert, not wrong.** The guard is
    **presence-based**: it suppresses injection only for a flag or key the _caller_ actually wrote.
    A caller cannot usefully write a flag the installed binary rejects — the harness itself rejects
-   the argv. So guarding `--allow-dangerously-skip-permissions` or `-p` against an older binary
-   costs nothing, while _not_ guarding a flag the installed binary does accept is a fail-open. The
-   guard is written for the newest observed version by design, and this asymmetry is the reason.
+   the argv. So guarding `-p` against an older binary costs nothing, while _not_ guarding a flag
+   the installed binary does accept is a fail-open. The guard is written for the newest observed
+   version by design, and this asymmetry is the reason. (`--allow-dangerously-skip-permissions` is
+   deliberately **not** guarded at any version: it pins no rung, so guarding it would drop the
+   requested mode with no caller-pinned rung to defer to — see §5.)
 
 **The live `codex doctor --json` gate lives on the Go side.** A `CONFORMANCE=1`-gated verification
 added _here_ would sit in the same file as `test/conformance.test.ts`'s version-drift assertion,

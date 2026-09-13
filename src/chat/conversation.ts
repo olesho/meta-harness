@@ -130,7 +130,7 @@ import { normHarness } from "../wrapper/internal/harnessargs.ts";
 import {
   ClaudeModeBypassPermissions,
   PermissionModeBypass,
-  effectiveLaunchRung,
+  bypassReachableAtLaunch,
 } from "../wrapper/internal/permissionrungs.ts";
 import {
   normalizePermissionRung,
@@ -1294,11 +1294,12 @@ export class Conversation {
     if (target === PermissionModeBypass && !this.bypassEnabledAtLaunch()) {
       throw permissionUnreachable(
         `bypass is not enabled for this session: neither the permissionMode ` +
-          `option nor args carry a bypass-enabling launch flag, so the rung is ` +
-          `not on this session's Shift+Tab ring and no keystroke path can ` +
-          `reach it. Relaunch with permissionMode "bypass" (or ` +
-          `--permission-mode bypassPermissions / --dangerously-skip-permissions ` +
-          `in args).`,
+          `option nor args carry a launch flag that puts bypass on the ring, ` +
+          `so the rung is not on this session's Shift+Tab ring and no ` +
+          `keystroke path can reach it. Relaunch with permissionMode "bypass" ` +
+          `(or --permission-mode bypassPermissions / ` +
+          `--dangerously-skip-permissions / ` +
+          `--allow-dangerously-skip-permissions in args).`,
       );
     }
 
@@ -1493,23 +1494,23 @@ export class Conversation {
 
   /**
    * Whether this session's LAUNCH CONFIGURATION enables the `bypass` rung — i.e.
-   * whether `bypass` is on this session's Shift+Tab ring at all.
+   * whether `bypass` is on this session's Shift+Tab ring at all. That is
+   * REACHABILITY, not "the launch is bypass": claude's unlock-only
+   * `--allow-dangerously-skip-permissions` launches restricted yet still puts
+   * bypass on the ring (harness-wrapper #48), so keying this on
+   * effectiveLaunchRung alone would refuse a switch the harness permits.
    *
-   * META-HARNESS-100 landed the launch-configuration predicate as
-   * effectiveLaunchRung rather than the anticipated
-   * `bypassEnablingFlagPresent(mode, args)` shape. We reuse it verbatim instead
-   * of hand-rolling a flag scanner in the chat layer: it reads BOTH the
+   * The predicate lives in the wrapper's replay module (bypassReachableAtLaunch)
+   * rather than as a flag scanner in the chat layer: it reads BOTH the
    * structured knob and argv, including the `=`-joined
-   * `--permission-mode=bypassPermissions` form and the
-   * `--dangerously-skip-permissions` family, which is exactly the fact needed.
+   * `--permission-mode=bypassPermissions` form, the enabling
+   * `--dangerously-skip-permissions` and the unlock-only flag.
    */
   private bypassEnabledAtLaunch(): boolean {
-    return (
-      effectiveLaunchRung(
-        this.opts.harness,
-        this.opts.args ?? [],
-        this.opts.permissionMode ?? "",
-      ) === PermissionModeBypass
+    return bypassReachableAtLaunch(
+      this.opts.harness,
+      this.opts.args ?? [],
+      this.opts.permissionMode ?? "",
     );
   }
 

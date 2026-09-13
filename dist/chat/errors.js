@@ -105,7 +105,9 @@ export const ErrPermissionModeUnsupported = defineSentinel("chat/permission-mode
  * evidence (observed axis value, `source`, `raw`, press count) to the message.
  *
  * Raised when:
- *   - `bypass` is requested without a bypass-enabling launch configuration;
+ *   - `bypass` is requested without a launch configuration that puts it on
+ *     the ring (a bypass mode, --dangerously-skip-permissions, or the
+ *     unlock-only --allow-dangerously-skip-permissions);
  *   - the cycle ring lapped all the way round without landing on the target;
  *   - the target is off this harness's axis (a ladder rung on codex,
  *     `"default"` on claude);

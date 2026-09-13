@@ -315,7 +315,7 @@ case-insensitive) or codex's collaboration value `default` — and answers
 `400 invalid_options` otherwise. Per-harness native spellings (`bypassPermissions`,
 `workspace-write`) are **not** accepted here; the gateway holds no harness knowledge.
 Whether a known target is legal for _this_ session is chat's call and comes back as
-`409 permission_mode_unreachable` (wrong axis / no bypass-enabling launch),
+`409 permission_mode_unreachable` (wrong axis / bypass not on this launch's ring),
 `400 permission_mode_unsupported` (the harness has no switch at all) or
 `409 permission_mode_stalled` (the switch never settled).
 
