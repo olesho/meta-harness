@@ -242,14 +242,65 @@ describe("reportedPermissionRung (StructuredTurnResult.permission_mode)", () => 
     expect(rung("codex", { sandboxDefaults: true })).toBeUndefined();
   });
 
-  test("a caller-tail claude bypass flag reports bypass, in both spellings", () => {
+  test("a caller-tail claude bypass flag reports bypass", () => {
     expect(
       rung("claude-code", { harnessArgs: ["--dangerously-skip-permissions"] }),
     ).toBe("bypass");
+  });
+
+  // harness-wrapper PR #48's contract: --allow-dangerously-skip-permissions is
+  // NOT a second bypass spelling. It UNLOCKS the bypass rung without selecting
+  // it (claude --help, re-read at 2.1.270: "Enable bypassing all permission
+  // checks as an option, without it being enabled by default"), so it pins no
+  // rung and the report is whatever the rest of the launch says. Reporting
+  // "bypass" here would claim an unrestricted launch for a restricted one.
+  test("the unlock-only --allow-dangerously-skip-permissions is NOT reported as bypass", () => {
+    const allow = "--allow-dangerously-skip-permissions";
+    // Nothing requested, nothing injected: ABSENT, exactly as with no tail.
+    expect(rung("claude-code", { harnessArgs: [allow] })).toBeUndefined();
+    // The requested rung is injected alongside the flag — report it.
+    expect(
+      rung("claude-code", { permissionMode: "plan", harnessArgs: [allow] }),
+    ).toBe("plan");
     expect(
       rung("claude-code", {
-        harnessArgs: ["--allow-dangerously-skip-permissions"],
+        permissionMode: "acceptEdits",
+        harnessArgs: [allow],
       }),
+    ).toBe("ask");
+    // A caller-tail --permission-mode still names the rung.
+    expect(
+      rung("claude-code", {
+        harnessArgs: [allow, "--permission-mode", "plan"],
+      }),
+    ).toBe("plan");
+    // An off-ladder native spelling still passes through verbatim — the flag
+    // is not a pin, so it cannot turn a precisely-known posture into
+    // "override".
+    expect(
+      rung("claude-code", {
+        harnessArgs: [allow, "--permission-mode", "dontAsk"],
+      }),
+    ).toBe("dontAsk");
+    expect(
+      rung("claude-code", { permissionMode: "dontAsk", harnessArgs: [allow] }),
+    ).toBe("dontAsk");
+  });
+
+  test("controls: bypass IS reported when something else enables it next to the unlock flag", () => {
+    const allow = "--allow-dangerously-skip-permissions";
+    expect(
+      rung("claude-code", { permissionMode: "bypass", harnessArgs: [allow] }),
+    ).toBe("bypass");
+    expect(
+      rung("claude-code", {
+        harnessArgs: [allow, "--dangerously-skip-permissions"],
+      }),
+    ).toBe("bypass");
+    // --sandbox-defaults' own injected token is the bypass here, not the
+    // unlock flag riding along in the tail.
+    expect(
+      rung("claude-code", { sandboxDefaults: true, harnessArgs: [allow] }),
     ).toBe("bypass");
   });
 
@@ -734,6 +785,59 @@ describe("structured-runner main() — one-turn JSON contract (real pty + fake h
         "--dangerously-skip-permissions",
       ]);
       expect(argv).not.toContain("--permission-mode");
+    }, 25000);
+
+    // F, G — both guards, seen from the unlock flag's side (harness-wrapper
+    // PR #48). `--allow-dangerously-skip-permissions` only UNLOCKS the bypass
+    // rung, so neither guard may read it as "already bypass": whatever a guard
+    // does when no bypass-ENABLING flag is present must still happen with it.
+    //
+    // F — the --sandbox-defaults guard: with no --permission-mode it emits the
+    // bypass token (as in E), and a caller-tail unlock flag does not stand in
+    // for it. (Go's applySandboxDefaults checks for the enabling flag only, too.)
+    test("F: --sandbox-defaults claude -- --allow-dangerously-skip-permissions → the bypass token is STILL injected", async () => {
+      const argv = await claudeArgv([
+        "--sandbox-defaults",
+        "claude",
+        "--",
+        "--allow-dangerously-skip-permissions",
+      ]);
+      expect(argv).toEqual([
+        "--session-id",
+        "<uuid>",
+        "--dangerously-skip-permissions",
+        "--allow-dangerously-skip-permissions",
+      ]);
+    }, 25000);
+
+    // G — the wrapper's injection guard: the unlock flag pins no rung, so the
+    // explicit --permission-mode is STILL injected alongside it, and the wire
+    // reports that rung. Contrast C, where the caller's ENABLING flag is a pin.
+    test("G: --sandbox-defaults --permission-mode plan claude -- --allow-dangerously-skip-permissions → plan STILL injected and reported", async () => {
+      const { promptPath, argvOut } = stageTurn();
+      const { code, payload } = await captureMain([
+        "--prompt-file",
+        promptPath,
+        "--sandbox-defaults",
+        "--permission-mode",
+        "plan",
+        "claude",
+        "--",
+        "--allow-dangerously-skip-permissions",
+      ]);
+      expect(code).toBe(ExitOK);
+      const argv = normalizeSessionID(
+        JSON.parse(readFileSync(argvOut, "utf8")),
+      );
+      expect(argv).toEqual([
+        "--permission-mode",
+        "plan",
+        "--session-id",
+        "<uuid>",
+        "--allow-dangerously-skip-permissions",
+      ]);
+      expect(argv).not.toContain("--dangerously-skip-permissions");
+      expect(payload.permission_mode).toBe("plan");
     }, 25000);
 
     // B — codex. Deliberately NOT toEqual: the expected tokens are the wrapper's
