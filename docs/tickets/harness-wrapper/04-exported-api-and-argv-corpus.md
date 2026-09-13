@@ -142,16 +142,19 @@ corpus README that this field asserts **which rejection fired**, not the full se
 - **Each guard-suppression case:** `-s` alone, `-a` alone, `--sandbox=read-only`, `-sread-only`,
   `-c sandbox_mode=` alone, `-c approval_policy=` alone, `-csandbox_mode=…`,
   `--config=sandbox_mode=…`, `-p`, `--profile`, `-pwide`, `--profile=wide`, both bypass flags,
-  claude's `--permission-mode`, `--dangerously-skip-permissions`,
-  `--allow-dangerously-skip-permissions`.
+  claude's `--permission-mode`, `--dangerously-skip-permissions`.
+- **The claude unlock-flag counter-row:** `{claude-code, plan, ["--allow-dangerously-skip-permissions"]}`
+  → `["--permission-mode", "plan", "--allow-dangerously-skip-permissions"]` with
+  `effective_rung: "plan"`. It proves the unlock-only flag is **not** a guard entry: it makes
+  bypass reachable without selecting a rung (Ticket 1(c), harness-wrapper PR #48).
 - **The claude `-p` counter-row:** `{claude-code, auto, ["-p"]}` →
   `["--permission-mode", "auto", "-p"]`, proving `-p` suppresses on codex and **not** on claude.
   This is the frozen mirror of `permission_mode_test.go:82-88` and the fence against Ticket 1's
   hazard H2.
 - **The proof-of-unrestricted rows:** `-c sandbox_mode="danger-full-access"` — quoted **and**
   unquoted, attached **and** separated — → suppressed argv with `effective_rung: "bypass"`.
-- **The contradiction cases** → `rejected`, including the **new**
-  `--allow-dangerously-skip-permissions` + non-bypass-rung row from Ticket 1(c).
+- **The contradiction cases** → `rejected`. `--allow-dangerously-skip-permissions` + a non-bypass
+  rung is **not** one of them. It is accepted, which is the counter-row above (Ticket 1(c)).
 - **The invalid-mode cases** — cross-harness native spellings, e.g. `{codex, "acceptEdits"}` and
   `{claude, "workspace-write"}` → `rejected`.
 - **A subcommand-position row**: `caller_args: ["resume", "<uuid>"]`, so the settled flag-position
@@ -172,10 +175,13 @@ are matched.
 
 - Run **`codex doctor --json`** for the argv of each codex row and assert the reported
   `"approval policy"` / `"filesystem sandbox"` match the rung's intent.
-- Run **`claude --help`** and assert **both** bypass-enabling flags exist. HARNESS-WRAPPER-109
-  recorded the Shift+Tab ring for `--dangerously-skip-permissions` and
-  `--permission-mode bypassPermissions`, but **not** for the `--allow-…` alias — so until this
-  gate runs, Ticket 1(c)'s claim rests solely on `claude --help`'s identical description.
+- Run **`claude --help`** and assert **both** skip-permissions flags exist: the bypass-enabling
+  `--dangerously-skip-permissions` and the unlock-only `--allow-dangerously-skip-permissions`
+  (harness-wrapper PR #48's `TestConformance_BypassFlagsExist` already checks both).
+  HARNESS-WRAPPER-109 recorded the Shift+Tab ring for `--dangerously-skip-permissions` and
+  `--permission-mode bypassPermissions`. PR #48 measured the unlock flag: the launch lands in auto
+  mode, not bypass, and Shift+Tab reaches bypass on a 5-rung cycle. The two `--help` descriptions are
+  **not** identical. The unlock flag's reads "as an option, without it being enabled by default".
 
 **It lives on the Go side deliberately.** harness-wrapper's pins are already **0.144.5 / 2.1.217**
 while meta-harness's are not; a gate added there would fail on `test/conformance.test.ts`'s

@@ -53,6 +53,12 @@ import { ClaudeModeAcceptEdits, ClaudeModeBypassPermissions, ClaudeModeDontAsk, 
 /**
  * claude flags that pin the permission axis out of band. Any of them in argv
  * suppresses injection entirely.
+ *
+ * The unlock-only `--allow-dangerously-skip-permissions` is deliberately NOT a
+ * guard entry (ClaudeSkipPermissionsFlags excludes it): it makes bypass
+ * reachable without selecting any rung, so the requested --permission-mode
+ * must still be injected alongside it — suppressing would launch at claude's
+ * own default instead. Go's guard never learned it either (harness-wrapper #48).
  */
 const claudeGuardFlags = [
     ClaudePermissionModeFlag,

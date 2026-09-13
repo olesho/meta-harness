@@ -1,4 +1,4 @@
-# Permission-argv guard-set reconciliation — three missing suppressors, three sites each
+# Permission-argv guard-set reconciliation — two missing suppressors (three sites each) plus one reachability-only flag
 
 **Workspace:** `harness-wrapper` · **Type:** task · **Priority:** 1
 **Repo:** `harness-wrapper`, all paths relative to its root. Line numbers verified against `117c0b1`.
@@ -35,16 +35,17 @@ same axis, in which case it injects **nothing** and leaves the caller's argv exa
 launched at, reading argv first and only falling back to the knob. It is what
 `StructuredTurnResult.permission_mode` carries.
 
-The two sets have drifted. Three suppression cases exist in reality but are missing from one or
-both sides.
+The two sets have drifted. Two suppression cases exist in reality but are missing from one or
+both sides. A third flag, row (c), looks like a suppressor but is not one: it only makes the bypass
+rung reachable, so it belongs in the ring-length answer and nowhere else.
 
 ## The three rows
 
-| #   | Divergence                                       | Go today                                                                                                                                 | Fix                                                                                                                                                                                      |
-| --- | ------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| a   | codex `-p` / `--profile`                         | absent from the codex guard — `grep -n profile pkg/wrapper/*.go` returns nothing                                                         | guard (`wrapper.go:624`) **+** replay rule → `""` **+** corpus rows including `-pwide` and `--profile=wide`                                                                              |
-| b   | codex `-c sandbox_mode=` / `-c approval_policy=` | absent from the codex guard **and** from the replay                                                                                      | guard via `argsContainConfigKey` (`:936`) **+** replay rules (`sandbox_mode` == `danger-full-access` → `bypass` through a new `configKeyValue` helper; otherwise `""`) **+** corpus rows |
-| c   | claude `--allow-dangerously-skip-permissions`    | absent from the claude guard (`:612`), from `BypassEnablingFlags` (`:739`), **and** from `EffectiveLaunchRung`'s claude arm (`:777-785`) | all three sites                                                                                                                                                                          |
+| #   | Divergence                                       | Go today                                                                                                                                                                                                                  | Fix                                                                                                                                                                                                             |
+| --- | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| a   | codex `-p` / `--profile`                         | absent from the codex guard — `grep -n profile pkg/wrapper/*.go` returns nothing                                                                                                                                          | guard (`wrapper.go:624`) **+** replay rule → `""` **+** corpus rows including `-pwide` and `--profile=wide`                                                                                                     |
+| b   | codex `-c sandbox_mode=` / `-c approval_policy=` | absent from the codex guard **and** from the replay                                                                                                                                                                       | guard via `argsContainConfigKey` (`:936`) **+** replay rules (`sandbox_mode` == `danger-full-access` → `bypass` through a new `configKeyValue` helper; otherwise `""`) **+** corpus rows                        |
+| c   | claude `--allow-dangerously-skip-permissions`    | absent from the claude guard (`:612`), from `BypassEnablingFlags` (`:739`) and from `EffectiveLaunchRung`'s claude arm (`:777-785`), **which is correct**; also absent from `pkg/chat`'s ring-length answer, which is not | **reachability only**: a separate `BypassReachableFlags` feeding `cycleRing`. The guard, `BypassEnablingFlags` and `EffectiveLaunchRung` stay as they are. Landed as harness-wrapper PR #48 (`loom/PUPPET-496`) |
 
 ## The new helper: `configKeyValue(args []string, key string) (string, bool)`
 
@@ -70,51 +71,66 @@ Requirements:
   `-c` with no operand), matching `flagValue`'s documented `ok`-means-PRESENCE contract at
   `:859-862`.
 
-## Row (c) is live-verified and flips two frozen tests
+## Row (c): the flag UNLOCKS the bypass rung, it does not ENABLE bypass
 
-`claude --help` at **2.1.217** lists **both**:
+`claude --help` lists **both** flags (verified at **2.1.217**; the full descriptions below were
+re-read at **2.1.270**), and it describes them **differently**:
 
-- `--allow-dangerously-skip-permissions` — "Enable bypassing all permission checks"
-- `--dangerously-skip-permissions`
+- `--allow-dangerously-skip-permissions` — "Enable bypassing all permission checks as an option,
+  without it being enabled by default. Recommended only for sandboxes with no internet access."
+- `--dangerously-skip-permissions` — "Bypass all permission checks. Recommended only for sandboxes
+  with no internet access."
 
-Today, `Args: ["--allow-dangerously-skip-permissions"]` + `PermissionMode: "plan"`:
+An earlier revision of this ticket quoted only the first five words of the first description,
+read the two flags as synonyms, and asked for the unlock flag in all three sites. **That reading
+was wrong.** The flag puts the bypass rung **on** the Shift+Tab ring without **selecting** it:
+harness-wrapper PR #48 measured a launch carrying it landing in auto mode, not bypass, with
+Shift+Tab reaching "bypass permissions" on a 5-rung cycle. For `Args: ["--allow-dangerously-skip-permissions"]`
+plus `PermissionMode: "plan"`, Go before that PR (`d6eb85f`) was right on three counts and wrong on
+one:
 
-1. passes `validatePermissionMode`'s contradiction check (`:359`, contradiction arm sourced from
-   `BypassEnablingFlags` at `:739`) with **no error**;
-2. is not seen by the claude injection guard at `:612`, so `--permission-mode plan` is prepended
-   anyway;
-3. is reported by `EffectiveLaunchRung` (`:777-785`) as `plan`, when **bypass is in fact
-   reachable** — and since HW-101 that lands on the wire.
+1. `validatePermissionMode`'s contradiction check (`:359`, sourced from `BypassEnablingFlags` at
+   `:739`) accepts it. **Correct**: a restrictive mode is exactly the pairing the unlock flag
+   exists for. Putting the flag in `BypassEnablingFlags` would turn that config into a hard
+   `ErrInvalidConfig`.
+2. The claude injection guard at `:612` does not see it, so `--permission-mode plan` is prepended.
+   **Correct**: the flag sets no rung, and suppressing injection would drop the caller's `plan`
+   and launch at claude's own default.
+3. `EffectiveLaunchRung` (`:777-785`) reports `plan`. **Correct**: the session launches in plan,
+   and reporting `bypass` would put an unrestricted posture on the wire for a restricted launch.
+4. `pkg/chat`'s `cycleRing` built a 4-ring, so `SetPermissionMode("bypass")` fast-failed with
+   `ErrPermissionModeUnreachable`. **Wrong**: bypass is reachable. This is the only place the flag
+   is missing.
 
-**Two frozen tests flip, not one.**
+So row (c) is **not** a guard entry and the three-site rule does not apply to it. The fix is a
+separate `BypassReachableFlags` (the `BypassEnablingFlags` flags plus
+`--allow-dangerously-skip-permissions` for claude / claude-code; the same as
+`BypassEnablingFlags` for codex) that feeds `cycleRing` and nothing else. harness-wrapper PR #48
+(`loom/PUPPET-496`) lands it.
 
-- `TestBypassEnablingFlags` (`pkg/wrapper/permission_rungs_test.go:58-79`) asserts the exact
-  per-harness slices.
-- `TestBypassEnablingFlagsNeverIncludesNonexistentFlag` (`:81-90`) asserts the returned flags are
-  only `SkipPermissionsFlag` / `codexBypassFlag`, with the comment at `:82`:
-  _"--allow-dangerously-skip-permissions does not exist in this repo."_
-
-Adding the flag to the **injection guard** alone trips neither. Adding it to
-**`BypassEnablingFlags`** trips both. **That comment is factually wrong at claude 2.1.217 and must
-be rewritten citing the `claude --help` probe** — not worked around, not deleted silently, and not
-routed around by leaving `BypassEnablingFlags` untouched.
+**No frozen test flips.** `TestBypassEnablingFlags` (`pkg/wrapper/permission_rungs_test.go:58-79`)
+and `TestBypassEnablingFlagsNeverIncludesNonexistentFlag` (`:81-90`) keep their assertions. Only
+the comment at `:82`, _"--allow-dangerously-skip-permissions does not exist in this repo."_, is
+rewritten: the flag does exist upstream, but it is unlock-only, which is why it must stay out of
+that set.
 
 Also update **`suppressionFlagsFor`** (`permission_rungs_test.go:262-273`, func at `:264`), a
-hand-copied mirror of the guard set. It gains `-p` / `--profile` on the codex arm and
-`--allow-dangerously-skip-permissions` on the claude arm. (The `-c` keys of row (b) are **not
-flags** — `argsContainAnyFlag` will never see them — so they need their own mirror arm in that
-helper, or the row-(b) corpus/replay cases will not satisfy the setup assertion.) Without this,
-`TestEffectiveLaunchRungResolvesFromArgvWhenSuppressed`'s setup assertion
-(`permission_rungs_test.go:249-252`, `t.Fatalf("test setup: %v does not trip suppression …")`)
+hand-copied mirror of the guard set. It gains `-p` / `--profile` on the codex arm. It must **not**
+gain `--allow-dangerously-skip-permissions` on the claude arm, because the guard does not have it
+either. (The `-c` keys of row (b) are **not flags** — `argsContainAnyFlag` will never see them — so
+they need their own mirror arm in that helper, or the row-(b) corpus/replay cases will not satisfy
+the setup assertion.) Without this, `TestEffectiveLaunchRungResolvesFromArgvWhenSuppressed`'s setup
+assertion (`permission_rungs_test.go:249-252`, `t.Fatalf("test setup: %v does not trip suppression …")`)
 fails on the new rows.
 
 ### Blast radius, stated honestly
 
-`BypassEnablingFlags` has **no non-test callers** today — its doc comment's _"pkg/chat's
-ring-length calculation"_ (`:733-734`) is aspirational, not current. So the only production
-consequence of row (c) is that `--allow-dangerously-skip-permissions` paired with a non-bypass
-rung becomes a hard `ErrInvalidConfig`. That is the intended fail-closed direction, but it **is a
-new rejection** for argv that is accepted today. Call it out in the commit message.
+Row (c) changes one production answer: `cycleRing` puts bypass on the ring for a launch carrying
+the unlock flag, so `SetPermissionMode("bypass")` stops fast-failing on it. Nothing new is rejected
+and no argv changes. The earlier revision's plan would have made every
+`--allow-dangerously-skip-permissions` + non-bypass-rung launch a hard `ErrInvalidConfig`,
+dropped the injected rung, and reported `bypass` for a restricted session. All three would have
+been regressions.
 
 ## Two hazards to carry into the docstrings
 
@@ -180,18 +196,21 @@ ordered rule, which is where the final ordering is specified.
 
 - [ ] Codex injection guard at `wrapper.go:624` covers `-p`, `--profile`, and (via
       `argsContainConfigKey`) the `sandbox_mode` and `approval_policy` config keys.
-- [ ] Claude injection guard at `:612` covers `--allow-dangerously-skip-permissions`.
-- [ ] `BypassEnablingFlags` (`:739`) returns `--allow-dangerously-skip-permissions` for claude /
-      claude-code, and `EffectiveLaunchRung`'s claude arm (`:777-785`) treats it as a definite
-      `bypass` exactly as it treats `SkipPermissionsFlag`.
+- [ ] Claude injection guard at `:612` does **not** cover `--allow-dangerously-skip-permissions`:
+      the flag pins no rung, so `--permission-mode` is still injected alongside it.
+- [ ] `BypassEnablingFlags` (`:739`) and `EffectiveLaunchRung`'s claude arm (`:777-785`) do **not**
+      learn `--allow-dangerously-skip-permissions`: it is neither bypass-enabling nor a definite
+      `bypass`. A separate `BypassReachableFlags` (`BypassEnablingFlags` plus the unlock flag for
+      claude / claude-code) feeds `pkg/chat`'s `cycleRing` only — done in harness-wrapper PR #48.
 - [ ] `configKeyValue` exists, mirrors all four `-c` spellings, is last-wins, strips one matched
       quote pair, and is unit-tested for each spelling plus the quoted/unquoted pair.
 - [ ] `EffectiveLaunchRung`'s codex arm returns `""` for `-p`/`--profile` and for a
       non-`danger-full-access` `sandbox_mode`, and `bypass` for
       `sandbox_mode` == `danger-full-access` in every spelling.
-- [ ] `permission_rungs_test.go:58-79` and `:81-90` updated; the `:82` comment **rewritten** to
-      cite the `claude --help` 2.1.217 probe.
-- [ ] `suppressionFlagsFor` (`:264`) mirrors the new per-harness sets, including a config-key arm.
+- [ ] `permission_rungs_test.go:58-79` and `:81-90` keep their assertions; the `:82` comment is
+      **rewritten** to cite the full `claude --help` description (the flag exists, unlock-only).
+- [ ] `suppressionFlagsFor` (`:264`) mirrors the new per-harness sets, including a config-key arm,
+      and has no `--allow-dangerously-skip-permissions` entry.
 - [ ] H1 documented in `argsContainAnyFlag`'s comment; the reject-vs-suppress rule documented in
       `EffectiveLaunchRung`'s comment.
 - [ ] Same commit as Ticket 2 and Ticket 3.

@@ -41,9 +41,10 @@ const CHAT_ERROR_TABLE = [
     // setPermissionMode sentinels off the generic 500 path.
     //
     // 409 vs 400: unreachable/stalled are conflicts with the LIVE session state
-    // (wrong axis, no bypass-enabling launch, the switch never settled), which the
-    // same request may win later; unsupported is a property of the harness itself,
-    // so the request is malformed for this session and can never succeed → 400.
+    // (wrong axis, bypass not on this launch's ring, the switch never settled),
+    // which the same request may win later; unsupported is a property of the
+    // harness itself, so the request is malformed for this session and can never
+    // succeed → 400.
     {
         sentinel: ErrPermissionModeUnreachable,
         status: 409,

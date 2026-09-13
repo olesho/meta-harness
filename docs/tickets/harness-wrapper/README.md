@@ -17,13 +17,13 @@ The first `# ` heading of each file is the ticket title; everything below it is 
 Ship them in numeric order so the dependency notes (Ticket 4 blocks on 1–3) reference tickets that
 already exist.
 
-| File                                 | Ticket                                                                                                                         | Lands with              |
-| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------ | ----------------------- |
-| `01-guard-set-reconciliation.md`     | Guard sets: codex `-p`/`--profile`, codex `-c sandbox_mode=`/`approval_policy=`, claude `--allow-dangerously-skip-permissions` | one commit with 02 + 03 |
-| `02-mapping-reconciliation.md`       | codex `manual` → `-s workspace-write -a untrusted`; codex accepts `plan`; two-axis replay + single-axis ceiling                | one commit with 01 + 03 |
-| `03-wire-contract-text.md`           | `turnproto.PermissionMode` doc caveats + crossrepo mirror                                                                      | rides in 02's commit    |
-| `04-exported-api-and-argv-corpus.md` | Export `PermissionArgs` / `ValidatePermissionMode`, `test/conformance/permissions/argv.json`, `CONFORMANCE=1` live gate        | **blocked on 01–03**    |
-| `05-crossrepo-note.md`               | Fourth `crossrepo/meta-harness/` note + HW-77/HW-101 attribution fix                                                           | independent             |
+| File                                 | Ticket                                                                                                                                                                 | Lands with              |
+| ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------- |
+| `01-guard-set-reconciliation.md`     | Guard sets: codex `-p`/`--profile`, codex `-c sandbox_mode=`/`approval_policy=`; claude `--allow-dangerously-skip-permissions` is reachability-only, NOT a guard entry | one commit with 02 + 03 |
+| `02-mapping-reconciliation.md`       | codex `manual` → `-s workspace-write -a untrusted`; codex accepts `plan`; two-axis replay + single-axis ceiling                                                        | one commit with 01 + 03 |
+| `03-wire-contract-text.md`           | `turnproto.PermissionMode` doc caveats + crossrepo mirror                                                                                                              | rides in 02's commit    |
+| `04-exported-api-and-argv-corpus.md` | Export `PermissionArgs` / `ValidatePermissionMode`, `test/conformance/permissions/argv.json`, `CONFORMANCE=1` live gate                                                | **blocked on 01–03**    |
+| `05-crossrepo-note.md`               | Fourth `crossrepo/meta-harness/` note + HW-77/HW-101 attribution fix                                                                                                   | independent             |
 
 ## The rule every ticket restates up front
 

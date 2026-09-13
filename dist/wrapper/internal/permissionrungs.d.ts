@@ -23,10 +23,31 @@ export declare const CodexApprovalNever = "never";
  */
 export declare const ClaudePermissionModeFlag = "--permission-mode";
 /**
- * Claude Code's blanket permission-bypass flags. Both spellings exist at
- * claude-code 2.1.217; either one in argv leaves the harness unrestricted.
+ * Claude Code's bypass-ENABLING flags: one of these in argv leaves the harness
+ * unrestricted, so it is a definite bypass for effectiveLaunchRung and a pin
+ * for the injection guard. The claude arm of Go's BypassEnablingFlags.
+ *
+ * `--allow-dangerously-skip-permissions` is deliberately NOT here. claude's
+ * `--help` (re-read at 2.1.270) describes it as "Enable bypassing all
+ * permission checks as an option, without it being enabled by default": it
+ * UNLOCKS the bypass rung without SELECTING it, so a launch carrying it is
+ * still restricted. Listing it here would make the replay report bypass for a
+ * restricted launch and would drop a requested mode on the floor. It lives in
+ * ClaudeBypassReachableFlags instead (harness-wrapper #48).
  */
 export declare const ClaudeSkipPermissionsFlags: readonly string[];
+/**
+ * Claude Code's bypass-REACHABLE flags: one of these in argv puts the bypass
+ * rung on the session's Shift+Tab ring, whether or not the launch is already
+ * unrestricted. That is ClaudeSkipPermissionsFlags plus the unlock-only
+ * `--allow-dangerously-skip-permissions`. The claude arm of Go's
+ * BypassReachableFlags (harness-wrapper #48).
+ *
+ * Read ONLY where reachability is decided (bypassReachableAtLaunch). The
+ * injection guard and effectiveLaunchRung must keep reading
+ * ClaudeSkipPermissionsFlags: the unlock flag sets no rung.
+ */
+export declare const ClaudeBypassReachableFlags: readonly string[];
 /** codex's blanket approval+sandbox bypass flag. */
 export declare const CodexBypassFlag = "--dangerously-bypass-approvals-and-sandbox";
 /** codex's sandbox-axis flag, short and long spelling. */
@@ -66,7 +87,11 @@ export declare function morePermissive(a: string, b: string): boolean;
  * A bypass-enabling flag in argv is itself reported as a definite bypass: it
  * suppresses injection AND leaves the harness unrestricted, so there is
  * nothing unknown about the result, and it WINS over a restrictive
- * --permission-mode in the same argv.
+ * --permission-mode in the same argv. claude's unlock-only
+ * `--allow-dangerously-skip-permissions` is NOT such a flag — it sets no rung,
+ * so the rung comes from --permission-mode or the mode as usual (see
+ * ClaudeSkipPermissionsFlags, and bypassReachableAtLaunch for the question it
+ * does answer).
  *
  * Returns "" when argv carries a permission flag whose value cannot be
  * resolved (a trailing flag with no operand, an unrecognized spelling), when
@@ -122,4 +147,19 @@ export declare function morePermissive(a: string, b: string): boolean;
  * would replay a manual launch as ask, i.e. MORE permissive than requested.
  */
 export declare function effectiveLaunchRung(harness: string, args: string[], mode: string): string;
+/**
+ * bypassReachableAtLaunch reports whether the bypass rung is REACHABLE — on
+ * the harness's own permission ring — for a session launched with args and the
+ * requested mode. The TS counterpart of the bypass half of Go's pkg/chat
+ * cycleRing (harness-wrapper #48).
+ *
+ * Deliberately wider than `effectiveLaunchRung(...) === "bypass"`: a launch
+ * that IS bypass is reachable, and so is a claude launch carrying any
+ * ClaudeBypassReachableFlags flag, notably the unlock-only
+ * `--allow-dangerously-skip-permissions`, which launches RESTRICTED yet can
+ * still be cycled to bypass. Keep the two questions apart: "is this launch
+ * unrestricted" belongs to effectiveLaunchRung and the injection guard; "can
+ * this session get to bypass at all" belongs here.
+ */
+export declare function bypassReachableAtLaunch(harness: string, args: string[], mode: string): boolean;
 //# sourceMappingURL=permissionrungs.d.ts.map

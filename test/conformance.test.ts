@@ -133,11 +133,11 @@ import {
 } from "../src/acquisition/internal/planAcquisition.ts";
 import { admitParent } from "../src/acquisition/internal/filter.ts";
 import {
+  ClaudeBypassReachableFlags,
   ClaudeModeAcceptEdits,
   ClaudeModeBypassPermissions,
   ClaudeModeDontAsk,
   ClaudePermissionModeFlag,
-  ClaudeSkipPermissionsFlags,
   CodexApprovalFlags,
   CodexApprovalNever,
   CodexApprovalOnRequest,
@@ -550,16 +550,22 @@ describe("conformance: permission-flag surface (CONFORMANCE=1)", () => {
           ).toBe(true);
         }
 
-        // The blanket bypass flags the SHIPPED code path already injects:
-        // metaHarnessArgs (src/cli/structured-runner.ts) adds
-        // --dangerously-skip-permissions under --sandbox-defaults today.
-        for (const flag of ClaudeSkipPermissionsFlags) {
+        // The skip-permissions flags the SHIPPED code paths hardcode:
+        // metaHarnessArgs (src/cli/structured-runner.ts) adds the ENABLING
+        // --dangerously-skip-permissions under --sandbox-defaults today, and
+        // bypassReachableAtLaunch reads the unlock-only
+        // --allow-dangerously-skip-permissions to put bypass on the ring.
+        // ClaudeBypassReachableFlags is the superset of both
+        // (ClaudeSkipPermissionsFlags plus the unlock flag), so iterating it
+        // checks every spelling either set relies on.
+        for (const flag of ClaudeBypassReachableFlags) {
           expect(
             help.includes(flag),
             `claude ${version} no longer offers \`${flag}\` (expected from ` +
-              `ClaudeSkipPermissionsFlags, ${SYMBOLS}); \`--help\` no longer mentions it. ` +
-              `Launching with it now hard-errors — update ClaudeSkipPermissionsFlags, ` +
-              `claudeGuardFlags (src/wrapper/internal/permission.ts) and metaHarnessArgs ` +
+              `ClaudeBypassReachableFlags, ${SYMBOLS}); \`--help\` no longer mentions it. ` +
+              `Launching with it now hard-errors — update ClaudeSkipPermissionsFlags / ` +
+              `ClaudeBypassReachableFlags, claudeGuardFlags ` +
+              `(src/wrapper/internal/permission.ts) and metaHarnessArgs ` +
               `(src/cli/structured-runner.ts).`,
           ).toBe(true);
         }

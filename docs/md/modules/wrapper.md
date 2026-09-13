@@ -363,7 +363,9 @@ rather than guessed.
   injection entirely — the same rule effort and model follow. It is all-or-nothing per
   harness, both axes at once: if the caller pinned only the sandbox, the wrapper does not
   half-inject an approval policy on top. On Claude Code the guard covers
-  `--permission-mode` and the skip-permissions flags; on Codex it covers `-s`/`--sandbox`,
+  `--permission-mode` and `--dangerously-skip-permissions` — **not** the unlock-only
+  `--allow-dangerously-skip-permissions`, which makes bypass reachable without selecting a
+  rung, so the requested mode is still injected next to it; on Codex it covers `-s`/`--sandbox`,
   `-a`/`--ask-for-approval`, `-p`/`--profile`,
   `--dangerously-bypass-approvals-and-sandbox`, and the `sandbox_mode` / `approval_policy`
   config keys in every `-c` spelling. (`-p` is guarded on Codex and **never** on Claude
