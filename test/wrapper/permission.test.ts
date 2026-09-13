@@ -217,11 +217,6 @@ describe("explicit override wins: injection is all-or-nothing", () => {
       args: ["--dangerously-skip-permissions", "-p", "prompt"],
     },
     {
-      name: "claude --allow-dangerously-skip-permissions",
-      harness: "claude-code",
-      args: ["--allow-dangerously-skip-permissions", "-p", "prompt"],
-    },
-    {
       name: "codex -s X",
       harness: "codex",
       args: ["-s", "read-only", "exec"],
@@ -293,6 +288,67 @@ describe("explicit override wins: injection is all-or-nothing", () => {
       }
     });
   }
+});
+
+// harness-wrapper PR #48's contract: `--allow-dangerously-skip-permissions`
+// only UNLOCKS the bypass rung ("Enable bypassing all permission checks as an
+// option, without it being enabled by default" — claude --help, re-read at
+// 2.1.270); it pins NO rung. So it is not an explicit override: the requested
+// mode must still be injected alongside it. Treating it as one (as the table
+// above rightly treats --dangerously-skip-permissions) drops the caller's
+// `plan` on the floor and launches at claude's own default with bypass one
+// Shift+Tab away. Go's argsWithHarnessPermissionMode guard never learned the
+// flag for exactly this reason (#48 commit message).
+describe("the unlock-only --allow-dangerously-skip-permissions is NOT an override: the requested mode is still injected", () => {
+  const allow = "--allow-dangerously-skip-permissions";
+  const native: Record<string, string> = {
+    plan: "plan",
+    manual: "manual",
+    ask: "acceptEdits",
+    auto: "auto",
+    bypass: "bypassPermissions",
+    acceptEdits: "acceptEdits",
+    bypassPermissions: "bypassPermissions",
+    dontAsk: "dontAsk",
+  };
+  for (const harness of ["claude", "claude-code"]) {
+    for (const [mode, value] of Object.entries(native)) {
+      test(`${harness} ${mode} + ${allow} -> --permission-mode ${value} injected`, () => {
+        expect(
+          argsWithHarnessPermissionMode(harness, [allow, "-p", "prompt"], mode),
+        ).toEqual(["--permission-mode", value, allow, "-p", "prompt"]);
+      });
+    }
+  }
+
+  test("joined spellings (rejected by claude 2.1.270) do not suppress injection either", () => {
+    for (const token of [`${allow}=true`, `${allow}=false`]) {
+      expect(argsWithHarnessPermissionMode("claude", [token], "plan")).toEqual([
+        "--permission-mode",
+        "plan",
+        token,
+      ]);
+    }
+  });
+
+  test("control: an empty mode still injects nothing", () => {
+    expect(argsWithHarnessPermissionMode("claude", [allow], "")).toEqual([
+      allow,
+    ]);
+  });
+
+  test("the replay reads the injected rung back, and it is never bypass unless bypass was requested", () => {
+    for (const mode of Object.keys(native)) {
+      const injected = argsWithHarnessPermissionMode("claude", [allow], mode);
+      const replayed = effectiveLaunchRung("claude", injected, mode);
+      // Idempotent over injection: the replay of the composed argv equals the
+      // replay of the bare argv + knob.
+      expect(replayed).toBe(effectiveLaunchRung("claude", [allow], mode));
+      // ...and that is the rung the same request resolves to with no unlock
+      // flag at all.
+      expect(replayed).toBe(effectiveLaunchRung("claude", [], mode));
+    }
+  });
 });
 
 describe("isSupportedPermissionMode", () => {

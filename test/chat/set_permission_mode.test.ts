@@ -1059,6 +1059,79 @@ describe("setPermissionMode: bypass", () => {
       release();
     }
   });
+
+  // (c) the UNLOCK-only flag — harness-wrapper PR #48, the Go ring-length
+  // table's argv-allow-skip-permissions rows. `--allow-dangerously-skip-
+  // permissions` puts bypass ON the Shift+Tab ring without selecting it, so a
+  // session launched RESTRICTED (here: plan) can still cycle to bypass and the
+  // fast-fail must not refuse it. The launch is not bypass (the replay reports
+  // plan — test/wrapper/permissionrungs.test.ts), which is exactly why the
+  // fast-fail cannot be keyed on the launch rung alone.
+  //
+  // The joined `=true` row mirrors Go's; claude 2.1.270 rejects that spelling
+  // before any session starts, so it pins only that the fast-fail fails OPEN on
+  // it (the cycle loop stays the arbiter), never that such a session exists.
+  const unlockCases: { name: string; opts: Record<string, unknown> }[] = [
+    {
+      name: "the bare unlock flag + requested plan",
+      opts: {
+        permissionMode: "plan",
+        args: ["--allow-dangerously-skip-permissions"],
+      },
+    },
+    {
+      name: "the joined unlock flag =true + requested plan",
+      opts: {
+        permissionMode: "plan",
+        args: ["--allow-dangerously-skip-permissions=true"],
+      },
+    },
+    {
+      name: "the unlock flag + --permission-mode=plan in args",
+      opts: {
+        args: [
+          "--allow-dangerously-skip-permissions",
+          "--permission-mode=plan",
+        ],
+      },
+    },
+  ];
+  for (const tc of unlockCases) {
+    test(`accepted from a plan launch with ${tc.name}: bypass is REACHABLE`, async () => {
+      const r = newRing({ presses: ["bypass"], opts: tc.opts });
+      const release = await armed(r, "plan");
+      try {
+        const got = await r.conv.setPermissionMode(
+          Context.background(),
+          "bypass",
+        );
+        expect(got.observed).toBe("bypass");
+        expect(r.presses()).toBe(1);
+      } finally {
+        release();
+      }
+    });
+  }
+
+  // The Go table's plain-non-bypass-launch control: the same plan launch WITHOUT
+  // the unlock flag keeps bypass off the ring, so the fast-fail still fires
+  // before a single byte is written.
+  test("control: refused with a ZERO delta on a plan launch without the unlock flag", async () => {
+    const r = newRing({ opts: { permissionMode: "plan" } });
+    const release = await armed(r, "plan");
+    try {
+      const before = r.bytes();
+      const err = await caught(
+        r.conv.setPermissionMode(Context.background(), "bypass"),
+      );
+      expect(isSentinel(err, ErrPermissionModeUnreachable)).toBe(true);
+      expect(String(err)).toContain("bypass is not enabled");
+      expect(r.bytes() - before).toBe(0);
+      expect(r.presses()).toBe(0);
+    } finally {
+      release();
+    }
+  });
 });
 
 // ── unsupported harnesses / off-axis targets ─────────────────────────────────

@@ -623,11 +623,14 @@ describe("effectiveLaunchRung — claude", () => {
       want: "bypass",
     },
     {
-      name: "--allow-dangerously-skip-permissions is the other spelling and also -> bypass",
+      // NOT a second bypass spelling: it only UNLOCKS the rung (see the
+      // harness-wrapper #48 contract block below), so the rung stays the one
+      // --permission-mode names.
+      name: "--allow-dangerously-skip-permissions does NOT beat a restrictive --permission-mode: it only unlocks bypass",
       harness: "claude-code",
       args: ["--permission-mode=plan", "--allow-dangerously-skip-permissions"],
       mode: "",
-      want: "bypass",
+      want: "plan",
     },
     {
       name: "no argv, no knob -> UNKNOWN",
@@ -644,6 +647,180 @@ describe("effectiveLaunchRung — claude", () => {
       want: "auto",
     },
   ]);
+});
+
+// ── The upstream contract, shared with harness-wrapper PR #48 ────────────────
+//
+// claude-code's own `--help` (re-read at 2.1.270) describes the two
+// skip-permissions flags differently, and the difference is the whole point:
+//
+//	--allow-dangerously-skip-permissions  Enable bypassing all permission checks
+//	                                      as an option, without it being enabled
+//	                                      by default. [...]
+//	--dangerously-skip-permissions        Bypass all permission checks. [...]
+//
+// The first UNLOCKS the bypass rung — puts it on the Shift+Tab ring — without
+// SELECTING it; only the second leaves the launch unrestricted. So the unlock
+// flag must never make the replay report bypass: the rung is still whatever
+// --permission-mode or the requested mode says, and with neither it is the
+// harness's own default (UNKNOWN, ""). Mirrors Go's TestEffectiveLaunchRung row
+// "claude unlock flag does not report bypass". REACHABILITY is asserted where
+// it is decided — test/chat/set_permission_mode.test.ts, "setPermissionMode:
+// bypass" — and injection in test/wrapper/permission.test.ts.
+//
+// Joined boolean spellings (`--allow-dangerously-skip-permissions=true|false`,
+// `--dangerously-skip-permissions=true|false`) are REJECTED by claude 2.1.270
+// before any session starts ("error: unknown option '…=false'", exit 1). The
+// rows for them pin only the fail-safe reading: the unlock flag is not bypass
+// in any spelling, while the enabling flag is bypass in every spelling — never
+// under-report a token claude refuses to parse.
+describe("effectiveLaunchRung — claude, --allow-dangerously-skip-permissions UNLOCKS bypass but never ENABLES it (harness-wrapper #48)", () => {
+  const allow = "--allow-dangerously-skip-permissions";
+  const skip = "--dangerously-skip-permissions";
+
+  runCases([
+    {
+      name: "Go parity: unlock flag + --permission-mode=plan -> plan, never bypass",
+      harness: "claude",
+      args: [allow, "--permission-mode=plan"],
+      mode: "",
+      want: "plan",
+    },
+    {
+      name: "unlock flag alone, nothing requested -> UNKNOWN (claude's own default), never bypass",
+      harness: "claude-code",
+      args: [allow],
+      mode: "",
+      want: "",
+    },
+    {
+      name: "unlock flag + requested plan -> plan (the requested mode is still the rung)",
+      harness: "claude-code",
+      args: [allow],
+      mode: "plan",
+      want: "plan",
+    },
+    {
+      name: "unlock flag after a separated --permission-mode acceptEdits -> ask",
+      harness: "claude",
+      args: ["--permission-mode", "acceptEdits", allow],
+      mode: "",
+      want: "ask",
+    },
+    // Joined spellings — see the block comment for why these are fail-safe pins.
+    {
+      name: "joined unlock flag =true (claude 2.1.270 rejects it) is still not bypass",
+      harness: "claude-code",
+      args: [`${allow}=true`],
+      mode: "plan",
+      want: "plan",
+    },
+    {
+      name: "joined unlock flag =false is not bypass either",
+      harness: "claude-code",
+      args: [`${allow}=false`],
+      mode: "plan",
+      want: "plan",
+    },
+    // Controls: the paths that DO enable bypass are untouched by the unlock
+    // flag's presence.
+    {
+      name: "control: the ENABLING flag alone is still a definite bypass",
+      harness: "claude",
+      args: [skip],
+      mode: "",
+      want: "bypass",
+    },
+    {
+      name: "control: the enabling flag still beats a restrictive mode when the unlock flag rides along",
+      harness: "claude-code",
+      args: [allow, "--permission-mode", "plan", skip],
+      mode: "plan",
+      want: "bypass",
+    },
+    {
+      name: "control: joined enabling flag =false still reports bypass (fail-safe; claude rejects the spelling)",
+      harness: "claude-code",
+      args: [`${skip}=false`],
+      mode: "plan",
+      want: "bypass",
+    },
+    {
+      name: "control: explicit --permission-mode bypassPermissions next to the unlock flag -> bypass",
+      harness: "claude",
+      args: [allow, "--permission-mode", "bypassPermissions"],
+      mode: "",
+      want: "bypass",
+    },
+    {
+      name: "control: requested canonical bypass next to the unlock flag -> bypass",
+      harness: "claude-code",
+      args: [allow],
+      mode: "bypass",
+      want: "bypass",
+    },
+    {
+      name: "control: requested native bypassPermissions next to the unlock flag -> bypass",
+      harness: "claude-code",
+      args: [allow],
+      mode: "bypassPermissions",
+      want: "bypass",
+    },
+  ]);
+
+  // Ordinary modes are UNCHANGED by the unlock flag: each resolves to exactly
+  // what it resolves to without it, wherever the flag sits. The "without" half
+  // of every assertion is today's behaviour, restated so a row cannot pass by
+  // both halves drifting together.
+  //
+  // dontAsk and claude's hidden `default` alias have no canonical rung on this
+  // side (claudeRung -> ""); Go's claudeRung maps dontAsk to manual. That is a
+  // pre-existing TS/Go divergence this contract does not touch — the unlock
+  // flag must simply leave each value where it was.
+  const knobs: [mode: string, want: string][] = [
+    ["plan", "plan"],
+    ["manual", "manual"],
+    ["ask", "ask"],
+    ["acceptEdits", "ask"],
+    ["auto", "auto"],
+    ["dontAsk", ""],
+  ];
+  for (const [mode, want] of knobs) {
+    test(`requested ${mode} -> ${want || "UNKNOWN"} with or without the unlock flag`, () => {
+      expect(effectiveLaunchRung("claude-code", ["-p", "hi"], mode)).toBe(want);
+      expect(
+        effectiveLaunchRung("claude-code", [allow, "-p", "hi"], mode),
+      ).toBe(want);
+      expect(
+        effectiveLaunchRung("claude-code", ["-p", "hi", allow], mode),
+      ).toBe(want);
+    });
+  }
+  const argvValues: [value: string, want: string][] = [
+    ["plan", "plan"],
+    ["manual", "manual"],
+    ["acceptEdits", "ask"],
+    ["auto", "auto"],
+    ["dontAsk", ""],
+    ["default", ""],
+  ];
+  for (const [value, want] of argvValues) {
+    test(`--permission-mode ${value} -> ${want || "UNKNOWN"} with or without the unlock flag`, () => {
+      expect(
+        effectiveLaunchRung("claude", ["--permission-mode", value], ""),
+      ).toBe(want);
+      expect(
+        effectiveLaunchRung("claude", [allow, "--permission-mode", value], ""),
+      ).toBe(want);
+      expect(
+        effectiveLaunchRung(
+          "claude",
+          [`--permission-mode=${value}`, allow],
+          "",
+        ),
+      ).toBe(want);
+    });
+  }
 });
 
 describe("effectiveLaunchRung — harnesses with no launch-time permission axis", () => {
