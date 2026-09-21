@@ -6,6 +6,10 @@
 // exports-guard test enforces).
 
 export { classifyOutput } from "./internal/classifier.ts";
+export {
+  classifyFinishedOutput,
+  RuleTimeoutUpgrade,
+} from "./internal/finished.ts";
 
 export type {
   Classification,

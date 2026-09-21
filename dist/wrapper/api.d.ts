@@ -1,4 +1,5 @@
 export { classifyOutput } from "./internal/classifier.ts";
+export { classifyFinishedOutput, RuleTimeoutUpgrade, } from "./internal/finished.ts";
 export type { Classification, Classifier, ClassifierInput, } from "./internal/classification.ts";
 export { ErrNone, ErrRateLimited, ErrAuth, ErrBilling, ErrModelNotFound, ErrContextOverflow, ErrTimeout, ErrTransient, ErrUnknown, errorClassString, type ErrorClass, } from "./internal/errorclass.ts";
 export { StatusIdle, StatusFailed, StatusBlockedByCost, StatusRetryLater, StatusAPIError, StatusWaitingForInput, StatusStale, StatusInterrupted, StatusUnknown, StatusBinaryNotFound, type Status, } from "./internal/status.ts";
