@@ -103,6 +103,10 @@ function assistantLineEvents(line, ts, seq) {
     const msg = line.message;
     if (!msg || !Array.isArray(msg.content))
         return [];
+    // A synthetic API-error line is shaped exactly like an assistant reply --
+    // one text block holding the rendered error -- so the tag is the only thing
+    // that tells them apart. Carry it onto every event this line produces.
+    const apiError = apiErrorTagOf(line);
     const out = [];
     for (const block of msg.content) {
         switch (block.type) {
@@ -118,6 +122,7 @@ function assistantLineEvents(line, ts, seq) {
                     uuid: line.uuid,
                     source: SourceFile,
                     nativeID: textNativeID(line.uuid, seq.v),
+                    ...(apiError ? { apiError } : {}),
                 });
                 seq.v++;
                 break;
@@ -134,6 +139,7 @@ function assistantLineEvents(line, ts, seq) {
                     uuid: line.uuid,
                     source: SourceFile,
                     nativeID: "tool-use:" + id,
+                    ...(apiError ? { apiError } : {}),
                 });
                 seq.v++;
                 break;
@@ -141,6 +147,18 @@ function assistantLineEvents(line, ts, seq) {
         }
     }
     return out;
+}
+// apiErrorTagOf returns the line's machine-readable failure tag, and "" for
+// every line that is not a synthetic API error.
+//
+// isApiErrorMessage is REQUIRED, not merely preferred: `error` also appears on
+// lines that are not API errors at all (hook results carry "warn" / "debug" /
+// "policy_denied" there), and treating one of those as a failed turn would
+// error a turn the harness completed. Port of harness-wrapper's apiErrorTagOf.
+export function apiErrorTagOf(line) {
+    if (line.isApiErrorMessage !== true)
+        return "";
+    return (line.error ?? "").trim();
 }
 // extractToolResultText pulls the text out of a tool_result block's content,
 // either an array of text blocks or a plain string.

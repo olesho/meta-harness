@@ -27,6 +27,11 @@ export function parseFromBytes(content) {
             message: obj.message,
             timestamp: obj.timestamp,
         };
+        // Only carried when present, so an ordinary line keeps its exact shape.
+        if (obj.isApiErrorMessage === true)
+            line.isApiErrorMessage = true;
+        if (typeof obj.error === "string")
+            line.error = obj.error;
         normalizeLineType(line);
         lines.push(line);
     }

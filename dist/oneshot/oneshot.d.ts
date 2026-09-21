@@ -1,4 +1,4 @@
-import { type InputPolicy } from "../chat/index.ts";
+import { type InputPolicy, type TurnCode } from "../chat/index.ts";
 import { Context } from "../internal/async/index.ts";
 import type { Adapter, RequestedAcquisitionMode } from "../turns/index.ts";
 import type { EventEnvelope } from "../transcript/index.ts";
@@ -123,6 +123,12 @@ export type OneShotOutcome = {
 } | {
     status: "errored";
     reason: string;
+    /**
+     * The stable wall token the harness's own verdict named — auth_required,
+     * usage_limited, billing_wall — and absent for every other failure. What a
+     * caller should switch on to raise a wall signal; `reason` is operator copy.
+     */
+    code?: TurnCode;
     harnessSessionID: string;
     workingDir: string;
 } | {

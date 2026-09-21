@@ -9,6 +9,8 @@ interface RawLine {
   uuid?: string;
   message?: unknown;
   timestamp?: string;
+  isApiErrorMessage?: boolean;
+  error?: string;
 }
 
 // normalizeLineType ensures line.type is populated for all formats: Claude Code
@@ -37,6 +39,9 @@ export function parseFromBytes(content: string): Line[] {
       message: obj.message,
       timestamp: obj.timestamp,
     };
+    // Only carried when present, so an ordinary line keeps its exact shape.
+    if (obj.isApiErrorMessage === true) line.isApiErrorMessage = true;
+    if (typeof obj.error === "string") line.error = obj.error;
     normalizeLineType(line);
     lines.push(line);
   }

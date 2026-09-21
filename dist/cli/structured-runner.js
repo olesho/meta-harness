@@ -310,6 +310,10 @@ function exitFor(status) {
         return ExitDeadline;
     return ExitError;
 }
+/** codeOf narrows the union: only an errored turn can carry a wall code. */
+function codeOf(outcome) {
+    return outcome.status === "errored" ? outcome.code : undefined;
+}
 /** reasonOf narrows the union: only errored/startup_error carry a reason. */
 function reasonOf(outcome) {
     return "reason" in outcome ? outcome.reason : undefined;
@@ -465,6 +469,7 @@ export async function main(argv) {
         transcript_entries: transcriptEntries,
         usage: usage ?? undefined,
         reason: reasonOf(outcome),
+        code: codeOf(outcome),
         transcript_error: transcriptError,
         permission_mode: permissionMode,
         working_dir: workingDir,

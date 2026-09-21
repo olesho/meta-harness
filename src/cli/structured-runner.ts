@@ -404,6 +404,11 @@ function exitFor(status: OneShotOutcome["status"]): number {
   return ExitError;
 }
 
+/** codeOf narrows the union: only an errored turn can carry a wall code. */
+function codeOf(outcome: OneShotOutcome): string | undefined {
+  return outcome.status === "errored" ? outcome.code : undefined;
+}
+
 /** reasonOf narrows the union: only errored/startup_error carry a reason. */
 function reasonOf(outcome: OneShotOutcome): string | undefined {
   return "reason" in outcome ? outcome.reason : undefined;
@@ -579,6 +584,7 @@ export async function main(argv: string[]): Promise<number> {
     transcript_entries: transcriptEntries,
     usage: usage ?? undefined,
     reason: reasonOf(outcome),
+    code: codeOf(outcome),
     transcript_error: transcriptError,
     permission_mode: permissionMode,
     working_dir: workingDir,

@@ -8,6 +8,8 @@ export interface Line {
     uuid: string;
     message: unknown;
     timestamp?: string;
+    isApiErrorMessage?: boolean;
+    error?: string;
 }
 export interface AssistantMessage {
     content: ContentBlock[];

@@ -18,6 +18,7 @@ interface WireEvent {
   tool_input?: unknown;
   output?: string;
   uuid?: string;
+  api_error?: string;
   source?: string;
   native_id?: string;
   schema_version: number;
@@ -44,6 +45,7 @@ function toWire(pe: ParsedEvent): WireParsedEvent {
   if (e.toolInput) w.tool_input = JSON.parse(e.toolInput);
   if (e.output) w.output = e.output;
   if (e.uuid) w.uuid = e.uuid;
+  if (e.apiError) w.api_error = e.apiError;
   if (e.source) w.source = e.source;
   if (e.nativeID) w.native_id = e.nativeID;
   const out: WireParsedEvent = {
@@ -68,6 +70,7 @@ function fromWire(w: WireParsedEvent): ParsedEvent {
       e.tool_input !== undefined ? JSON.stringify(e.tool_input) : undefined,
     output: e.output,
     uuid: e.uuid,
+    apiError: e.api_error,
     source: e.source,
     nativeID: e.native_id,
     schemaVersion: e.schema_version,
