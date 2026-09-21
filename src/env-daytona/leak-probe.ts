@@ -1,22 +1,31 @@
 // Credential leak detection for sandboxed environments.
 //
-// The canonical list of sensitive environment variable names that should never
-// cross into a sandbox boundary. This list is the source of truth for both the
-// in-guest probe (run via exec to count leaks) and host-side redaction logic.
+// The list of sensitive environment variable names that must never cross into a
+// sandbox boundary. Its CANONICAL form lives in `contract/sensitive-env-names.json`,
+// which splits it into two roles (`runner_infra`, `provider_credentials`); the array
+// below is their concatenation in that exact order, and
+// test/env/sensitive_env_contract.test.ts fails if the two ever disagree.
 //
-// Ported from loomcli daytona-task-runner.ts and env.go to kill the drift
-// between codebases: the Go env.go list was manually synced with the TS probe
-// and diverged (CLAUDE_CODE_OAUTH_TOKEN is in Go but was missing from TS).
+// loomcli vendors the same artifact at internal/driver/testdata/sensitive-env-names.json
+// and gates its own two literals (sandboxLeakProbeCommand() and env.go's
+// trustedLocalProviderCredentials) against it. To CHANGE the list, edit the contract
+// file and run scripts/sync-sensitive-env-names.sh --to $LOOMCLI_REPO, then land the PR
+// in BOTH repos — see contract/README.md.
+//
+// The literal is kept here, rather than read from the JSON at runtime, deliberately:
+// the probe is a security gate and must not acquire a filesystem dependency.
 
 import { shQuote } from "../env/argv.ts";
 
 export const CREDENTIAL_SENSITIVE_ENV_NAMES = [
+  // contract/sensitive-env-names.json -> runner_infra
   "DAYTONA_API_KEY",
+  "LOOM_TASK_RUN_LEASE_TOKEN",
+  "LOOM_DRIVER_TASK_RUNNER_CMD_JSON",
+  // contract/sensitive-env-names.json -> provider_credentials
   "GITHUB_TOKEN",
   "GH_TOKEN",
   "CODEX_HOME",
-  "LOOM_TASK_RUN_LEASE_TOKEN",
-  "LOOM_DRIVER_TASK_RUNNER_CMD_JSON",
   "ANTHROPIC_API_KEY",
   "OPENAI_API_KEY",
   "CODEX_API_KEY",
@@ -35,12 +44,18 @@ export const CREDENTIAL_SENSITIVE_ENV_NAMES = [
  * Designed to run inside a sandbox via exec(). If the count is nonzero,
  * a secret reached the sandbox and the run should fail.
  *
- * Uses the same pattern as loomcli's sandboxLeakProbeCommand to ensure
- * consistency across runtimes.
+ * Each name is emitted SPLIT on "_" — `['DAYTONA','API','KEY']`, rejoined by the
+ * guest at runtime — so the probe's own source text carries no literal secret
+ * name for a scanner (or a curious guest process listing) to pick up. Same shape
+ * as loomcli's sandboxLeakProbeCommand, so the two stay diffable.
  */
 export function credentialLeakProbe(): string {
   const nameArrays = CREDENTIAL_SENSITIVE_ENV_NAMES.map(
-    (name) => `['${name}']`,
+    (name) =>
+      `[${name
+        .split("_")
+        .map((part) => `'${part}'`)
+        .join(",")}]`,
   );
   const code = [
     "const names=[",

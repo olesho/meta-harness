@@ -29,8 +29,8 @@
 //  2. /status always PRINTS a `Collaboration mode:` row; under every rung above
 //     it reads `Default`. "Collaboration axis unset" therefore means "not set
 //     to Plan", NOT "the row is absent". The claude bypass screen in particular
-//     is load-bearing: it is the premise of the default `trust_prompt` policy
-//     launchInputPolicy installs in src/chat/conversation.ts, and it does still
+//     is load-bearing: it is the premise of the default `bypass_acceptance`
+//     policy launchInputPolicy installs in src/chat/conversation.ts, and it does still
 //     paint on a fresh HOME (probed with an otherwise-authenticated HOME that
 //     carried no prior trust/bypass acceptance).
 //

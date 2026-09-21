@@ -15,7 +15,7 @@
 // The script is built in the test with the shared Builder (test/chat/
 // fakeharness.ts), so its codex/claude frame vocabulary matches the real adapters.
 
-import { readFileSync } from "node:fs";
+import { appendFileSync, readFileSync } from "node:fs";
 
 const VERSION = process.env.FAKE_HARNESS_VERSION ?? "9.9.9";
 
@@ -23,6 +23,19 @@ const VERSION = process.env.FAKE_HARNESS_VERSION ?? "9.9.9";
 if (process.argv.slice(2).includes("--version")) {
   process.stdout.write(VERSION + "\n");
   process.exit(0);
+}
+
+// Spawn ledger (test-only). When FAKE_HARNESS_SPAWN_LOG names a file, each PTY
+// LAUNCH appends one line — never the --version probe above, which exits first.
+// This is what lets the recorder tests count spawns directly: a freshWorkdir
+// scenario must skip the trust-accepting warmup pass, i.e. launch exactly once.
+const spawnLog = process.env.FAKE_HARNESS_SPAWN_LOG;
+if (spawnLog) {
+  try {
+    appendFileSync(spawnLog, "spawn\n");
+  } catch {
+    /* best effort */
+  }
 }
 
 const ENV_VAR = "FAKEHARNESS_SCRIPT";

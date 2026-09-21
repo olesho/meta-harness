@@ -55,8 +55,8 @@ interface Event {
 ```ts
 interface InputRequest {
   id: string; // stable across redraws of the SAME prompt; changes for a new one
-  kind: string; // "trust_prompt" | "menu_select" | "confirm" | "text_input"
-  //   | "question" | "question_review" | "approval_prompt"
+  kind: string; // "trust_prompt" | "bypass_acceptance" | "menu_select" | "confirm"
+  //   | "text_input" | "question" | "question_review" | "approval_prompt"
   prompt: string;
   options?: InputOption[]; // undefined for free-text prompts
   header?: string; // kind "question": the dialog's tab label

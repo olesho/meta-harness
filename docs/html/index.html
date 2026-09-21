@@ -1352,7 +1352,8 @@
             input_requested — blocking prompt
           </text>
           <text x="571" y="212" fill="var(--term-mute)" font-size="10.5">
-            trust_prompt · question · question_review · approval_prompt
+            trust_prompt · bypass_acceptance · question · question_review ·
+            approval_prompt
           </text>
           <text x="571" y="230" fill="#7f96a4" font-size="10.5">
             answer() → input_resolved → the turn resumes
@@ -1488,9 +1489,14 @@
       max-width: 80ch;
     "
   >
-    Input requests: Claude Code surfaces <code>trust_prompt</code> and the
-    mid-turn AskUserQuestion dialog (<code>question</code> /
-    <code>question_review</code>); Codex surfaces command / apply-patch
+    Input requests: Claude Code surfaces <code>trust_prompt</code> (the
+    folder-trust dialog), <code>bypass_acceptance</code> (the
+    <code>--dangerously-skip-permissions</code> acceptance screen — a separate
+    kind, so a policy can trust a folder without accepting a
+    skip-all-permissions launch) and the mid-turn AskUserQuestion dialog (<code
+      >question</code
+    >
+    / <code>question_review</code>); Codex surfaces command / apply-patch
     approvals as <code>approval_prompt</code> and the
     <code>/permissions</code> picker as <code>permissions_prompt</code> (its
     startup interstitials are auto-dismissed, never surfaced). Others: none.

@@ -125,8 +125,10 @@ two-check shape `effort` uses.
 
 Fidelity is not uniform, and the ladder is a translation rather than an identity. Claude
 Code names each rung in a single native value, so its side is exact — it also accepts its
-own native spellings as input, including `dontAsk`, which is Claude-only and sits off the
-ladder entirely. Codex has no single-token spelling at all: permissions and collaboration
+own native spellings as input, including `dontAsk`, which is Claude-only. `dontAsk` is a
+second spelling of the **`manual`** rung rather than a sixth rung: Claude ranks it equal
+to its own default, and it is strictly more restrictive in effect ("deny if not
+pre-approved"), so reporting `manual` for it can never under-report permissiveness. Codex has no single-token spelling at all: permissions and collaboration
 are two orthogonal axes there, so the wrapper emits a pair of flags. On Codex, `bypass`
 lands **good**; `manual` / `ask` / `auto` are **approximations** of the Claude Code rung;
 and `plan` is **partial** — it pins the permissions axis only, leaving the collaboration
@@ -303,8 +305,10 @@ a mid-turn clarifying question), the turns layer reports an **`InputRequest`**:
 write. The `id` is a content hash — stable across redraws of the _same_ prompt,
 different for a new one.
 
-The client-surfaced `kind` vocabulary is `trust_prompt` (folder-trust / bypass dialog),
-`menu_select` (a numbered menu), `confirm` (a y/n confirmation), `text_input` (a
+The client-surfaced `kind` vocabulary is `trust_prompt` (the folder-trust dialog),
+`bypass_acceptance` (Claude Code's `--dangerously-skip-permissions` acceptance screen —
+its own kind, so a policy can trust a folder without also accepting a
+skip-all-permissions launch), `menu_select` (a numbered menu), `confirm` (a y/n confirmation), `text_input` (a
 free-text prompt), `question` / `question_review` (Claude Code's clarifying-question
 dialog, below), `approval_prompt` (Codex's command / apply-patch approval dialog), and
 `permissions_prompt` (Codex's `/permissions` model-permissions picker).

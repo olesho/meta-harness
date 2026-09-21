@@ -6,7 +6,7 @@
 // new-session` call — those three functions only ever shell out to tmux by
 // session name, so they don't need the re-exec path to be tested for real.
 
-import { describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test } from "vitest";
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { homedir } from "node:os";
@@ -212,9 +212,25 @@ describe("runTmuxSpawn — --tmux-session validation", () => {
 describe.skipIf(!hasTmux)(
   "runTmuxStatus / runTmuxKill / runTmuxList — real tmux round trip",
   () => {
+    // Real detached tmux session: tmux is a daemon, so a throw before the
+    // finally-block kill would leak it permanently (PUPPET-327). afterEach
+    // reclaims it regardless of how the test body ended.
+    let createdSession: string | null = null;
+
+    afterEach(() => {
+      if (createdSession === null) return;
+      // Best-effort: the happy path already killed it, so "no such session"
+      // (non-zero) is the expected outcome here, not a failure.
+      spawnSync("tmux", ["kill-session", "-t", createdSession], {
+        stdio: "ignore",
+      });
+      createdSession = null;
+    });
+
     test("status/list/kill against a session created directly via tmux", () => {
       const name = `ws3-test-${String(process.pid)}`;
       const tmuxName = TMUX_SESSION_PREFIX + name;
+      createdSession = tmuxName;
       const spawnResult = spawnSync("tmux", [
         "new-session",
         "-d",

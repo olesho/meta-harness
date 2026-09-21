@@ -195,6 +195,8 @@ describe("cleanEnv", () => {
   test("isLeakedClaudeEnv matches the scrub keys", () => {
     expect(isLeakedClaudeEnv("CLAUDECODE")).toBe(true);
     expect(isLeakedClaudeEnv("CLAUDE_CODE_ENTRYPOINT")).toBe(true);
+    // Delegates to isClaudeNestingEnvKey, so the credential exemption holds here too.
+    expect(isLeakedClaudeEnv("CLAUDE_CODE_OAUTH_TOKEN")).toBe(false);
     expect(isLeakedClaudeEnv("CLAUDE_SOMETHING")).toBe(false);
     expect(isLeakedClaudeEnv("PATH")).toBe(false);
   });

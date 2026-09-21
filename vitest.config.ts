@@ -8,6 +8,12 @@ export default defineConfig({
     // shell (META-HARNESS-34). Mirrors bunfig.toml's `[test] preload` for the
     // gate's `bun test`.
     setupFiles: ["./test/setup/ensure-node-on-path.ts"],
+    // Two different hooks, deliberately: `setupFiles` above runs per test file
+    // INSIDE the worker, while `globalSetup` runs once in the vitest main
+    // process. The sweep needs the latter — its `setup()` half reclaims tmux
+    // sessions leaked by a PREVIOUS run that was SIGKILLed, the one case no
+    // in-process hook (afterEach, teardown) can ever cover (PUPPET-329).
+    globalSetup: ["./test/setup/tmux-sweep.ts"],
     // The suite drives real PTYs and asserts on wall-clock idle/timing
     // thresholds. Running test files concurrently starves those timers and
     // makes the PTY tests flaky, so run files sequentially (mirrors how the

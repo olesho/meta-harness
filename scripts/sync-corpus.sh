@@ -4,8 +4,8 @@
 # Generalizes the former auth-specific sync into ONE script covering every
 # corpus (`auth`, `wire`, ...). The canonical side lives in harness-wrapper; this
 # repo vendors byte-identical copies under test/corpus/<name>/ and freezes them
-# with a MANIFEST.sha256 (hash of every fixture file, excluding the manifest and
-# README.md).
+# with a MANIFEST.sha256 (hash of every fixture file, excluding the manifest —
+# and, for most corpora, README.md; see the per-corpus policy below).
 #
 # Usage:
 #   sync-corpus.sh <name>            Vendor test/corpus/<name> from the canonical
@@ -17,6 +17,16 @@
 #                                    OUR bytes equal the canonical repo's.
 #   sync-corpus.sh <name> --to DIR   Copy this repo's vendored corpus into DIR
 #                                    (so the other repo can --check against it).
+#
+# MANIFEST CONVENTION IS PER CORPUS. Three conventions are live in this family
+# (the table lives in scripts/sync-conformance.sh's header). They differ only in
+# whether README.md is hashed: the canonical generator for `permission-mode` and
+# `auth` (harness-wrapper/scripts/sync-permission-mode-corpus.sh, sync-auth-corpus.sh)
+# hashes EVERY file but MANIFEST.sha256, while `wire` and friends also exclude
+# README.md. A manifest computed with the wrong policy is internally consistent
+# and permanently unequal to canonical's — i.e. it silently breaks the one
+# invariant the vendored corpus exists to enforce. readme_hashed() below is that
+# policy; add a corpus to it when its canonical side hashes the README.
 #
 # NOTE: --check inside a single repo proves only that THIS repo's manifest is
 # internally consistent. Repo-to-repo divergence (two internally consistent but
@@ -35,14 +45,29 @@ shift
 
 corpus="$here/test/corpus/$name"
 
+# Per-corpus README policy (see the header). Corpora whose CANONICAL manifest
+# hashes README.md are listed here; every other corpus keeps the default, which
+# excludes it.
+readme_hashed() {
+  case "$1" in
+    # canonical generators: sync-permission-mode-corpus.sh / sync-auth-corpus.sh
+    permission-mode|auth) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
 # Recompute the canonical MANIFEST.sha256 body for a corpus dir: one
-# "<sha256>  <posix-relpath>" line per file, excluding MANIFEST.sha256 and
-# README.md, sorted by line. Must match test/helpers/corpus.ts::computeManifest.
+# "<sha256>  <posix-relpath>" line per file, excluding MANIFEST.sha256 (and
+# README.md unless readme_hashed says this corpus hashes it), sorted by line.
+# Must match test/helpers/corpus.ts::computeManifest with the same exclude set.
 compute_manifest() {
-  local root="$1"
+  local root="$1" cname="$2"
   ( cd "$root" && \
-    find . -type f \
-      ! -name MANIFEST.sha256 ! -name README.md \
+    if readme_hashed "$cname"; then
+      find . -type f ! -name MANIFEST.sha256
+    else
+      find . -type f ! -name MANIFEST.sha256 ! -name README.md
+    fi \
       | sed 's#^\./##' \
       | LC_ALL=C sort \
       | while IFS= read -r rel; do
@@ -55,7 +80,7 @@ mode="${1:-sync}"
 case "$mode" in
   --check)
     [ -d "$corpus" ] || { echo "corpus not found: $corpus" >&2; exit 1; }
-    got="$(compute_manifest "$corpus")"
+    got="$(compute_manifest "$corpus" "$name")"
     if ! diff -u "$corpus/MANIFEST.sha256" <(printf '%s\n' "$got") >/dev/null; then
       echo "FAIL: test/corpus/$name/MANIFEST.sha256 is stale — re-run sync-corpus.sh $name" >&2
       diff -u "$corpus/MANIFEST.sha256" <(printf '%s\n' "$got") >&2 || true
@@ -65,7 +90,7 @@ case "$mode" in
     if [ -n "${HARNESS_WRAPPER_REPO:-}" ]; then
       src="$HARNESS_WRAPPER_REPO/test/corpus/$name"
       [ -d "$src" ] || { echo "canonical corpus not found: $src" >&2; exit 1; }
-      if ! diff -u <(compute_manifest "$src") <(printf '%s\n' "$got") >/dev/null; then
+      if ! diff -u <(compute_manifest "$src" "$name") <(printf '%s\n' "$got") >/dev/null; then
         echo "FAIL: test/corpus/$name has DIVERGED from canonical ($src)" >&2
         exit 1
       fi
@@ -97,7 +122,7 @@ case "$mode" in
         mkdir -p "$corpus/$(dirname "$rel")"
         cp "$rel" "$corpus/$rel"
       done )
-    compute_manifest "$corpus" > "$corpus/MANIFEST.sha256"
+    compute_manifest "$corpus" "$name" > "$corpus/MANIFEST.sha256"
     echo "ok: vendored test/corpus/$name from $src"
     ;;
 

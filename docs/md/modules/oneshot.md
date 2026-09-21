@@ -138,19 +138,25 @@ class EmptyPromptError extends Error {} // "one-shot: empty prompt"
 ## Environment helpers
 
 ```ts
-AutoAcceptTrust: InputPolicy   // answers the claude-code trust/bypass dialog with "proceed"
-                               // (trust_prompt ONLY — see the question caveat below)
+AutoAcceptTrust: InputPolicy   // answers claude-code's two startup dialogs with "proceed"
+                               // (trust_prompt + bypass_acceptance — see the caveat below)
 cleanEnv(env: string[]): string[]        // strip CLAUDECODE / CLAUDE_CODE_* so a nested harness is clean
 isLeakedClaudeEnv(key: string): boolean  // predicate cleanEnv() uses
 ```
 
-`AutoAcceptTrust` is `{ byKind: { trust_prompt: { kind: DispositionAnswer, optionID:
-"proceed" } } }` — the same guard the Go `run.go` one-shot used, so an unattended turn is
-never blocked behind Claude Code's folder-trust prompt. Pass your `env` through `cleanEnv`
+`AutoAcceptTrust` answers **two kinds** with `{ kind: DispositionAnswer, optionID:
+"proceed" }`: `trust_prompt` (the folder-trust dialog) and `bypass_acceptance` (the
+`--dangerously-skip-permissions`, "Bypass Permissions mode", acceptance screen). It is the
+same guard the Go `run.go` one-shot used, so an unattended turn is never blocked behind
+either startup dialog. The two kinds are named explicitly and deliberately: they used to
+share one kind, so the entry written for folder trust accepted a skip-all-permissions
+launch as a side effect — naming both keeps that behaviour while making it a choice on the
+record. Pass your `env` through `cleanEnv`
 (the [CLI](cli.md) does this for you) so a harness launched from inside Claude Code doesn't
 inherit the outer session context.
 
-> **Mid-turn prompt caveat.** `AutoAcceptTrust` covers `trust_prompt` only. If the
+> **Mid-turn prompt caveat.** `AutoAcceptTrust` covers the two startup kinds only, and
+> carries no bare `default`. If the
 > model stops mid-turn to ask a [clarifying question](chat.md#clarifying-questions)
 > (`question` / `question_review`), or Codex stops on a command / apply-patch approval
 > (`approval_prompt`), the one-shot has no client to answer it and no `inputPolicy` knob

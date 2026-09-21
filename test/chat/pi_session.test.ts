@@ -4,7 +4,7 @@
 // session dirs are honored by the reader (absolute and cwd-anchored relative).
 
 import { afterEach, describe, expect, test } from "vitest";
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -23,9 +23,11 @@ import {
 import { slugForCwd } from "../../src/transcript/pi/pi.ts";
 import {
   New,
+  argvOutPath,
   fakeHarnessBin,
   fakeLaunchEnv,
   openFake,
+  readArgv,
   testIdleGap,
   testMarkerGap,
 } from "./fakeharness.ts";
@@ -41,21 +43,6 @@ afterEach(async () => {
 function track(conv: Conversation): Conversation {
   open.add(conv);
   return conv;
-}
-
-function argvOutPath(): string {
-  return join(mkdtempSync(join(tmpdir(), "pi-argv-")), "argv.json");
-}
-
-async function readArgv(path: string): Promise<string[]> {
-  for (let i = 0; i < 100; i++) {
-    try {
-      return JSON.parse(readFileSync(path, "utf8"));
-    } catch {
-      await new Promise((r) => setTimeout(r, 20));
-    }
-  }
-  throw new Error(`argv dump never appeared at ${path}`);
 }
 
 const uuidRE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -77,7 +64,7 @@ function writePiSession(sessionsDir: string, cwd: string, id: string): void {
 describe("pi create/resume", () => {
   test("Open (create) seeds a minted --session-id", async () => {
     const store = newMemStore();
-    const argvPath = argvOutPath();
+    const argvPath = argvOutPath("pi-argv-");
     const conv = track(
       await openFake(piScript(), { store, argvOut: argvPath }),
     );
@@ -102,7 +89,7 @@ describe("pi create/resume", () => {
     };
     await store.createSession(session);
 
-    const argvPath = argvOutPath();
+    const argvPath = argvOutPath("pi-argv-");
     const conv = track(
       await Reopen(undefined, {
         sessionID: storedID,
@@ -180,7 +167,7 @@ describe("pi create/resume", () => {
     }
 
     test("positional after -- is not rejected", async () => {
-      const argvPath = argvOutPath();
+      const argvPath = argvOutPath("pi-argv-");
       const conv = track(
         await openFake(piScript(), {
           store: newMemStore(),

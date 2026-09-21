@@ -5,7 +5,7 @@
 // tests require `dist/` to be current — CI builds before test, as it already
 // must for test/cli/run.test.ts.
 
-import { describe, expect, test, vi } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import { spawn, spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -210,10 +210,45 @@ describe("wrapper CLI subprocess — foreground passthrough", () => {
 });
 
 describe.skipIf(!hasTmux)("wrapper CLI subprocess — tmux round trip", () => {
+  // The session is a REAL detached tmux session, and tmux is a daemon: any
+  // throw before the kill line below leaks it, plus the `--mode stuck` node
+  // tree inside it, forever (PUPPET-327). Track the name so afterEach can
+  // reclaim it even when the test body never reaches its own kill.
+  let createdSession: string | null = null;
+
+  afterEach(() => {
+    if (createdSession === null) return;
+    // Best-effort: on the happy path the session is already gone, so a
+    // non-zero "no such session" here is the expected outcome, not a failure.
+    spawnSync(
+      "tmux",
+      ["kill-session", "-t", TMUX_SESSION_PREFIX + createdSession],
+      {
+        stdio: "ignore",
+      },
+    );
+    createdSession = null;
+  });
+
   test("spawn -> status --json -> kill", async () => {
     const name = `ws3-cli-${String(process.pid)}`;
+    createdSession = name;
+    // Explicit --trace-file, so resolveTracePath's default does NOT drop one
+    // more ws3-cli-*.trace.ndjson into ~/.meta-harness/sessions/ on every
+    // suite run (542 had accumulated by 2026-08-31). buildReexecArgv forwards
+    // the flag verbatim, so this is a test-side change only.
+    const traceDir = mkdtempSync(join(tmpdir(), "wrapper-tmux-test-"));
     const { proc, done } = spawnWrapperCli(
-      ["--tmux-session", name, "claude", "--", "--mode", "stuck"],
+      [
+        "--tmux-session",
+        name,
+        "--trace-file",
+        join(traceDir, "trace.ndjson"),
+        "claude",
+        "--",
+        "--mode",
+        "stuck",
+      ],
       {
         HARNESS_BINARY: mockHarnessBin,
       },

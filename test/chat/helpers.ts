@@ -49,6 +49,33 @@ export function trustRequest(): TurnsInputRequest {
   };
 }
 
+/**
+ * A bypass-acceptance request — claude's --dangerously-skip-permissions
+ * acceptance screen, which carries its OWN kind since PUPPET-526 rather than
+ * sharing `trust_prompt` with the folder-trust dialog above.
+ *
+ * The option ORDER mirrors the real screen (see fakeharness's BypassPrompt and
+ * the permission-mode corpora): option 1 is "No, exit" and option 2 is "Yes, I
+ * accept", the reverse of the folder-trust dialog. aliasForLabel therefore maps
+ * 1 → "deny" and 2 → "proceed", so denying this screen writes "1\r".
+ */
+export function bypassRequest(): TurnsInputRequest {
+  return {
+    id: "req-bypass-1",
+    kind: "bypass_acceptance",
+    prompt: "Bypass Permissions mode",
+    options: [
+      { id: "1", alias: "deny", label: "No, exit", keys: enc.encode("1\r") },
+      {
+        id: "2",
+        alias: "proceed",
+        label: "Yes, I accept",
+        keys: enc.encode("2\r"),
+      },
+    ],
+  };
+}
+
 /** A single-select clarifying-question request (AskUserQuestion dialog). */
 export function questionRequest(): TurnsInputRequest {
   return {

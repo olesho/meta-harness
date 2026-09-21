@@ -421,8 +421,9 @@ interface RunTurnRequestBody {
    * collaboration axis unset, which on this route stays permanently unset —
    * one-shot is unattended by construction. And because that rung sets
    * approval_policy="untrusted", codex can surface an `approval_prompt` that
-   * NOTHING on this route answers (AutoAcceptTrust covers `trust_prompt` only
-   * and has no default), so the run hangs until the client disconnects. Pass
+   * NOTHING on this route answers (AutoAcceptTrust covers claude-code's
+   * `trust_prompt` and `bypass_acceptance` startup screens, and carries no bare
+   * `default`), so the run hangs until the client disconnects. Pass
    * `timeout_seconds` for a bounded 504, or use POST /v1/conversations where a
    * client can answer via the /input route.
    */

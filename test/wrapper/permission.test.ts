@@ -65,6 +65,11 @@ describe("argsWithHarnessPermissionMode", () => {
       want: ["--permission-mode", "bypassPermissions", "-p", "prompt"],
     },
     {
+      // The REQUESTED side: dontAsk is emitted VERBATIM, never rewritten to
+      // `manual`. Deliberately different from the reported/observed side, which
+      // resolves it to the manual rung (effectiveLaunchRung / claudeFooterRungs)
+      // — argv has to say what claude understands, telemetry has to say which
+      // rung the session is on. Pinned in test/cli/structured-runner.test.ts.
       name: "claude native dontAsk",
       harness: "claude",
       args: ["-p", "prompt"],

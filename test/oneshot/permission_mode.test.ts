@@ -3,32 +3,18 @@
 // forward at that seam exists.
 
 import { describe, expect, test } from "vitest";
-import { existsSync, mkdtempSync, readFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-
 import { runOneShot } from "../../src/oneshot/index.ts";
 import { Context } from "../../src/internal/async/index.ts";
 import {
   New,
   PromptRef,
+  argvOutPath,
   fakeHarnessBin,
   fakeLaunchEnv,
+  readArgv,
   testIdleGap,
   testMarkerGap,
 } from "../chat/fakeharness.ts";
-
-/** The fake dumps its argv from its own run(); poll for it. */
-async function readArgv(path: string): Promise<string[]> {
-  for (let i = 0; i < 100; i++) {
-    if (existsSync(path)) {
-      const raw = readFileSync(path, "utf8");
-      if (raw !== "") return JSON.parse(raw) as string[];
-    }
-    await new Promise((r) => setTimeout(r, 50));
-  }
-  throw new Error(`fake harness never dumped its argv to ${path}`);
-}
 
 function oneShotScript() {
   return New("claude-code")
@@ -41,7 +27,7 @@ function oneShotScript() {
 
 describe("runOneShot permissionMode forwarding", () => {
   test("`bypass` launches claude with --permission-mode bypassPermissions", async () => {
-    const argvOut = join(mkdtempSync(join(tmpdir(), "os-argv-")), "argv.json");
+    const argvOut = argvOutPath("os-argv-");
     const { ctx, cancel } = Context.withDeadline(Context.background(), 8000);
     try {
       await runOneShot(ctx, {
@@ -65,7 +51,7 @@ describe("runOneShot permissionMode forwarding", () => {
   }, 20000);
 
   test("an unset permissionMode injects nothing", async () => {
-    const argvOut = join(mkdtempSync(join(tmpdir(), "os-argv-")), "argv.json");
+    const argvOut = argvOutPath("os-argv-");
     const { ctx, cancel } = Context.withDeadline(Context.background(), 8000);
     try {
       await runOneShot(ctx, {

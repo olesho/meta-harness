@@ -10,7 +10,7 @@
 // optionally echo the captured prompt back. See fakeharness.ts for the script
 // format and builder.
 
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFileSync, renameSync, writeFileSync } from "node:fs";
 
 const ENV_VAR = "FAKEHARNESS_SCRIPT";
 // When set, the launch argv (process.argv.slice(2)) is dumped as JSON to this
@@ -54,8 +54,14 @@ function holdUntilClosed() {
 async function run() {
   const argvOut = process.env[ARGV_OUT_VAR];
   if (argvOut) {
+    // Atomic: a reader must never observe a half-written array. Write to a
+    // sibling temp file and rename — same directory, so it is a single
+    // filesystem operation and "file exists" implies "file is complete JSON"
+    // (PUPPET-318).
     try {
-      writeFileSync(argvOut, JSON.stringify(process.argv.slice(2)));
+      const tmp = `${argvOut}.tmp`;
+      writeFileSync(tmp, JSON.stringify(process.argv.slice(2)));
+      renameSync(tmp, argvOut);
     } catch {
       /* best effort */
     }

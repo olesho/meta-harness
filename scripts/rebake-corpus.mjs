@@ -20,13 +20,18 @@
 //
 // Scenario coverage is PER-HARNESS (see SCENARIOS): the on-disk corpus and the
 // scripted-driver coverage differ per harness, so a single flat array cannot
-// describe the matrix. This ticket's live matrix:
-//   claude-code: multi-turn, tool-call, interrupted-mid-reply  (3)
+// describe the matrix. The live matrix:
+//   claude-code: multi-turn, tool-call, interrupted-mid-reply, trust-dialog (4)
 //   codex:       multi-turn, tool-call                          (2)
 //   pi:          (deferred — pinned so rebake iterates it, but no scripted
 //                 scenario corpus and no interrupt-confirmation anchor)  (0)
-// = 5 live cells. Harnesses absent from the map rebake nothing (logged, not
+// = 6 live cells. Harnesses absent from the map rebake nothing (logged, not
 // silently skipped). Enabling pi / extra codex scenarios is a map + catalog edit.
+//
+// trust-dialog is the one cell with an UNTRUSTED-WORKDIR precondition: claude
+// persists folder trust per absolute path, so the recorder mints a fresh temp
+// directory per run and skips its trust-accepting warmup pass. Nothing is passed
+// here to arrange that — it follows from the scenario's `freshWorkdir` flag.
 //
 //   Manifest path:  env META_HARNESS_REBAKE_MANIFEST, else ./versions.rebake.json
 //   Recorder:       env META_HARNESS_SCREENBENCH_RECORD, else `meta-harness-screenbench-record` on PATH
@@ -54,7 +59,12 @@ const ExitRecorderAbsent = 3;
 // so on-disk presence is an output, not a precondition). Harnesses absent from
 // this map (pi, any unpinned/unsupported harness) rebake nothing.
 const SCENARIOS = {
-  "claude-code": ["multi-turn", "tool-call", "interrupted-mid-reply"],
+  "claude-code": [
+    "multi-turn",
+    "tool-call",
+    "interrupted-mid-reply",
+    "trust-dialog",
+  ],
   codex: ["multi-turn", "tool-call"], // interrupt excluded: no BusyDetector/interrupt seam
   // "pi": deferred — pi is pinned so rebake iterates it, but it has no scripted
   //   scenario corpus and no interrupt-confirmation anchor. Omitted here so the

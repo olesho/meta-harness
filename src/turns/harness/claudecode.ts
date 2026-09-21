@@ -61,7 +61,30 @@ const interruptMarker = "⎿  Interrupted · What should Claude do instead?";
 // Blocking-dialog anchors.
 const trustAnchor = "Do you trust the files in this folder?";
 const trustAnchorAlt = "Is this a project you created or one you trust?";
+// bypassAnchor is the --dangerously-skip-permissions acceptance screen, which
+// is itself a blocking confirm even though it "skips" permissions. It carries
+// its OWN kind (KindBypassAcceptance), not the folder-trust one: every policy
+// surface keys on `kind` alone, so sharing a kind with folder trust made "trust
+// this folder, but never silently accept a skip-all-permissions launch"
+// inexpressible.
 const bypassAnchor = "Bypass Permissions mode";
+
+/**
+ * Input kinds this adapter stamps on InputRequest.kind. They are the keys a
+ * declarative policy matches on (chat's InputPolicy.byKind), so they are
+ * exported: a consumer that wants to answer one screen and refuse the other
+ * should name these constants rather than repeat the string literals.
+ *
+ * KindTrustPrompt is the folder-trust dialog, in either phrasing.
+ */
+export const KindTrustPrompt = "trust_prompt";
+/**
+ * KindBypassAcceptance is the --dangerously-skip-permissions acceptance
+ * screen. Split out of KindTrustPrompt so a policy can trust a folder without
+ * also accepting a skip-all-permissions launch. Twin of harness-wrapper's
+ * claudecode.KindBypassAcceptance (PUPPET-507).
+ */
+export const KindBypassAcceptance = "bypass_acceptance";
 
 // AskUserQuestion dialog anchors (verified live against 2.1.210). The dialog
 // renders a tab-strip line ("☐ Color", or "←  ☒ Color  ☐ Size  ✔ Submit  →"
@@ -452,19 +475,32 @@ export function New(): ClaudeCodeAdapter {
  * text and returns the structured request, or null when none is present.
  * Startup dialogs (trust/bypass) win over question dialogs; the two cannot
  * render simultaneously.
+ *
+ * The startup dialogs carry TWO distinct kinds: the folder-trust dialog (either
+ * phrasing) is KindTrustPrompt, and the --dangerously-skip-permissions
+ * acceptance screen is KindBypassAcceptance.
  */
 export function DetectInput(text: string): InputRequest | null {
   let prompt: string;
-  if (text.includes(trustAnchor)) prompt = trustAnchor;
-  else if (text.includes(trustAnchorAlt)) prompt = trustAnchorAlt;
-  else if (text.includes(bypassAnchor)) prompt = bypassAnchor;
-  else return DetectQuestion(text);
+  let kind: string;
+  // Order matters and must not change: a screen that contains BOTH a trust
+  // anchor and the bypass phrase resolves to trust, exactly as it always has.
+  if (text.includes(trustAnchor)) {
+    prompt = trustAnchor;
+    kind = KindTrustPrompt;
+  } else if (text.includes(trustAnchorAlt)) {
+    prompt = trustAnchorAlt;
+    kind = KindTrustPrompt;
+  } else if (text.includes(bypassAnchor)) {
+    prompt = bypassAnchor;
+    kind = KindBypassAcceptance;
+  } else return DetectQuestion(text);
 
   const opts = parseMenuOptions(text);
   if (opts.length === 0) return null; // anchor visible but menu not rendered yet
   const req: InputRequest = {
     id: "",
-    kind: "trust_prompt",
+    kind,
     prompt,
     options: opts,
   };

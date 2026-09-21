@@ -200,12 +200,32 @@ describe("Credential leak probe", () => {
     }
   });
 
+  // credentialLeakProbe() emits each name split on "_" (['A','B']) and shell-quotes
+  // the whole node script, escaping every ' as '\''. Rebuild the emitted text for a
+  // name so assertions match the real command.
+  const partsLiteral = (name: string): string =>
+    (
+      "[" +
+      name
+        .split("_")
+        .map((p) => `'${p}'`)
+        .join(",") +
+      "]"
+    ).replace(/'/g, "'\\''");
+
   test("leak probe list and probe implementation match", () => {
     const cmd = credentialLeakProbe();
 
-    // The command should reference each sensitive name
+    // The command should reference each sensitive name. Names are emitted SPLIT
+    // on "_" so the probe source carries no literal secret name, and the whole
+    // script is shell-quoted, so reconstruct the parts-literal through the same
+    // escaping rather than looking for the bare name.
     for (const name of CREDENTIAL_SENSITIVE_ENV_NAMES) {
-      expect(cmd).toContain(name);
+      expect(cmd).toContain(partsLiteral(name));
+    }
+    // ...and no bare name leaks into the emitted source.
+    for (const name of CREDENTIAL_SENSITIVE_ENV_NAMES) {
+      expect(cmd).not.toContain(name);
     }
 
     // The command should have the expected structure
@@ -227,9 +247,10 @@ describe("Credential leak probe", () => {
     const probeCmd = credentialLeakProbe();
     const injectorRedactions = injector.redactions();
 
-    // CLAUDE_CODE_OAUTH_TOKEN should be in the leak probe
+    // CLAUDE_CODE_OAUTH_TOKEN should be in the leak probe (as a parts-literal —
+    // see partsLiteral() on the obfuscation the probe applies).
     expect(CREDENTIAL_SENSITIVE_ENV_NAMES).toContain("CLAUDE_CODE_OAUTH_TOKEN");
-    expect(probeCmd).toContain("CLAUDE_CODE_OAUTH_TOKEN");
+    expect(probeCmd).toContain(partsLiteral("CLAUDE_CODE_OAUTH_TOKEN"));
 
     // The injector redacts the actual token value, not the env name
     expect(injectorRedactions).toContain(token);

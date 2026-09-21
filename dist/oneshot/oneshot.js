@@ -7,7 +7,9 @@
 // disposable one-shot contract the Go `harness-wrapper run` provided: prompt in,
 // clean reply out, one turn, then exit.
 import { Open, newMemStore, DispositionAnswer, EventTurn, RoleAssistant, TurnStateComplete, TurnStateErrored, } from "../chat/index.js";
+import { isClaudeNestingEnvKey } from "../chat/env.js";
 import { Context, ctxDeadlineExceeded } from "../internal/async/index.js";
+import { claudecode } from "../turns/index.js";
 /** Thrown when the run's deadline (or an ancestor deadline) fired before completion. */
 export class DeadlineError extends Error {
     constructor(message = "one-shot: context deadline exceeded") {
@@ -32,19 +34,45 @@ export class EmptyPromptError extends Error {
     }
 }
 /**
- * AutoAcceptTrust — the input policy the one-shot loop installs. It answers the
- * claude-code folder-trust / bypass startup dialog with its "proceed" option so
- * an unattended turn is never wedged behind a trust prompt. Mirrors the Go
- * run.go one-shot `AUTO_ACCEPT_TRUST` input policy.
+ * AutoAcceptTrust — the input policy the one-shot loop installs. It answers
+ * claude-code's blocking startup dialogs with their "proceed" option so an
+ * unattended turn is never wedged behind one. Mirrors the Go run.go one-shot
+ * `AUTO_ACCEPT_TRUST` input policy.
+ *
+ * It names TWO kinds, deliberately and explicitly: `trust_prompt` (the
+ * folder-trust dialog) and `bypass_acceptance` (the
+ * --dangerously-skip-permissions, "Bypass Permissions mode", acceptance
+ * screen). These are DISTINCT kinds — claudecode.DetectInput used to stamp both
+ * screens `trust_prompt`, so the entry written for folder trust silently
+ * accepted a skip-all-permissions launch and no policy could separate them
+ * (PUPPET-526, twin of harness-wrapper's PUPPET-507). Naming both here keeps
+ * unattended one-shot behaviour byte-identical, and makes accepting the bypass
+ * screen a choice on the record rather than a side effect.
+ *
+ * What it still does NOT cover: mid-turn `question` dialogs, and codex's
+ * `approval_prompt`. It carries no bare `default`, so those stall an unattended
+ * turn to the deadline.
  */
 export const AutoAcceptTrust = {
     byKind: {
-        trust_prompt: { kind: DispositionAnswer, optionID: "proceed" },
+        [claudecode.KindTrustPrompt]: {
+            kind: DispositionAnswer,
+            optionID: "proceed",
+        },
+        [claudecode.KindBypassAcceptance]: {
+            kind: DispositionAnswer,
+            optionID: "proceed",
+        },
     },
 };
-/** Environment keys that leak the outer Claude Code session into the child harness. */
+/**
+ * Environment keys that leak the outer Claude Code session into the child
+ * harness. Delegates to {@link isClaudeNestingEnvKey}, the canonical definition
+ * in src/chat/env.ts — including its CLAUDE_CODE_OAUTH_TOKEN exemption, which
+ * is a credential rather than a nesting marker (PUPPET-309).
+ */
 export function isLeakedClaudeEnv(key) {
-    return key === "CLAUDECODE" || key.startsWith("CLAUDE_CODE_");
+    return isClaudeNestingEnvKey(key);
 }
 /**
  * cleanEnv returns `env` (KEY=VALUE strings) with the CLAUDECODE / CLAUDE_CODE_*

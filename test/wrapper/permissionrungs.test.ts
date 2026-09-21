@@ -20,6 +20,14 @@ describe("permissionRungs", () => {
     expect(permissionRungs()).not.toContain("acceptEdits");
   });
 
+  test("dontAsk is NOT a rung either — it reports manual, it does not join the ladder", () => {
+    // claude ranks dontAsk EQUAL to default (= manual). The ladder is a strict
+    // total order, so it cannot carry a tie: dontAsk stays a native spelling
+    // that claudeRung maps onto the existing rung.
+    expect(permissionRungs()).not.toContain("dontAsk");
+    expect(permissionRungs()).toHaveLength(5);
+  });
+
   test("a fresh array per call: mutating the result cannot corrupt a later one", () => {
     const first = permissionRungs();
     first.reverse();
@@ -57,6 +65,23 @@ describe("morePermissive", () => {
     },
     { name: "typo a", a: "byapss", b: "plan", want: false },
     { name: "typo b", a: "bypass", b: "plann", want: false },
+    // claudeRung now maps `dontAsk` onto the manual rung, but the LADDER is
+    // unchanged: `dontAsk` is a native spelling, never a member of
+    // permissionRungs(), so rungIndex still returns -1 for it and this ordering
+    // helper still fails closed on BOTH sides. Normalise through claudeRung
+    // first if you want it compared.
+    {
+      name: "native spelling a (dontAsk)",
+      a: "dontAsk",
+      b: "plan",
+      want: false,
+    },
+    {
+      name: "native spelling b (dontAsk)",
+      a: "bypass",
+      b: "dontAsk",
+      want: false,
+    },
   ];
   for (const tc of cases) {
     test(tc.name, () => {
@@ -581,18 +606,40 @@ describe("effectiveLaunchRung — claude", () => {
       want: "ask",
     },
     {
-      name: "dontAsk in argv has NO canonical rung -> UNKNOWN, never guessed into ask/auto",
+      // claude's own permissiveness rank table ties dontAsk with default
+      // (= manual) at rank 1, so it is a SECOND SPELLING of the manual rung —
+      // exactly as acceptEdits is of ask — and never a sixth rung. The SDK
+      // schema ("deny if not pre-approved") makes it strictly MORE restrictive
+      // than manual, so reporting manual can never under-report permissiveness.
+      name: "dontAsk in argv reports the existing manual rung, never a sixth",
       harness: "claude",
       args: ["--permission-mode", "dontAsk"],
       mode: "",
-      want: "",
+      want: "manual",
     },
     {
-      name: "dontAsk as the knob -> UNKNOWN",
+      name: "the attached --permission-mode=dontAsk form reports manual too",
+      harness: "claude",
+      args: ["--permission-mode=dontAsk"],
+      mode: "",
+      want: "manual",
+    },
+    {
+      name: "dontAsk as the knob -> manual",
       harness: "claude",
       args: [],
       mode: "dontAsk",
-      want: "",
+      want: "manual",
+    },
+    {
+      // The rung LADDER is a strict total order and cannot express the tie, so
+      // dontAsk is not a member of it: rungIndex must keep returning -1 and the
+      // ordering helpers must keep failing closed on the native spelling.
+      name: "a dontAsk launch is a definite NON-bypass posture",
+      harness: "claude",
+      args: ["--permission-mode", "dontAsk"],
+      mode: "bypass",
+      want: "manual",
     },
     {
       name: "trailing --permission-mode (no operand) -> UNKNOWN",
@@ -773,17 +820,18 @@ describe("effectiveLaunchRung — claude, --allow-dangerously-skip-permissions U
   // of every assertion is today's behaviour, restated so a row cannot pass by
   // both halves drifting together.
   //
-  // dontAsk and claude's hidden `default` alias have no canonical rung on this
-  // side (claudeRung -> ""); Go's claudeRung maps dontAsk to manual. That is a
-  // pre-existing TS/Go divergence this contract does not touch — the unlock
-  // flag must simply leave each value where it was.
+  // claude's hidden `default` alias has no canonical rung on this side
+  // (claudeRung -> ""). dontAsk reports `manual` since PUPPET-510, matching
+  // Go's claudeRung — the TS/Go divergence this comment used to note is gone.
+  // Either way this contract does not care WHICH rung a value lands on, only
+  // that the unlock flag leaves it where it was.
   const knobs: [mode: string, want: string][] = [
     ["plan", "plan"],
     ["manual", "manual"],
     ["ask", "ask"],
     ["acceptEdits", "ask"],
     ["auto", "auto"],
-    ["dontAsk", ""],
+    ["dontAsk", "manual"],
   ];
   for (const [mode, want] of knobs) {
     test(`requested ${mode} -> ${want || "UNKNOWN"} with or without the unlock flag`, () => {
@@ -801,7 +849,7 @@ describe("effectiveLaunchRung — claude, --allow-dangerously-skip-permissions U
     ["manual", "manual"],
     ["acceptEdits", "ask"],
     ["auto", "auto"],
-    ["dontAsk", ""],
+    ["dontAsk", "manual"],
     ["default", ""],
   ];
   for (const [value, want] of argvValues) {

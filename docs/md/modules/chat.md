@@ -321,7 +321,10 @@ interface InputPolicy {
 }
 ```
 
-`byKind[req.kind]` wins over `default`. The client-surfaced `kind`s are `trust_prompt`,
+`byKind[req.kind]` wins over `default`. The client-surfaced `kind`s are `trust_prompt`
+(the folder-trust dialog), `bypass_acceptance` (Claude Code's
+`--dangerously-skip-permissions` acceptance screen — a separate kind, so a policy can
+answer folder trust without also accepting a skip-all-permissions launch),
 `menu_select`, `confirm`, `text_input`, `question`, `question_review` (both below), and
 `approval_prompt` (Codex's command / apply-patch approval dialog — options carry
 `proceed`/`deny` aliases). See

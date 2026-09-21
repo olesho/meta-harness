@@ -92,10 +92,13 @@ export interface InputRequest {
     /** Stable across redraws of the SAME prompt; changes for a new prompt. */
     id: string;
     /**
-     * "trust_prompt" | "menu_select" | "confirm" | "text_input" | "question"
-     * (the harness asked the user a clarifying question mid-turn) |
-     * "question_review" (the submit/cancel confirmation after the last
-     * question of a multi-question or multi-select dialog) | harness kinds.
+     * "trust_prompt" | "bypass_acceptance" | "menu_select" | "confirm" |
+     * "text_input" | "question" (the harness asked the user a clarifying question
+     * mid-turn) | "question_review" (the submit/cancel confirmation after the
+     * last question of a multi-question or multi-select dialog) | harness kinds.
+     * "trust_prompt" is the folder-trust dialog and "bypass_acceptance"
+     * claude-code's --dangerously-skip-permissions acceptance screen; they are
+     * separate kinds so a policy can answer one without answering the other.
      */
     kind: string;
     /** The question text shown to the user. */

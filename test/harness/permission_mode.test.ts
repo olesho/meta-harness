@@ -1,27 +1,18 @@
 // TurnConfig.permissionMode must reach the wrapper Config. runTurn forwards a
 // possibly-undefined cfg.inputPolicy, so a claude `bypass` here is also the case
-// where chat's default trust_prompt policy kicks in (see launchInputPolicy).
+// where chat's default bypass_acceptance policy kicks in (see
+// launchInputPolicy; PUPPET-526 split that kind out of `trust_prompt`).
 
 import { describe, expect, test } from "vitest";
-import { existsSync, mkdtempSync, readFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-
 import { runTurn } from "../../src/harness/internal/runTurn.ts";
 import { TurnStateComplete } from "../../src/chat/index.ts";
-import { New, fakeHarnessBin, fakeLaunchEnv } from "../chat/fakeharness.ts";
-
-/** The fake dumps its argv from its own run(); poll for it. */
-async function readArgv(path: string): Promise<string[]> {
-  for (let i = 0; i < 100; i++) {
-    if (existsSync(path)) {
-      const raw = readFileSync(path, "utf8");
-      if (raw !== "") return JSON.parse(raw) as string[];
-    }
-    await new Promise((r) => setTimeout(r, 50));
-  }
-  throw new Error(`fake harness never dumped its argv to ${path}`);
-}
+import {
+  New,
+  argvOutPath,
+  fakeHarnessBin,
+  fakeLaunchEnv,
+  readArgv,
+} from "../chat/fakeharness.ts";
 
 function turnScript() {
   return New("claude-code")
@@ -34,7 +25,7 @@ function turnScript() {
 
 describe("runTurn permissionMode forwarding", () => {
   test("`plan` launches claude with --permission-mode plan", async () => {
-    const argvOut = join(mkdtempSync(join(tmpdir(), "rt-argv-")), "argv.json");
+    const argvOut = argvOutPath("rt-argv-");
 
     const result = await runTurn(undefined, {
       harness: "claude",
@@ -52,7 +43,7 @@ describe("runTurn permissionMode forwarding", () => {
   }, 30000);
 
   test("an unset permissionMode injects nothing", async () => {
-    const argvOut = join(mkdtempSync(join(tmpdir(), "rt-argv-")), "argv.json");
+    const argvOut = argvOutPath("rt-argv-");
 
     const result = await runTurn(undefined, {
       harness: "claude",

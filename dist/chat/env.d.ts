@@ -1,4 +1,7 @@
-/** True for CLAUDECODE and any CLAUDE_CODE_* variable (the nesting markers). */
+/**
+ * True for CLAUDECODE and any CLAUDE_CODE_* variable (the nesting markers),
+ * except the credential keys in {@link NESTING_EXEMPT}.
+ */
 export declare function isClaudeNestingEnvKey(key: string): boolean;
 /**
  * Return env (as "KEY=VALUE" entries) with Claude Code's nesting markers

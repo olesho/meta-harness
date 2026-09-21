@@ -29,8 +29,8 @@
 //  2. /status always PRINTS a `Collaboration mode:` row; under every rung above
 //     it reads `Default`. "Collaboration axis unset" therefore means "not set
 //     to Plan", NOT "the row is absent". The claude bypass screen in particular
-//     is load-bearing: it is the premise of the default `trust_prompt` policy
-//     launchInputPolicy installs in src/chat/conversation.ts, and it does still
+//     is load-bearing: it is the premise of the default `bypass_acceptance`
+//     policy launchInputPolicy installs in src/chat/conversation.ts, and it does still
 //     paint on a fresh HOME (probed with an otherwise-authenticated HOME that
 //     carried no prior trust/bypass acceptance).
 //
@@ -257,8 +257,10 @@ export function argsWithHarnessPermissionMode(
  *	"none"   nothing in args pins permissions, so argsWithHarnessPermissionMode
  *	         WOULD inject — the all-or-nothing precedence's complement;
  *	"native" pinned by a single --permission-mode flag whose operand is readable
- *	         and non-empty, but which names no canonical rung (claude's dontAsk
- *	         at 2.1.217, or a spelling a newer claude added). `value` is that
+ *	         and non-empty, but which names no canonical rung — i.e. a spelling
+ *	         a claude newer than 2.1.261 added. (`dontAsk` USED to be the one
+ *	         live example; it now names the manual rung, so effectiveLaunchRung
+ *	         resolves it and it never reaches this kind.) `value` is that
  *	         operand VERBATIM — the caller reports it rather than erasing a
  *	         precisely-known posture behind a sentinel;
  *	"opaque" pinned, but no single token names the result: a valueless or

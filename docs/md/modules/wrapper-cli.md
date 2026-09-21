@@ -97,12 +97,23 @@ at different points in the launch and answer different questions:
   harness's argv before the PTY ever starts. See [`wrapper` › Permission
   mode](wrapper.md#permission-mode) for the rung → flag mapping (not restated here).
 - `AutoAcceptTrust` ([`src/oneshot/oneshot.ts`](../../../src/oneshot/oneshot.ts)) is a **runtime
-  input policy**: it answers a `trust_prompt` dialog that appears after the harness is already
-  running, mirroring Go's `run.go` `AUTO_ACCEPT_TRUST` policy. It is applied in unattended
-  contexts (the one-shot loop and the gateway) rather than being flipped per invocation.
+  input policy**: it answers the `trust_prompt` and `bypass_acceptance` startup dialogs that
+  appear after the harness is already running, mirroring Go's `run.go` `AUTO_ACCEPT_TRUST`
+  policy. It is applied in unattended contexts (the one-shot loop and the gateway) rather
+  than being flipped per invocation.
 
 These two are coupled: selecting the most permissive rung on claude paints a blocking
-"Bypass Permissions" dialog on a fresh `HOME`, and the launch path installs a default
-`trust_prompt` answer to dismiss it — but **only** when the caller supplied no `trust_prompt`
-disposition of its own. A caller-supplied input policy always wins over that default, the
-same way an explicit one-shot `AutoAcceptTrust` already takes precedence over nothing.
+"Bypass Permissions" dialog on a fresh `HOME`, and the launch path (`launchInputPolicy` in
+[`src/chat/conversation.ts`](../../../src/chat/conversation.ts)) installs a default answer
+for that screen's own kind, `bypass_acceptance`. A caller-supplied input policy always wins
+over that default; the resolution order is:
+
+1. the caller already resolves `bypass_acceptance` — an explicit `byKind` entry, or a bare
+   `default` disposition — so the policy passes through untouched;
+2. otherwise, if the caller supplied an explicit `byKind.trust_prompt` disposition, **that
+   same disposition** is copied onto `bypass_acceptance`. This is a compatibility shim for
+   the spelling that predates the two kinds being split: a caller who wrote
+   `trust_prompt: deny` to refuse a bypass launch still gets a refusal, not a silent
+   "proceed". It will be retired once callers name `bypass_acceptance`;
+3. otherwise a `{ DispositionAnswer, optionID: "proceed" }` entry is injected on
+   `bypass_acceptance`, which is what dismisses the dialog.

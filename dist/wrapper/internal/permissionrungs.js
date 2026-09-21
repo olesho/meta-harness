@@ -365,13 +365,40 @@ function codexRung(value) {
 }
 /**
  * claudeRung normalizes a canonical rung or a claude-native --permission-mode
- * value to a canonical rung. claude's dontAsk has NO canonical rung and so
- * reports unknown ("") rather than being guessed into ask or auto.
+ * value to a canonical rung.
+ *
+ * `dontAsk` reports the EXISTING `manual` rung; no sixth rung is added. That is
+ * claude's own ranking, not a judgement call. Its bundle (2.1.261) carries the
+ * permissiveness rank table
+ *
+ *     { plan:0, bubble:1, default:1, dontAsk:1, acceptEdits:2, auto:3,
+ *       bypassPermissions:4 }
+ *
+ * in which `dontAsk` and `default` (= `manual`) SHARE rank 1. A shared rank is
+ * exactly what "a second spelling of an existing rung" looks like — the same
+ * relationship `acceptEdits` has to `ask` — and permissionRungs() is a strict
+ * total order that cannot express a tie, so the tie has to resolve onto the
+ * rung already there rather than growing the ladder.
+ *
+ * Safe in the one direction that matters: claude's SDK schema describes
+ * `dontAsk` as "Don't prompt for permissions, deny if not pre-approved", i.e.
+ * strictly MORE restrictive than `manual` in effect, so reporting `manual` can
+ * never UNDER-report permissiveness. (Over-reporting restriction is the
+ * accepted residual — see setPermissionMode's docstring in
+ * src/chat/conversation.ts.)
+ *
+ * It stays a native SPELLING, never a ladder member: rungIndex("dontAsk") is
+ * still -1 and morePermissive() still fails closed on it. It is also launch-only
+ * — claude's own footer-ring function yields ["plan","default","acceptEdits"]
+ * (+ auto / + bypassPermissions when enabled) and omits `dontAsk` — so this
+ * mapping cannot corrupt the cycle driver's ring model.
  */
 function claudeRung(value) {
     switch (value) {
         case ClaudeModeAcceptEdits:
             return PermissionModeAsk;
+        case ClaudeModeDontAsk:
+            return PermissionModeManual;
         case ClaudeModeBypassPermissions:
             return PermissionModeBypass;
         default:

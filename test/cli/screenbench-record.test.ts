@@ -11,6 +11,7 @@ import { spawnSync } from "node:child_process";
 import {
   chmodSync,
   existsSync,
+  mkdirSync,
   mkdtempSync,
   readFileSync,
   writeFileSync,
@@ -25,11 +26,13 @@ import {
   main,
   scenarios,
   interruptSpecs,
+  dialogSpecs,
+  claudeTrustState,
   ExitOK,
   ExitError,
   ExitUsage,
 } from "../../src/cli/screenbench-record.ts";
-import { New } from "../chat/fakeharness.ts";
+import { New, type Builder } from "../chat/fakeharness.ts";
 import { newScreen } from "../../src/screen/index.ts";
 import { NormalizedDistance } from "../corpus/tools/screenbench-metrics.ts";
 
@@ -64,16 +67,35 @@ function codexScript(turns: number): string {
   return p;
 }
 
+/**
+ * claudeScript writes a claude-code fake-harness script built by `build` and
+ * returns its path. Used by the trust-dialog recordings, whose terminal state is
+ * a blocking dialog rather than a TurnComplete.
+ */
+function claudeScript(build: (b: Builder) => Builder): string {
+  const b = build(New("claude-code"));
+  const dir = mkdtempSync(join(tmpdir(), "sbrec-script-"));
+  const p = join(dir, "script.json");
+  writeFileSync(p, JSON.stringify(b.Build()), { mode: 0o600 });
+  return p;
+}
+
 /** Runs main() with FAKEHARNESS_SCRIPT/FAKE_HARNESS_VERSION set for the child PTY. */
 async function runRecorder(
   argv: string[],
   scriptPath: string,
   version = FAKE_VERSION,
+  extraEnv: Record<string, string> = {},
 ): Promise<number> {
   const prevScript = process.env.FAKEHARNESS_SCRIPT;
   const prevVersion = process.env.FAKE_HARNESS_VERSION;
+  const prevExtra = new Map<string, string | undefined>();
   process.env.FAKEHARNESS_SCRIPT = scriptPath;
   process.env.FAKE_HARNESS_VERSION = version;
+  for (const [k, v] of Object.entries(extraEnv)) {
+    prevExtra.set(k, process.env[k]);
+    process.env[k] = v;
+  }
   try {
     return await main(argv);
   } finally {
@@ -81,6 +103,10 @@ async function runRecorder(
     else process.env.FAKEHARNESS_SCRIPT = prevScript;
     if (prevVersion === undefined) delete process.env.FAKE_HARNESS_VERSION;
     else process.env.FAKE_HARNESS_VERSION = prevVersion;
+    for (const [k, v] of prevExtra) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
   }
 }
 
@@ -135,6 +161,58 @@ describe("parseArgs", () => {
   test("--help short-circuits", () => {
     expect(parseArgs(["--help"]).help).toBe(true);
   });
+
+  // --workdir is a TRUE ALIAS of --cwd: one field, two spellings. It is not a
+  // second concept, and a disagreeing pair is a caller bug, not last-wins.
+  test("--workdir writes the same field as --cwd", () => {
+    const spaced = parseArgs([
+      "--harness",
+      "codex",
+      "--out",
+      "/x/y",
+      "--workdir",
+      "/x",
+    ]);
+    expect(spaced.error).toBeUndefined();
+    expect(spaced.cwd).toBe("/x");
+
+    const inline = parseArgs([
+      "--harness",
+      "codex",
+      "--out",
+      "/x/y",
+      "--workdir=/x",
+    ]);
+    expect(inline.error).toBeUndefined();
+    expect(inline.cwd).toBe("/x");
+  });
+
+  test("--cwd and --workdir agree: fine; disagree: usage error", () => {
+    const same = parseArgs([
+      "--harness",
+      "codex",
+      "--out",
+      "/x/y",
+      "--cwd",
+      "/a",
+      "--workdir",
+      "/a",
+    ]);
+    expect(same.error).toBeUndefined();
+    expect(same.cwd).toBe("/a");
+
+    const clash = parseArgs([
+      "--harness",
+      "codex",
+      "--out",
+      "/x/y",
+      "--cwd",
+      "/a",
+      "--workdir",
+      "/b",
+    ]);
+    expect(clash.error).toBeDefined();
+  });
 });
 
 describe("normalizeVersion", () => {
@@ -153,6 +231,85 @@ describe("catalog invariants", () => {
     expect(interruptSpecs["claude-code"]).toBeDefined();
     expect(interruptSpecs["codex"]).toBeUndefined();
   });
+
+  test("trust-dialog is a promptless, dialog-terminated, fresh-workdir cell", () => {
+    const sc = scenarios["trust-dialog"];
+    expect(sc.dialog).toBe(true);
+    expect(sc.freshWorkdir).toBe(true);
+    expect(sc.prompts.length).toBe(0);
+  });
+
+  test("the startup dialog is claude-code-only", () => {
+    expect(dialogSpecs["claude-code"]).toBeDefined();
+    expect(dialogSpecs["codex"]).toBeUndefined();
+  });
+
+  // Guards a copy-paste divergence: the recorder's dialog anchors must be the
+  // SAME strings src/chat/ready.ts blocks on, or the recorder could settle on a
+  // frame the readiness gate does not consider a dialog (or vice versa).
+  test("dialog anchors are exactly the readiness layer's trust anchors", () => {
+    expect([...dialogSpecs["claude-code"].anchors].sort()).toEqual(
+      [
+        "Do you trust the files in this folder?",
+        "Is this a project you created or one you trust?",
+      ].sort(),
+    );
+  });
+});
+
+describe("claudeTrustState", () => {
+  const fixture = join(here, "testdata", "claude-trusted.json");
+
+  test("an accepted entry reports true", () => {
+    expect(
+      claudeTrustState("/private/tmp/meta-harness-fixture-trusted", fixture),
+    ).toBe(true);
+  });
+
+  test("a seen-but-declined entry reports false, not true", () => {
+    // `false` is the normal "launched here, said no" state — the dialog still
+    // fires, so this must NOT block a recording.
+    expect(
+      claudeTrustState("/private/tmp/meta-harness-fixture-seen", fixture),
+    ).toBe(false);
+  });
+
+  test("an unknown path reports false", () => {
+    expect(claudeTrustState("/private/tmp/never-launched-here", fixture)).toBe(
+      false,
+    );
+  });
+
+  // null is "cannot tell", NOT "trusted" — an unreadable config must not block a
+  // legitimate recording.
+  test("a missing config reports null", () => {
+    expect(
+      claudeTrustState(
+        "/private/tmp/meta-harness-fixture-trusted",
+        join(here, "testdata", "no-such-claude-config.json"),
+      ),
+    ).toBeNull();
+  });
+
+  test("a malformed config reports null", () => {
+    const bad = join(mkdtempSync(join(tmpdir(), "sbrec-cfg-")), "claude.json");
+    writeFileSync(bad, "{ not json");
+    expect(
+      claudeTrustState("/private/tmp/meta-harness-fixture-trusted", bad),
+    ).toBeNull();
+  });
+
+  test.runIf(process.platform === "darwin")(
+    "a /tmp path matches a config entry stored as /private/tmp",
+    () => {
+      // On macOS /tmp is a symlink to /private/tmp and claude stores the
+      // resolved path. A raw-only comparison would make this check silently
+      // useless exactly where recordings are taken.
+      const raw = "/tmp/meta-harness-fixture-trusted";
+      mkdirSync(raw, { recursive: true });
+      expect(claudeTrustState(raw, fixture)).toBe(true);
+    },
+  );
 });
 
 // ---- recording tests (real PTY, hermetic fake harness) ----------------------
@@ -276,6 +433,58 @@ describe("recorder end-to-end", () => {
     expect(existsSync(join(out, "meta.json"))).toBe(false);
   });
 
+  // Dialog gate: mirrors the interrupt-gate test exactly — an unsupported
+  // (harness × capability) pair errors BEFORE any file is written.
+  test("dialog scenario for codex fails with no partial", async () => {
+    const out = outDir("trust-dialog");
+    const code = await runRecorder(
+      [
+        "--harness",
+        "codex",
+        "--out",
+        out,
+        "--scenario",
+        "trust-dialog",
+        "--bin",
+        fakeHarness,
+      ],
+      codexScript(1),
+    );
+    expect(code).toBe(ExitError);
+    expect(existsSync(out)).toBe(false);
+  });
+
+  // Untrusted-directory precondition: an explicit --cwd claude has already been
+  // trusted in would record a ready composer, not the dialog.
+  test("trust-dialog into an already-trusted --cwd fails with no partial", async () => {
+    const out = outDir("trust-dialog");
+    const code = await runRecorder(
+      [
+        "--harness",
+        "claude-code",
+        "--out",
+        out,
+        "--scenario",
+        "trust-dialog",
+        "--cwd",
+        "/private/tmp/meta-harness-fixture-trusted",
+        "--bin",
+        fakeHarness,
+      ],
+      claudeScript((b) => b.ClaudeTrustPrompt(0).StayAliveUntilStopped()),
+      FAKE_VERSION,
+      {
+        META_HARNESS_CLAUDE_CONFIG: join(
+          here,
+          "testdata",
+          "claude-trusted.json",
+        ),
+      },
+    );
+    expect(code).toBe(ExitError);
+    expect(existsSync(out)).toBe(false);
+  });
+
   test("unknown scenario name is a usage error", async () => {
     const out = outDir("no-such-scenario");
     const code = await runRecorder(
@@ -283,6 +492,103 @@ describe("recorder end-to-end", () => {
       codexScript(1),
     );
     expect(code).toBe(ExitUsage);
+  });
+});
+
+describe("recorder: trust-dialog (dialog-terminated scenario)", () => {
+  const anchor = "Is this a project you created or one you trust?";
+
+  test("records the unanswered dialog frame as a valid, self-consistent triple", async () => {
+    const out = outDir("trust-dialog");
+    const spawnLog = join(mkdtempSync(join(tmpdir(), "sbrec-spawn-")), "log");
+    const code = await runRecorder(
+      [
+        "--harness",
+        "claude-code",
+        "--scenario",
+        "trust-dialog",
+        "--out",
+        out,
+        "--bin",
+        fakeHarness,
+      ],
+      claudeScript((b) => b.ClaudeTrustPrompt(0).StayAliveUntilStopped()),
+      FAKE_VERSION,
+      { FAKE_HARNESS_SPAWN_LOG: spawnLog },
+    );
+    expect(code).toBe(ExitOK);
+
+    expect(existsSync(join(out, "bytes.raw"))).toBe(true);
+    expect(existsSync(join(out, "meta.json"))).toBe(true);
+    expect(existsSync(join(out, "expected.txt"))).toBe(true);
+
+    const expected = readFileSync(join(out, "expected.txt"), "utf8");
+    expect(expected).toContain(anchor);
+    expect(expected).toContain("No, exit");
+    expect(expected).toContain("Yes, I trust this folder");
+
+    // NO-WARMUP PROOF, asserted directly: the warmup pass exists to answer and
+    // persist the trust decision, so running it would leave nothing to record.
+    // Exactly one PTY launch means it was skipped. (The --version probe exits
+    // before the ledger, so it never contributes a line.)
+    const spawns = readFileSync(spawnLog, "utf8").trim().split("\n");
+    expect(spawns.length).toBe(1);
+
+    const meta = JSON.parse(readFileSync(join(out, "meta.json"), "utf8"));
+    expect(meta.harness).toBe("claude-code");
+    expect(meta.binary_version).toBe(FAKE_VERSION);
+    // workdir is recorded because the captured frame renders an absolute path
+    // verbatim — a reader can tell it is a recorder artifact.
+    expect(typeof meta.workdir).toBe("string");
+    expect(meta.workdir.length).toBeGreaterThan(0);
+    expect(meta.keystrokes).toBe("none (dialog captured unanswered)");
+
+    // Self-consistency replay, same shape as the codex triple test.
+    const bytes = new Uint8Array(readFileSync(join(out, "bytes.raw")));
+    const screen = newScreen(meta.cols, meta.rows);
+    await screen.write(bytes);
+    const strip = (s: string) => s.replace(/\s+$/u, "");
+    expect(
+      NormalizedDistance(strip(screen.snapshot().text), strip(expected)),
+    ).toBe(0);
+  }, 60_000);
+
+  // NO-AUTO-ANSWER PROOF: the script blocks on a menu choice after the dialog
+  // frame and only then paints the ready composer. The recorder must finish
+  // with the dialog still up — leaving it unanswered is what keeps
+  // hasTrustDialogAccepted unwritten for the throwaway directory.
+  test("never answers the dialog", async () => {
+    const out = outDir("trust-dialog");
+    const code = await runRecorder(
+      [
+        "--harness",
+        "claude-code",
+        "--scenario",
+        "trust-dialog",
+        "--out",
+        out,
+        "--bin",
+        fakeHarness,
+      ],
+      claudeScript((b) =>
+        b.ClaudeTrustPrompt(0).AwaitMenuChoice().Idle().StayAliveUntilStopped(),
+      ),
+    );
+    expect(code).toBe(ExitOK);
+    const expected = readFileSync(join(out, "expected.txt"), "utf8");
+    expect(expected).toContain(anchor);
+    // The post-choice Idle frame paints claude's resume hint; its absence means
+    // AwaitMenuChoice never fired.
+    expect(expected).not.toContain("claude --resume");
+  }, 60_000);
+
+  // Pin the non-overlap the proof above relies on: AwaitMenuChoice matches a
+  // digit followed by CR, which the 2.1.251 answer keystroke (ESC [ B then CR)
+  // is NOT — so a recorder that *did* answer would still not trip that wait.
+  // Documented here so the proof above is read as a real assertion.
+  test("AwaitMenuChoice's digit+CR pattern does not match ESC[B + CR", () => {
+    expect(new RegExp("[0-9]\\r").test("\x1b[B\r")).toBe(false);
+    expect(new RegExp("[0-9]\\r").test("1\r")).toBe(true);
   });
 });
 

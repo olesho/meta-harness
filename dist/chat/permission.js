@@ -18,13 +18,19 @@
 // `./discovery` public subpath still resolves.
 // ── claude-code: footer scrape ────────────────────────────────────────────
 //
-// The five real footers, captured live from 2.1.217:
+// The six real footers, captured live from 2.1.217:
 //
 //   ⏵⏵ auto mode on (shift+tab to cycle) · ← for agents
 //   ⏸ manual mode on · ← for agents
 //   ⏵⏵ accept edits on (shift+tab to cycle) · ← for agents
 //   ⏸ plan mode on (shift+tab to cycle) · ← for agents
 //   ⏵⏵ bypass permissions on (shift+tab to cycle) · ← for agents
+//   ⏵⏵ don't ask on (shift+tab to cycle)                 (--permission-mode dontAsk)
+//
+// SIX FOOTERS, FIVE RUNGS. The last one is claude's `dontAsk` launch mode and it
+// reports the EXISTING `manual` rung — see claudeFooterRungs below for why the
+// ladder does not grow a sixth entry. It is captured live in
+// test/corpus/permission-mode/claude-code/dont-ask (claude 2.1.217).
 //
 // `manual` is the ONLY one WITHOUT the "(shift+tab to cycle)" suffix, and it is
 // claude's current DEFAULT — a regex requiring that suffix silently fails to see
@@ -58,14 +64,50 @@ const claudeModeFooterRE = /^[^\S\r\n]*(?:[⏵⏸]\uFE0F?){1,2}[^\S\r\n]*([A-Za-
 // Glyph-only presence probe: "a mode footer line IS painted", independent of
 // whether the fragment parsed. Discriminates unparsed_footer from no_footer.
 const claudeModeGlyphRE = /^[^\S\r\n]*(?:[⏵⏸]\uFE0F?){1,2}[^\S\r\n]/gm;
-/** Footer fragment → ladder rung. Anything else is off-ladder → "unknown" + raw. */
+/**
+ * Footer fragment → ladder rung. Anything else is off-ladder → "unknown" + raw.
+ *
+ * This table is the CLOSED half of the parse: `claudeModeFooterRE` above matches
+ * the structural shape (glyph + "<words> on") on purpose, so an unmapped
+ * fragment reaches here and degrades to "unknown" + raw rather than to a wrong
+ * answer. Adding a footer is therefore a table row, NEVER a looser regex.
+ *
+ * `don't ask on` is claude's SIXTH footer word (`--permission-mode dontAsk`) and
+ * it maps onto the EXISTING `manual` rung — six footers, five rungs. claude's
+ * own permissiveness rank table ties `dontAsk` with `default` (= manual) at rank
+ * 1, so it is a second spelling of a rung the ladder already has, exactly as
+ * `accept edits on` is not its own rung either. Its SDK schema ("deny if not
+ * pre-approved") makes it strictly MORE restrictive than manual in effect, so
+ * reporting manual can never under-report permissiveness. See
+ * `claudeRung` (src/wrapper/internal/permissionrungs.ts) for the launch-side
+ * half of the same decision, and setPermissionMode's docstring
+ * (src/chat/conversation.ts) for the one accepted residual.
+ *
+ * Keys are matched lowercased AND with U+2019 folded to U+0027 (see
+ * `normalizeFooterFragment`), so `don’t ask on` needs no second row.
+ */
 const claudeFooterRungs = {
     "auto mode on": "auto",
     "manual mode on": "manual",
     "accept edits on": "acceptEdits",
     "plan mode on": "plan",
     "bypass permissions on": "bypass",
+    "don't ask on": "manual",
 };
+/**
+ * The lookup key for a captured footer fragment: lowercased, with the
+ * typographic apostrophe U+2019 folded onto ASCII U+0027.
+ *
+ * Only `don't ask on` contains an apostrophe today. The live 2.1.217 capture
+ * uses ASCII (test/corpus/permission-mode/claude-code/dont-ask/screen.txt), but
+ * the glyph is claude's to render and a font/terminal-driven swap must not drop
+ * a readable session to "unknown". Folded here rather than added as a second
+ * table row so the table stays ONE row per real footer, and applied to the KEY
+ * only — `raw` keeps whatever the screen actually said.
+ */
+function normalizeFooterFragment(fragment) {
+    return fragment.toLowerCase().replace(/\u2019/g, "'");
+}
 /** Returns the LAST match of a /g regex over `text`, or null. */
 function lastMatch(re, text) {
     let last = null;
@@ -77,10 +119,11 @@ function parseClaudeFooter(text) {
     const m = lastMatch(claudeModeFooterRE, text);
     if (m) {
         const raw = m[1].trim();
-        const rung = claudeFooterRungs[raw.toLowerCase()];
-        // A structurally-valid fragment we don't have a rung for (a rename, or the
-        // epic's flag-only `dontAsk`) is preserved verbatim in `raw` — an
-        // off-ladder state, NOT a failure to see.
+        const rung = claudeFooterRungs[normalizeFooterFragment(raw)];
+        // A structurally-valid fragment we don't have a rung for (a rename, or a
+        // seventh mode a future claude adds) is preserved verbatim in `raw` — an
+        // off-ladder state, NOT a failure to see. That degrade-to-unknown property
+        // is the point of keeping the regex structural and the table closed.
         return rung
             ? { observed: rung, raw, source: "footer" }
             : { observed: "unknown", raw, source: "footer" };
@@ -291,12 +334,26 @@ const codexNativeRungs = {
 };
 /**
  * normalizePermissionRung maps a ladder rung name OR a per-harness native
- * spelling to the ladder rung, or undefined when the value is off-ladder (e.g.
- * the flag-only `dontAsk`).
+ * spelling to the ladder rung, or undefined when the value is off-ladder (a
+ * spelling claude or codex accepts that names no rung).
  *
  * A `requested === observed` drift check is only valid when BOTH sides have been
  * through this function — the launch spelling and the screen spelling are
  * different vocabularies, so comparison MUST go through it.
+ *
+ * DELIBERATE ASYMMETRY, `dontAsk`. The OBSERVED side reads a `don't ask on`
+ * footer as `manual` (claudeFooterRungs above) and the wrapper's launch replay
+ * reports the same rung (claudeRung, src/wrapper/internal/permissionrungs.ts),
+ * but this REQUESTED-side map deliberately leaves `dontAsk` undefined. The two
+ * are answering different questions: the observed side reports the posture the
+ * screen shows, while this map decides which values a caller may compare with —
+ * and `dontAsk` is strictly MORE restrictive than `manual` in effect (its SDK
+ * schema is "deny if not pre-approved"), so equating the two here would let a
+ * caller conclude "requested === observed, nothing to do" about a session that
+ * is auto-denying. `requestedRaw` keeps the verbatim spelling for a caller that
+ * needs to tell them apart. Changing this would need the reading to carry the
+ * native spelling alongside the rung — an interface change across every
+ * adapter, explicitly out of scope here.
  */
 export function normalizePermissionRung(value, harness) {
     const key = value.trim().toLowerCase();

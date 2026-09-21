@@ -68,8 +68,10 @@ export declare function readUsage(harness: string, harnessSessionID: string, wor
  * something unnameable"; argvPermissionPin tells those apart, because absence
  * here means "nothing was requested" and must never be read as "pinned, posture
  * unknown". A pinned-but-unnameable posture reports "override"; a pin naming a
- * spelling with no canonical rung (claude's dontAsk) passes through verbatim
- * rather than being erased.
+ * spelling with no canonical rung passes through verbatim rather than being
+ * erased. As of claude 2.1.261 no shipped spelling takes that last path —
+ * `dontAsk`, which used to, now resolves to "manual" — so it is the path a
+ * spelling a NEWER claude adds will take.
  */
 export declare function reportedPermissionRung(harness: string, parsed: StructuredArgs): string | undefined;
 export declare function main(argv: string[]): Promise<number>;
