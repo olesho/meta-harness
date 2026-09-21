@@ -34,6 +34,20 @@ export interface Classification {
   retryAfter: number;
   /** Absolute reset instant from a session-limit banner, or null. */
   resumeAt: Date | null;
+  /**
+   * WHICH matcher produced this classification, when it has a stable id: set by
+   * classifyFinishedOutput's residual rows (`residual.auth`, ...) and its timeout
+   * refinement; absent for the live per-harness arms, whose `reason` already
+   * carries the matched phrase. The residual ids are a CONTRACT — loom's ADR 0002
+   * names `residual.auth` in a revisit trigger — so never rename one.
+   */
+  rule?: string;
+  /**
+   * The text `rule`'s pattern matched, verbatim and UNREDACTED. Absent when
+   * `rule` is. A consumer that persists it must cap and redact it: the window
+   * around an auth pattern is exactly where a credential would be.
+   */
+  match?: string;
 }
 
 /** Inspects recent harness output and reports actionable classifications. */
