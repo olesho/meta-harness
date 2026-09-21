@@ -281,9 +281,54 @@ export class Builder {
     return this.waitInput("[0-9]\\r", false, "menu-choice");
   }
 
+  /**
+   * Blocks until the wrapper answers an UNNUMBERED selector menu by moving the
+   * highlight one row DOWN and confirming — `ESC [ B` then CR, in one write.
+   *
+   * The literal is quoteMeta'd so the "[" is matched, not read as a character
+   * class. If this ever stops matching because the keys became a bare CR,
+   * that is the regression: a bare CR confirms whatever row claude highlighted,
+   * which is "No, exit".
+   */
+  AwaitSelectorDown(): this {
+    return this.waitInput(quoteMeta("\x1b[B\r"), false, "selector-down");
+  }
+
   /** Blocks until the wrapper submits a turn with a bare CR (pi's submit key). */
   AwaitSubmitCR(): this {
     return this.waitInput(quoteMeta(SubmitCR), true, "submit-cr");
+  }
+
+  /**
+   * Blocks until the wrapper types `text` — the PROMPT burst, which lands
+   * before the submit key.
+   *
+   * A sibling of AwaitSubmit for the pre-submit half of a send. It exists so a
+   * script can paint the composer echo the recorder's `prompt` step asserts:
+   * the fake does not echo keystrokes by itself (fakeharness.mjs mirrors a real
+   * TUI in raw mode), so without a gate here the echo frame would have to be
+   * painted on a bare delay and would race the write it is supposed to answer.
+   *
+   * `capture: false` — the text is already known to the caller, which passed it.
+   */
+  AwaitTyped(text: string): this {
+    return this.waitInput(quoteMeta(text), false, "typed");
+  }
+
+  /**
+   * Paints the claude composer with `text` sitting in it, pre-submit — the
+   * frame a real claude paints while a prompt is typed but not yet sent.
+   *
+   * NOT ready-for-input by design: `❯ <text>` is a non-empty composer row, so
+   * claudeComposerRE (src/chat/ready.ts) correctly does not match it. Pair it
+   * with a preceding Idle() for the readiness gate the send waits on.
+   */
+  ClaudeComposerTyped(delayMs: number, text: string): this {
+    return this.frame(
+      delayMs,
+      this.ccScreen(ccHeader, "", ccPrompt + text, "", this.resumeHint()),
+      false,
+    );
   }
 
   /** Blocks until the wrapper writes a bare digit (question-option select). */
@@ -536,17 +581,21 @@ export class Builder {
   }
 
   /**
-   * Paints claude 2.1.251's folder-trust dialog — the UNNUMBERED shape, with the
-   * highlight defaulting to "No, exit". Transcribed verbatim from PUPPET-296 §1.
+   * Paints claude 2.1.251's UNNUMBERED folder-trust dialog — the shape
+   * `parseSelectorMenu` (src/turns/harness/menuSelector.ts) reads and the
+   * numbered `menuRE` cannot. Captured live (tmux, 2026-08-29; see PUPPET-236).
    *
-   * Deliberately a sibling of BypassPrompt rather than a variant of it:
-   * BypassPrompt paints the NUMBERED box ("❯ 1. No, exit"), which parseMenuOptions
-   * reads, and it must stay untouched. This shape is the one the digit-requiring
-   * menu regex CANNOT read — so `DetectInput` returns null on it while
-   * `readyForInput` still (correctly) reports not-ready via the anchor-only
-   * `claudeBlockingDialog`. That divergence is the whole point of the fixture.
+   * The byte contract this scenario pins: because the rows carry no digits,
+   * selection is RELATIVE to the highlight — and claude highlights the NEGATIVE
+   * choice ("No, exit") by default. Answering "proceed" must therefore write
+   * `ESC [ B` + CR as a SINGLE pty write. A bare CR would confirm "No, exit" and
+   * quit claude at startup; the arrows split across writes would be a lone Esc,
+   * which cancels the dialog. Pair this with `AwaitSelectorDown()`.
+   *
+   * Idle-but-not-ready, like BypassPrompt: no busy footer, and the composer "❯"
+   * is consumed by the menu's highlight row.
    */
-  ClaudeTrustPrompt(delayMs: number): this {
+  TrustPromptUnnumbered(delayMs: number): this {
     return this.frame(
       delayMs,
       this.ccScreen(
@@ -565,7 +614,66 @@ export class Builder {
     );
   }
 
-  // --- claude-code AskUserQuestion vocabulary (shapes verified on 2.1.210) ---
+  /**
+   * Paints claude 2.1.251's folder-trust dialog — the UNNUMBERED shape, with the
+   * highlight defaulting to "No, exit". Transcribed verbatim from PUPPET-296 §1.
+   *
+   * Deliberately a sibling of BypassPrompt rather than a variant of it:
+   * BypassPrompt paints the NUMBERED box ("❯ 1. No, exit"), which parseMenuOptions
+   * reads, and it must stay untouched. This shape is the one the digit-requiring
+   * menu regex CANNOT read — so `DetectInput` returns null on it while
+   * `readyForInput` still (correctly) reports not-ready via the anchor-only
+   * `claudeBlockingDialog`. That divergence is the whole point of the fixture.
+   */
+  ClaudeTrustPrompt(delayMs: number): this {
+    return this.TrustPromptUnnumbered(delayMs);
+  }
+
+  /**
+   * Paints the 2.1.251 folder-trust anchor with a choice-shaped "❯" row that has
+   * NO sibling, so no option set can be built: claudecode.DetectUnparseable — the
+   * state that used to be reported as "no dialog at all". It is
+   * TrustPromptUnnumbered minus the "Yes, I trust this folder" row, which drops the
+   * selector block below `minSelectorRows` (menuSelector.ts) while leaving the
+   * anchor and the "❯" in place.
+   *
+   * Idle-but-not-ready, like TrustPromptUnnumbered. There is no Await* pair for
+   * this one: the contract is that NOTHING is ever written to it.
+   */
+  TrustPromptUnparseable(delayMs: number): this {
+    return this.frame(
+      delayMs,
+      this.ccScreen(
+        " ▐▛███▜▌   " + ccHeader + " v2.1.251",
+        "",
+        "Accessing workspace:",
+        "/private/tmp/trustrepo",
+        "Quick safety check: Is this a project you created or one you trust? …",
+        "Claude Code'll be able to read, edit, and execute files here.",
+        "Security guide",
+        " ❯ No, exit",
+        "Enter to confirm · Esc to cancel",
+      ),
+      false,
+    );
+  }
+
+  // --- claude-code AskUserQuestion vocabulary ---
+  //
+  // Shapes first verified on 2.1.210 and RE-VERIFIED on 2.1.251 by PUPPET-301
+  // against real PTY captures (test/corpus/claude-code/question-single,
+  // question-multi, question-review). The painters below are byte-compatible
+  // with those captures: same "❯"/"  " row prefix, same "<n>. " numbering,
+  // same "Type something." / "Chat about this" affordance rows either side of
+  // the rule, same " ● <q>" / "   → <a>" review summary, same
+  // "Ready to submit your answers?" anchor. Nothing needed changing.
+  //
+  // One cosmetic difference the captures show and Question() does not model:
+  // on a dialog with more than one tab the footer tail reads "Tab/Arrow keys
+  // to navigate" rather than "↑/↓ to navigate". Detection anchors on the
+  // "Enter to select ·" prefix, so the painted tail is immaterial — and
+  // test/turns/claude-code/input.test.ts already carries a screen with the
+  // Tab/Arrow wording.
 
   private static readonly qRule = "─".repeat(120);
 

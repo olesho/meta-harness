@@ -123,6 +123,48 @@ describe("readyForInput(claude-code)", () => {
     "   2. No, exit",
   ].join("\n");
 
+  // The UNNUMBERED folder-trust dialog claude 2.1.251 renders (PUPPET-296). No
+  // digits, and the default highlight is on "No, exit".
+  //
+  // This assertion PASSES BOTH BEFORE AND AFTER the selector-parser fix, and
+  // that is the point: claudeBlockingDialog is ANCHOR-ONLY, so readiness never
+  // depended on the menu parsing. It is a pin, not a reproduction. The Go side
+  // had degraded its claude readiness check to a bare `strings.Contains(text,
+  // "❯")`, which called this dialog READY and let Send type the prompt into it
+  // and submit onto "No, exit" — quitting claude at startup. Keep this check
+  // parser-independent, or that bug reopens here.
+  const trustDialogUnnumbered = [
+    "Accessing workspace:",
+    "/private/tmp/trustrepo",
+    "Quick safety check: Is this a project you created or one you trust? …",
+    "Claude Code'll be able to read, edit, and execute files here.",
+    "Security guide",
+    " ❯ No, exit",
+    "   Yes, I trust this folder",
+    "Enter to confirm · Esc to cancel",
+  ].join("\n");
+
+  // The same dialog with its second row missing: the selector block falls below
+  // menuSelector's minSelectorRows, so no option set can be built and
+  // claudecode.DetectInputDetail reports DetectUnparseable (PUPPET-302).
+  //
+  // Like the unnumbered pin above, this assertion PASSES BOTH BEFORE AND AFTER
+  // the send-path fast-fail, and that is the point: claudeBlockingDialog is
+  // ANCHOR-ONLY, so readiness never depended on the menu parsing and stays
+  // parser-independent. The fast-fail is layered on top of readiness in
+  // Conversation.awaitPromptReady, not wired into it — if this ever starts
+  // depending on the parser, an unreadable dialog would read as READY and Send
+  // would type the prompt into the menu.
+  const trustDialogUnparseable = [
+    "Accessing workspace:",
+    "/private/tmp/trustrepo",
+    "Quick safety check: Is this a project you created or one you trust? …",
+    "Claude Code'll be able to read, edit, and execute files here.",
+    "Security guide",
+    " ❯ No, exit",
+    "Enter to confirm · Esc to cancel",
+  ].join("\n");
+
   // Live 2.1.263 wording: the trust dialog is UNNUMBERED there and defaults to
   // "No, exit". Anchored by the created-or-trust sentence, so it stays rejected
   // by the blocking-dialog early-return, not by the composer predicate.
@@ -209,6 +251,12 @@ describe("readyForInput(claude-code)", () => {
   });
   test("trust dialog (created-or-trust variant) not ready", () => {
     expect(readyForInput("claude-code", trustDialogAlt)).toBe(false);
+  });
+  test("trust dialog (unnumbered 2.1.251 selector menu) not ready", () => {
+    expect(readyForInput("claude-code", trustDialogUnnumbered)).toBe(false);
+  });
+  test("trust dialog (unparseable: lone selector row) not ready", () => {
+    expect(readyForInput("claude-code", trustDialogUnparseable)).toBe(false);
   });
   test("startup splash not ready", () => {
     expect(readyForInput("claude-code", startupSplash)).toBe(false);

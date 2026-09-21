@@ -22,6 +22,13 @@ export interface TurnsInputOption {
   keys: Uint8Array;
   /** Explanatory text rendered under the label, when the dialog shows one. */
   description?: string;
+  /**
+   * For a multiSelect "question" request ONLY: true when the row is a checkbox
+   * toggle, false when it is an injected affordance that CLOSES the dialog by
+   * itself (so no submitKeys must follow). Undefined on every other kind and
+   * harness — test `=== false`, never `!toggle`.
+   */
+  toggle?: boolean;
 }
 
 export interface TurnsInputRequest {

@@ -98,12 +98,31 @@ The most fully-supported harness. Name `claude-code`, binary `claude`.
   request and the `--dangerously-skip-permissions` ("Bypass Permissions mode") acceptance
   screen as a `bypass_acceptance` one — separate kinds, so a policy can answer folder trust
   without also accepting a skip-all-permissions launch. The
-  [one-shot loop](modules/oneshot.md) auto-accepts both via `AutoAcceptTrust`. The mid-turn `AskUserQuestion` dialog (shapes verified
+  [one-shot loop](modules/oneshot.md) auto-accepts both via `AutoAcceptTrust`. Claude renders
+  the folder-trust dialog in **two shapes**:
+  the older numbered menu (`❯ 1. Yes, proceed`), answered with an absolute digit, and
+  2.1.251's **unnumbered selector menu**, answered with **relative arrow motion** from
+  the highlighted row — because that dialog's default highlight sits on the _negative_
+  choice ("No, exit"), so a bare Enter would quit the CLI. An anchor whose choices
+  cannot be parsed at all is now reported as an `Errored` naming the dialog, never as
+  "no dialog". The mid-turn `AskUserQuestion` dialog (shapes verified
   live on 2.1.210) is detected as `question` / `question_review` requests — single- and
   multi-question, multi-select, with the UI's free-text ("Type something.", alias
   `other`) and "Chat about this" affordances parsed as options. Selection mechanics are
-  encoded in the option `keys`: a bare digit selects (or toggles, for multi-select;
-  `submitKeys` = Tab commits), while the two UI affordances need digit+CR. See
+  encoded in the option `keys` and are decided PER ROW, not per pane: on a
+  single-select pane a bare digit selects and the two UI affordances need digit+CR,
+  while on a multi-select pane a bare digit toggles the row's checkbox and
+  `submitKeys` (Tab) commits. Which rows are checkboxes is what the pane actually
+  renders, so it is read off the screen and reported as `InputOption.toggle`: "Type
+  something" _does_ carry a `[ ]` marker on a multi-select pane and toggles, whereas
+  "Chat about this" — the one row below the horizontal rule — does not, and selecting
+  it closes the dialog, so no commit key follows it. The question panes carry the
+  same four detection states as the startup dialogs: a pane whose anchor (the
+  `Enter to select ·` footer, or the review pane's `Ready to submit your answers?`)
+  is on screen but whose rows cannot be parsed is reported as an `Errored` naming
+  the dialog, never as "no dialog", and never resolves a request nobody answered.
+  On 2.1.251 those rows are still numbered, so that state is a guard against a
+  future build rather than a live failure. See
   [Guides › Handling input](guides/handling-input.md#clarifying-questions-question--question_review).
 - **Wrapper patterns.** Rich: API-error lines (with tree-glyph prefixes), session-limit
   banners (`… resets HH:MM (TZ)` → a `resumeAt` instant), plus cost/retry/prompt

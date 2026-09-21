@@ -1,0 +1,22 @@
+                                                                                                                        
+ ▐▛███▛█   Claude Code v2.1.251                                                                                         
+▝▜██████▀  Opus 5 (1M context) with medium effort · Claude API                                                          
+  ▝▝ ▝▝    /…/626ad0af-72b1-4a95-96f0-64be65be33fc/scratchpad/capdir                                                    
+                                                                                                                        
+                                                                                                                        
+❯ Use the AskUserQuestion tool to ask me exactly one question. The question text must be "Which color should I use?"    
+  with header "Color" and exactly two options labeled "Red" and "Blue". Do not do anything else first.                  
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ ☐ Color                                                                                                                
+                                                                                                                        
+Which color should I use?                                                                                               
+                                                                                                                        
+❯ 1. Red                                                                                                                
+     Use red.                                                                                                           
+  2. Blue                                                                                                               
+     Use blue.                                                                                                          
+  3. Type something.                                                                                                    
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  4. Chat about this                                                                                                    
+                                                                                                                        
+Enter to select · ↑/↓ to navigate · Esc to cancel

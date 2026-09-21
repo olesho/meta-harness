@@ -1,0 +1,10 @@
+{
+  "harness": "claude-code",
+  "binary_version": "2.1.251",
+  "recorded_at": "2026-08-31T21:29:09.122Z",
+  "cols": 120,
+  "rows": 40,
+  "notes": "screenbench-record trust-dialog: first launch in an untrusted git repo; settles on the folder-trust dialog and ends InputRequested, never TurnComplete — PUPPET-303: unnumbered folder-trust dialog, fresh git-init'ed workdir",
+  "workdir": "/var/folders/_p/kgsjzrc91g57sggc0v8gfnch0000gn/T/meta-harness-corpus-rec-trust-A3IAvq",
+  "keystrokes": "none (dialog captured unanswered)"
+}

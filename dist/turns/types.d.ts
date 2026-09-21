@@ -142,6 +142,18 @@ export interface InputOption {
      * harnesses/menus that do not render a selector.
      */
     highlighted?: boolean;
+    /**
+     * For kind "question" with multiSelect true ONLY: true when this row rendered
+     * a "[ ]"/"[✔]" checkbox marker and therefore TOGGLES into the answer, false
+     * when it is an injected affordance below the option rule ("Chat about this")
+     * that closes the whole dialog on its own — writing submitKeys after such a
+     * row would land a stray Tab in the composer. Undefined everywhere else
+     * (single-select, review panes, trust prompts, menus, other harnesses), and
+     * consumers MUST test `=== false` so those keep the pre-existing behaviour.
+     * Server-side only — stripped by toClientInputRequest and excluded from the
+     * InputRequest id hash.
+     */
+    toggle?: boolean;
 }
 /**
  * The per-harness contract that translates raw signals (screen state + wrapper

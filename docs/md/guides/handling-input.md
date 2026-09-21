@@ -218,6 +218,13 @@ await conv.answer(ctx, req.id, { optionIDs: ["Cheese", "Olives"] });
 Passing several `optionIDs` to a single-select question throws
 [`ErrNotMultiSelect`](../modules/chat.md#errors).
 
+Not every row of a multi-select pane is a checkbox, though. _"Chat about this"_ renders
+below the pane's horizontal rule with no `[ ]` marker and CLOSES the dialog on its own,
+so answering with it writes that row alone and skips the commit key — a Tab afterwards
+would be typed into the composer the dialog just returned you to. Combining it with
+checkbox rows in one `optionIDs` is not an answer the widget can express and throws
+[`ErrNotMultiSelect`](../modules/chat.md#errors) before anything is written.
+
 **Free-text answers are a two-step.** Answering with the `"other"`-aliased option declines
 the structured question: the dialog closes, the tool reports "user declined", and the
 **turn completes**. Send your free-text answer as the next ordinary message:

@@ -1,0 +1,33 @@
+{
+  "harness": "claude-code",
+  "binary_version": "2.1.251",
+  "recorded_at": "2026-08-31T12:51:56.059Z",
+  "cols": 120,
+  "rows": 40,
+  "notes": "PUPPET-301. AskUserQuestion MULTI-SELECT (checkbox) question pane, captured live against claude 2.1.251. expected.txt is the POST-TOGGLE frame (option 1 toggled by pressing '1'), so it carries both a '[✔]' and four '[ ]' markers; expected-untoggled.txt is the same recording replayed to the byte offset before that keystroke, all '[ ]'. VERDICT: rows STILL NUMBERED — design §4 branch A.",
+  "prompt": "Use the AskUserQuestion tool to ask me exactly one MULTI-SELECT question (multiSelect true) with header \"Toppings\", question text \"Which toppings do you want?\" and exactly four options labeled \"Mushrooms\", \"Olives\", \"Peppers\" and \"Onions\". Do not do anything else first.",
+  "keystrokes": [
+    "<prompt text>",
+    "\\x1b[13u (submit)",
+    "'1' — toggles option 1's checkbox from [ ] to [✔] IN PLACE; it does not advance or submit, which is the live confirmation that a bare digit is the right key for a multi-select row"
+  ],
+  "expected_untoggled_byte_prefix": 6719,
+  "outcome": "interactive-detached",
+  "findings": {
+    "q1_option_rows_numbered": "YES. Every option row matches questionOptionRE (/^[^\\S\\r\\n]*(?:❯[^\\S\\r\\n]+)?(\\d+)\\.[^\\S\\n]+(\\S[^\\n]*)$/u) — the rows render as '❯ 1. Red', '  2. Blue', … on 2.1.251. The digit assumption in src/turns/harness/claudecode.ts is RE-VERIFIED, not merely inherited. This is what selects branch A of the PUPPET-301 design.",
+    "q2_glyphs": "Highlight glyph is still ❯ (U+276F). Tab strip glyphs are still ☐/☒/✔ with ←/→ arrows on the multi-tab strip. Observed tab strip: '←  ☐ Toppings  ✔ Submit  →'",
+    "q3_footer_and_review_anchor": "Footer still starts with 'Enter to select ·' — observed in full as: 'Enter to select · ↑/↓ to navigate · Esc to cancel'",
+    "q4_injected_affordances": "Still labeled 'Type something' / 'Chat about this' — matching questionOtherLabel and questionChatLabel.",
+    "q5_multiselect_checkboxes": "YES, unchanged. The marker is rendered INLINE in the label ('1. [ ] Mushrooms' / '1. [✔] Mushrooms'), exactly what questionCheckboxRE strips, and the bare 'Submit' chrome row is still present below the last option row (parseQuestionRegion still needs to skip it). The checked glyph is ✔ (U+2714).",
+    "q6_review_pane": "n/a — see question-review.",
+    "open_question_chat_affordance_keys": "PARTIALLY RESOLVED by PUPPET-308; the KEY half is still open. What this frame settles is structural and is now encoded: rows 1-5 carry a '[ ]'/'[✔]' checkbox marker (note that 'Type something' DOES on a multi-select pane, unlike on question-single) while '6. Chat about this' renders BELOW the horizontal rule with no marker at all. parseQuestionRegion now records that per row and DetectQuestion reports it as InputOption.toggle (true for 1-5, false for 6), which lets chat's writeAnswer stop appending submitKeys (Tab) after a row that closes the dialog — previously answering '6' wrote '6' then Tab, and the Tab landed wherever the dialog left the cursor. STILL NOT EXERCISED: whether the bare digit '6' ACTIVATES that row or merely moves the ❯ highlight onto it (which is what it does on the single-select pane, hence '4\\r' there). PUPPET-308's mandatory live re-capture could NOT be run: every claude credential on this machine had expired at implementation time (2026-08-31), so no live session was obtainable and the verdict was deliberately NOT inferred from this replay. The keys for row 6 are therefore left UNCHANGED at a bare '6'. Re-open with a live capture: press the chat row's digit on a settled multi-select pane and read the next frame — dialog gone means the digit activates; ❯ moved with the dialog still up means the keys must become '6\\r'."
+  },
+  "detect_input_result": "kind 'question', prompt 'Which toppings do you want?', header 'Toppings', multiSelect true, submitKeys '\\t', options 1..6 with bare-digit keys.",
+  "mode": "hand-recorded-interactive",
+  "recorder": "test/corpus/tools/record-pty.ts --interactive, over the production PTY bridge (src/wrapper/internal/pty.ts). Keystrokes were fed to the tool's stdin through a FIFO rather than typed at a tty (an agent has no interactive terminal); record-pty's own code path is unchanged and every keystroke is timestamped in stdin.log as usual.",
+  "binary_version_full": "2.1.251 (Claude Code)",
+  "version_note": "`claude --version` was re-probed at capture time and reported 2.1.251 (Claude Code) — the version this ticket targets. No discrepancy to record.",
+  "trust_note": "The recording cwd was `git init`-ed and trust was granted in an EARLIER, discarded session, so the folder-trust dialog does not appear anywhere in this recording. bytes.raw starts at the alt-screen enter (ESC[?1049h) of a clean composer.",
+  "teardown_note": "bytes.raw is TRUNCATED at the last byte of the settled dialog frame, deliberately, before the Ctrl-] detach teardown. SIGTERM makes claude leave the alt screen (ESC[?1049l) and print 'Resume this session with: claude --resume <id>', and a stream ending there replays as the resume text instead of the dialog. Same trap documented in permission-mode-bypass/meta.json.",
+  "expected_note": "expected.txt was PRODUCED BY REPLAYING bytes.raw through src/screen's Screen at 120x40 and serializing as screenbench-record does (finalText.replace(/\\s+$/u, '') + '\\n'). It is not hand-typed."
+}

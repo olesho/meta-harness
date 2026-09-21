@@ -42,6 +42,7 @@ import { Context, isSentinel, wrap } from "../internal/async/index.ts";
 import { ErrEmptySessionID, ErrSessionNotFound } from "../transcript/errors.ts";
 import { stripIDEContextTags } from "../transcript/stripTags.ts";
 import type { Store } from "./store.ts";
+import { answerKeys, findOption } from "./answerKeys.ts";
 import {
   type Session,
   type Turn,
@@ -75,10 +76,9 @@ import {
   ErrClosed,
   ErrInputPending,
   ErrAuthRequired,
+  ErrUnrecognizedDialog,
   ErrNoInputPending,
   ErrStaleInputRequest,
-  ErrUnknownOption,
-  ErrNotMultiSelect,
   ErrQuitUnsupported,
   ErrPermissionsUnsupported,
   ErrCodexPermissionsDisabled,
@@ -441,6 +441,15 @@ function permissionStalled(detail: string, who = "setPermissionMode"): Error {
 // wall (which never clears on its own) from a transient startup frame; a genuine
 // composer is never gated because the readyForInput check wins first. (ms)
 const authGateStabilizeGap = 2000;
+// unrecognizedDialogStabilizeGap — how long a blocking dialog this build cannot
+// parse (claudecode.DetectUnparseable) must persist before awaitPromptReady
+// short-circuits with ErrUnrecognizedDialog. Follows the onboarding-WALL precedent
+// — the condition is permanent, so waiting out the send deadline gains nothing —
+// with ONE deliberate difference: the wall fires immediately because it can flash
+// by in a single frame, whereas an unparseable frame can simply be a HALF-PAINTED
+// one, so the state must survive a re-check of the live screen before it is
+// believed. Same dwell as the auth banner. (ms)
+const unrecognizedDialogStabilizeGap = authGateStabilizeGap;
 // primeBoundGap — the overall wall-clock bound on the startup session-id prime,
 // so Open can never hang on the /status scrape. (ms)
 const primeBoundGap = 800;
@@ -2534,28 +2543,10 @@ export class Conversation {
       const submit = submitKeyForHarness(this.opts.harness, preWriteScreen);
       return this.writeMessageAndSubmit(ans.text ?? "", preWriteScreen, submit);
     }
-    // Multi-select prompts: toggle every named option, then commit with the
-    // request's submit keys (a single optionID answer is normalized into the
-    // same toggle-and-commit path — a bare toggle would never resolve the
-    // prompt). Validation precedes any write so a bad id surfaces cleanly.
-    const ids =
-      ans.optionIDs && ans.optionIDs.length > 0
-        ? ans.optionIDs
-        : ans.optionID
-          ? [ans.optionID]
-          : [];
-    if (req.multiSelect && req.submitKeys) {
-      const chosen = ids.map((s) => findOption(req, s));
-      if (ids.length === 0 || chosen.some((o) => o === null))
-        throw ErrUnknownOption;
-      for (const o of chosen) this.writeKeys(o!.keys);
-      this.writeKeys(req.submitKeys);
-      return Promise.resolve();
-    }
-    if (ids.length > 1) throw ErrNotMultiSelect;
-    const opt = findOption(req, ids[0] ?? "");
-    if (!opt) throw ErrUnknownOption;
-    this.writeKeys(opt.keys);
+    // answerKeys owns the option semantics (validate-all-then-write,
+    // multi-select toggle-then-commit) and throws synchronously; the recorder
+    // shares it so both write identical bytes.
+    for (const k of answerKeys(req, ans)) this.writeKeys(k);
     return Promise.resolve();
   }
 
@@ -3658,6 +3649,27 @@ export class Conversation {
     return typeof a.extractSessionIDFromLine === "function";
   }
 
+  /**
+   * claudeDialogState reports what claude-code's blocking-dialog detector sees on
+   * this screen, and DetectNone for every other harness.
+   *
+   * It lives HERE, not in ready.ts, on purpose: ready.ts is turns-free by stated
+   * convention (ready.ts:1-12) and this needs claudecode.DetectInputDetail, which
+   * conversation.ts already imports. Go's sibling sits in pkg/chat/ready.go because
+   * that file has no such convention; the behaviour is identical, only the file
+   * differs. It is the claude-only sibling of readyForInput, which returns a plain
+   * bool shared with the codex and pi branches — widening that signature to carry a
+   * claude-specific enum would push the detail into two harnesses with no use for it.
+   */
+  private claudeDialogState(
+    harness: string,
+    text: string,
+  ): claudecode.Detection {
+    if (harness !== "claude-code") return claudecode.DetectNone;
+    const [, det] = claudecode.DetectInputDetail(text);
+    return det;
+  }
+
   private async waitReadyForSend(ctx: Context): Promise<void> {
     if (this.inputAwaitingClient()) throw ErrInputPending;
     if (!requiresPromptReadiness(this.opts.harness)) return;
@@ -3688,16 +3700,46 @@ export class Conversation {
       }
       armedAuth = never;
     };
+    // Second, independent stabilizer: a blocking dialog whose choices this build
+    // cannot parse (claudecode.DetectUnparseable). Same arm/disarm dance, and
+    // deliberately NOT folded into the auth one — the two conditions are unrelated,
+    // and whichever fires first wins the race. Both re-check the live screen before
+    // committing, so an unparseable HALF-PAINTED frame that resolves within the gap
+    // simply disarms.
+    let dialogTimer: ReturnType<typeof setTimeout> | undefined;
+    let armedDialog: Promise<void> = never;
+    const disarmDialog = (): void => {
+      if (dialogTimer !== undefined) {
+        clearTimeout(dialogTimer);
+        dialogTimer = undefined;
+      }
+      armedDialog = never;
+    };
     // check classifies the current screen. An onboarding WALL (sign-in wizard /
     // device-code / login-method screen) fires NOW: it never becomes ready, and
     // it can appear for a single frame before the CLI advances its own login flow
     // past it — a dwell would miss it. A softer logged-out banner arms the
-    // debounce timer instead. readyForInput wins first, so a real composer (even
-    // with a stale banner scrolled above) is never auth-gated.
+    // debounce timer instead, as does an unparseable blocking dialog — the two
+    // timers are armed and disarmed independently. readyForInput wins first, so a
+    // real composer (even with a stale banner scrolled above) is never auth-gated;
+    // every frame that can reach DetectUnparseable carries a dialog anchor, which
+    // readyForInput already rejects, so that ordering can never mask it either.
     const check = (): "ready" | "wall" | "wait" => {
       const txt = this.screen.snapshot().text;
       if (readyForInput(this.opts.harness, txt)) return "ready";
       if (onboardingWall(this.opts.harness, txt)) return "wall";
+      if (
+        this.claudeDialogState(this.opts.harness, txt) ===
+        claudecode.DetectUnparseable
+      ) {
+        if (dialogTimer === undefined) {
+          armedDialog = new Promise<void>((res) => {
+            dialogTimer = setTimeout(res, unrecognizedDialogStabilizeGap);
+          });
+        }
+      } else {
+        disarmDialog();
+      }
       if (authRequired(this.opts.harness, txt)) {
         if (authTimer === undefined) {
           armedAuth = new Promise<void>((res) => {
@@ -3725,6 +3767,7 @@ export class Conversation {
               r.ok ? ("notify" as const) : ("notifyClosed" as const),
             ),
           armedAuth.then(() => "auth" as const),
+          armedDialog.then(() => "dialog" as const),
         ]);
         if (which === "ctx") throw ctx.err();
         if (which === "closed") throw ErrClosed;
@@ -3742,6 +3785,19 @@ export class Conversation {
           disarmAuth();
           continue;
         }
+        if (which === "dialog") {
+          // Same re-confirmation as the auth arm, and here it is load-bearing:
+          // the dwell exists precisely because one repaint can look unparseable.
+          const txt = this.screen.snapshot().text;
+          if (
+            !readyForInput(this.opts.harness, txt) &&
+            this.claudeDialogState(this.opts.harness, txt) ===
+              claudecode.DetectUnparseable
+          )
+            throw ErrUnrecognizedDialog;
+          disarmDialog();
+          continue;
+        }
         if (this.inputAwaitingClient()) throw ErrInputPending;
         const c = check();
         if (c === "ready") return;
@@ -3749,6 +3805,7 @@ export class Conversation {
       }
     } finally {
       disarmAuth();
+      disarmDialog();
       unsubscribe();
     }
   }
@@ -3956,23 +4013,6 @@ function toClientInputRequest(req: TurnsInputRequest): InputRequest {
   if (req.header !== undefined) out.header = req.header;
   if (req.multiSelect) out.multiSelect = true;
   return out;
-}
-
-function findOption(
-  req: TurnsInputRequest,
-  s: string,
-): TurnsInputOption | null {
-  if (s === "") return null;
-  const ls = s.toLowerCase();
-  for (const o of req.options ?? []) {
-    if (
-      o.id === s ||
-      o.alias.toLowerCase() === ls ||
-      o.label.toLowerCase() === ls
-    )
-      return o;
-  }
-  return null;
 }
 
 function findOptionByAlias(

@@ -20,6 +20,17 @@ export declare const ErrInputPending: Sentinel;
  * and error-path cases instead of hanging to the run deadline.
  */
 export declare const ErrAuthRequired: Sentinel;
+/**
+ * Thrown by waitReadyForSend when the harness is sitting on a blocking dialog whose
+ * choices this build cannot parse: the anchor is up and choice-shaped lines are
+ * painted, but no answerable option set could be built
+ * (claudecode.DetectUnparseable). Like ErrAuthRequired the condition never clears on
+ * its own — nothing can answer the dialog — so send() fails in seconds with a named
+ * cause instead of typing the prompt into the menu or waiting out the deadline. It
+ * fires only after the state survives a re-check of the live screen, because a
+ * half-painted frame can look unparseable for one repaint.
+ */
+export declare const ErrUnrecognizedDialog: Sentinel;
 /** Returned by Answer when no interactive prompt is currently pending. */
 export declare const ErrNoInputPending: Sentinel;
 /** Returned by Answer when the supplied request ID does not match the prompt. */

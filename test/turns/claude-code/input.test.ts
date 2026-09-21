@@ -28,6 +28,19 @@ const trustScreen = `╭──────────────────�
 │ Enter to confirm · Esc to exit                    │
 ╰─────────────────────────────────────────────────╯`;
 
+// The UNNUMBERED folder-trust dialog claude 2.1.251 renders (captured live,
+// tmux, 2026-08-29 — see PUPPET-236). No digits, and the default highlight is on
+// the NEGATIVE choice, so the affirmative row is reached with a DOWN arrow.
+const unnumberedTrustScreen =
+  "Accessing workspace:\n" +
+  "/private/tmp/trustrepo\n" +
+  "Quick safety check: Is this a project you created or one you trust? …\n" +
+  "Claude Code'll be able to read, edit, and execute files here.\n" +
+  "Security guide\n" +
+  " ❯ No, exit\n" +
+  "   Yes, I trust this folder\n" +
+  "Enter to confirm · Esc to cancel\n";
+
 const bypassScreen = `WARNING: Claude Code running in Bypass Permissions mode
 
 By proceeding, you accept all risks.
@@ -170,9 +183,77 @@ describe("claude-code input", () => {
     expect(res).not.toBeNull();
     expect(res!.input!.id).toBe(req!.input!.id);
   });
+
+  // ── the unnumbered (selector-only) shape, claude 2.1.251 ─────────────────
+  //
+  // The numbered assertions above are the regression guard proving this branch
+  // did not steal the numbered path: a numbered menu also carries "❯", and its
+  // digit keys are absolute, so parseNumberedMenu must still win.
+
+  test("unnumbered trust dialog (2.1.251)", () => {
+    const req = claudecode.DetectInput(unnumberedTrustScreen);
+    expect(req).not.toBeNull();
+    expect(req!.kind).toBe("trust_prompt");
+    expect(req!.prompt).toBe(trustAnchorAlt);
+    const want: (Pick<InputOption, "id" | "alias" | "label"> & {
+      keys: string;
+      highlighted: boolean;
+    })[] = [
+      {
+        id: "0",
+        alias: "deny",
+        label: "No, exit",
+        keys: "\r",
+        highlighted: true,
+      },
+      {
+        id: "1",
+        alias: "proceed",
+        label: "Yes, I trust this folder",
+        keys: "\x1b[B\r",
+        highlighted: false,
+      },
+    ];
+    expect(req!.options!.length).toBe(want.length);
+    want.forEach((w, i) => {
+      const o = req!.options![i];
+      expect(o.id).toBe(w.id);
+      expect(o.alias).toBe(w.alias);
+      expect(o.label).toBe(w.label);
+      expect(dec.decode(o.keys)).toBe(w.keys);
+      expect(o.highlighted === true).toBe(w.highlighted);
+    });
+    expect(req!.id).not.toBe("");
+  });
+
+  // Stated on its own so a fixture edit cannot quietly lose it: claude
+  // highlights "No, exit", so answering "proceed" with a bare CR would confirm
+  // the DENY row and quit the CLI at startup.
+  test("unnumbered: the proceed option is never a bare CR", () => {
+    const req = claudecode.DetectInput(unnumberedTrustScreen);
+    const proceed = req!.options!.find((o) => o.alias === "proceed");
+    expect(proceed).toBeDefined();
+    expect(dec.decode(proceed!.keys)).not.toBe("\r");
+    expect(dec.decode(proceed!.keys)).toBe("\x1b[B\r");
+  });
+
+  test("OnScreen: the unnumbered dialog surfaces an InputRequested", () => {
+    const a = claudecode.New();
+    const ev = findKind(
+      a.onScreen(textSnap(unnumberedTrustScreen)),
+      InputRequested,
+    );
+    expect(ev).not.toBeNull();
+    expect(ev!.input!.options!.length).toBe(2);
+  });
 });
 
-// ── AskUserQuestion dialogs (screens verified live against 2.1.210) ─────────
+// ── AskUserQuestion dialogs ────────────────────────────────────────────────
+//
+// Screens verified live against 2.1.210, and re-verified against 2.1.251 by
+// PUPPET-301 — the real captures are replayed in question-corpus.test.ts.
+// These hand-written screens stay as the compact unit fixtures; they were
+// found byte-compatible with the 2.1.251 recordings.
 
 const singleQuestionScreen = `⏺ I'll ask you the question now.
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -329,9 +410,33 @@ describe("claude-code question dialogs", () => {
     ]);
     // Toggle keys: the bare digit, no CR.
     expect(dec.decode(req!.options![1].keys)).toBe("2");
-    // The toggled variant of the same dialog keeps the id.
+    // PUPPET-308: `toggle` is PER ROW and structural — it records whether the
+    // row rendered a "[ ]"/"[✔]" marker, not what its label says. On this pane
+    // "Type something" carries one (so it toggles) while "Chat about this",
+    // below the horizontal rule, does not: selecting it closes the dialog, so
+    // the chat layer must not append submitKeys after it.
+    expect(req!.options!.map((o) => o.toggle)).toEqual([
+      true,
+      true,
+      true,
+      true,
+      false,
+    ]);
+    // The toggled variant of the same dialog keeps the id, and an empty box
+    // marks a toggle exactly as a checked one does.
     const toggled = multiSelectScreen.replace("[✔]", "[ ]");
-    expect(claudecode.DetectInput(toggled)!.id).toBe(req!.id);
+    const reqToggled = claudecode.DetectInput(toggled)!;
+    expect(reqToggled.id).toBe(req!.id);
+    expect(reqToggled.options!.map((o) => o.toggle)).toEqual(
+      req!.options!.map((o) => o.toggle),
+    );
+  });
+
+  test("single-select and review options leave toggle undefined", () => {
+    for (const screen of [singleQuestionScreen, reviewScreen]) {
+      const req = claudecode.DetectInput(screen);
+      expect(req!.options!.every((o) => o.toggle === undefined)).toBe(true);
+    }
   });
 
   test("checkbox glyphs in a reply do not fire", () => {

@@ -1,0 +1,2 @@
+  12.082s  keys       Use the AskUserQuestion tool to ask me exactly one question. The question text must be "Which color should I use?" with header "Color" and exactly two options labeled "Red" and "Blue". Do not do anything else first.
+  14.086s  keys       \x1b[13u
