@@ -39,6 +39,14 @@ import type { Script, Step } from "./fakeharness.ts";
 // the public barrel for a test. If that constant changes, change this too.
 const dwellMs = 2000;
 
+// Node arms and fires timers on a MILLISECOND-TRUNCATED monotonic clock, so a
+// 2000ms timer can fire after 1999.x real ms, which Date.now() (the wall clock,
+// truncated at a different phase) reports as 1999. Never more than 1ms early
+// absent a clock step; measured 1 in 400 on node 24, and 1999 is exactly what
+// failed CI and a local pre-push run. A lower bound of dwellMs - timerSlackMs
+// still proves the dwell was waited out rather than skipped.
+const timerSlackMs = 5;
+
 const open = new Set<Conversation>();
 async function openTracked(
   script: Script,
@@ -142,7 +150,7 @@ describe("unrecognized dialog on the send path (real pty + fake harness)", () =>
       const err = await sendErr(conv, ctx, "hello");
       const elapsed = Date.now() - started;
       expect(isSentinel(err as Error, ErrUnrecognizedDialog)).toBe(true);
-      expect(elapsed).toBeGreaterThanOrEqual(dwellMs);
+      expect(elapsed).toBeGreaterThanOrEqual(dwellMs - timerSlackMs);
       expect(elapsed).toBeLessThan(dwellMs + 4000);
     } finally {
       cancel();
