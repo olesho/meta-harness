@@ -5,6 +5,7 @@
 // keeping its own source free of any `internal` import path (the boundary the
 // exports-guard test enforces).
 export { classifyOutput } from "./internal/classifier.js";
+export { classifyFinishedOutput, RuleTimeoutUpgrade, } from "./internal/finished.js";
 export { ErrNone, ErrRateLimited, ErrAuth, ErrBilling, ErrModelNotFound, ErrContextOverflow, ErrTimeout, ErrTransient, ErrUnknown, errorClassString, } from "./internal/errorclass.js";
 export { StatusIdle, StatusFailed, StatusBlockedByCost, StatusRetryLater, StatusAPIError, StatusWaitingForInput, StatusStale, StatusInterrupted, StatusUnknown, StatusBinaryNotFound, } from "./internal/status.js";
 export { ErrInvalidConfig, ErrBinaryNotFound, isBinaryNotFound, validateConfig, } from "./internal/config.js";
