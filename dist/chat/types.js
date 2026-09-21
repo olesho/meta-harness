@@ -8,6 +8,12 @@ export const TurnStatePending = "pending";
 export const TurnStateStreaming = "streaming";
 export const TurnStateComplete = "complete";
 export const TurnStateErrored = "errored";
+/** Accompanies {@link ReasonAuthRequired}. */
+export const CodeAuthRequired = "auth_required";
+/** Accompanies {@link ReasonUsageLimited}. */
+export const CodeUsageLimited = "usage_limited";
+/** Accompanies {@link ReasonBillingWall}. */
+export const CodeBillingWall = "billing_wall";
 /**
  * Canonical `Turn.reason` recorded when a turn produced no assistant output
  * because the harness CLI is logged out / its login has expired (claude-code
@@ -30,6 +36,20 @@ export const ReasonAuthRequired = "auth_required: harness login expired or re-au
  * point when the "reply" was in fact the wall (see Conversation.usageLimitRelabel).
  */
 export const ReasonUsageLimited = "usage_limit: harness usage or session limit reached — retry after the quota window resets";
+/**
+ * Terminal-turn `reason` when a turn failed because the account cannot be
+ * billed — a spent credit balance, an account on hold. Unlike the other two it
+ * is neither blameless nor self-healing: a quota window lifts on its own and an
+ * expired login is one command away, but nothing an orchestrator does makes the
+ * next turn succeed until a human pays.
+ *
+ * Set ONLY from a verdict the harness itself recorded in its transcript (see
+ * apierror.ts); no screen recogniser produces it. That is deliberate: the one
+ * screen-scrape wall detector this fleet shipped was removed after 11 detections
+ * with 0 true positives — all agent output quoting a banner — and a tag the
+ * harness wrote about its own API call cannot be quoted into existence.
+ */
+export const ReasonBillingWall = "billing_wall: harness billing or credit wall reached — the account cannot run turns until billing is resolved";
 export const EventTurn = "turn";
 export const EventInputRequest = "input_request";
 export const EventInputResolved = "input_resolved";

@@ -33,7 +33,31 @@ export interface Turn {
   httpCode: number;
   /** Wait duration (ms) parsed from the harness error message; 0 when none. */
   retryAfter: number;
+  /**
+   * Stable machine token for a terminal WALL — auth_required, usage_limited,
+   * billing_wall — set at every site that sets the matching reason. Absent on
+   * every other turn, including ordinary failures: absent means "not one of the
+   * walls", never "unknown". Consumers should switch on this rather than
+   * substring-matching `reason`, which is operator copy (see {@link TurnCode}).
+   */
+  code?: TurnCode;
 }
+
+/**
+ * TurnCode is the machine-readable half of a terminal `Turn.reason`: a short,
+ * stable token a consumer switches on, with no prose attached. `reason` is
+ * worded for a human and rewording it is an ordinary editorial change, so
+ * consumers that substring-matched it broke silently on every reword. Mirrors
+ * harness-wrapper's chat.TurnCode.
+ */
+export type TurnCode = "auth_required" | "usage_limited" | "billing_wall";
+
+/** Accompanies {@link ReasonAuthRequired}. */
+export const CodeAuthRequired: TurnCode = "auth_required";
+/** Accompanies {@link ReasonUsageLimited}. */
+export const CodeUsageLimited: TurnCode = "usage_limited";
+/** Accompanies {@link ReasonBillingWall}. */
+export const CodeBillingWall: TurnCode = "billing_wall";
 
 /**
  * Canonical `Turn.reason` recorded when a turn produced no assistant output
@@ -60,6 +84,22 @@ export const ReasonAuthRequired =
  */
 export const ReasonUsageLimited =
   "usage_limit: harness usage or session limit reached — retry after the quota window resets";
+
+/**
+ * Terminal-turn `reason` when a turn failed because the account cannot be
+ * billed — a spent credit balance, an account on hold. Unlike the other two it
+ * is neither blameless nor self-healing: a quota window lifts on its own and an
+ * expired login is one command away, but nothing an orchestrator does makes the
+ * next turn succeed until a human pays.
+ *
+ * Set ONLY from a verdict the harness itself recorded in its transcript (see
+ * apierror.ts); no screen recogniser produces it. That is deliberate: the one
+ * screen-scrape wall detector this fleet shipped was removed after 11 detections
+ * with 0 true positives — all agent output quoting a banner — and a tag the
+ * harness wrote about its own API call cannot be quoted into existence.
+ */
+export const ReasonBillingWall =
+  "billing_wall: harness billing or credit wall reached — the account cannot run turns until billing is resolved";
 
 /** EventType discriminates the variants of a ConversationEvent. */
 export type EventType = "turn" | "input_request" | "input_resolved";

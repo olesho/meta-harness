@@ -24,6 +24,8 @@ function toWire(pe) {
         w.output = e.output;
     if (e.uuid)
         w.uuid = e.uuid;
+    if (e.apiError)
+        w.api_error = e.apiError;
     if (e.source)
         w.source = e.source;
     if (e.nativeID)
@@ -49,6 +51,7 @@ function fromWire(w) {
         toolInput: e.tool_input !== undefined ? JSON.stringify(e.tool_input) : undefined,
         output: e.output,
         uuid: e.uuid,
+        apiError: e.api_error,
         source: e.source,
         nativeID: e.native_id,
         schemaVersion: e.schema_version,

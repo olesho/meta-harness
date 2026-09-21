@@ -46,6 +46,14 @@ export interface Event {
   output?: string; // tool_result text
   uuid?: string; // native message UUID when available
 
+  // apiError carries the harness's own failure tag when this event came from a
+  // synthetic API-error line (Line.error). Empty for every ordinary event, so
+  // the serialized stream is unchanged for a transcript that holds no failure.
+  // An event with apiError set is NOT an assistant reply: anything scanning for
+  // "the last thing the assistant said" must skip it, or it reports a failed
+  // turn as answered. Wire name `api_error`, as in harness-wrapper.
+  apiError?: string;
+
   // --- INTERNAL metadata: durable store row only, NOT public DTO ---
   schemaVersion?: number;
   source?: string; // SourceLive | SourceFile | SourceHook
@@ -88,6 +96,10 @@ export interface Turn {
   role: string;
   text: string;
   timestamp?: Date;
+  // apiError is the harness's failure tag when this turn came from a synthetic
+  // API-error entry rather than a real reply. Such a turn HAS text -- the
+  // rendered error -- so text alone cannot tell the two apart.
+  apiError?: string;
 }
 
 // turnsFromEvents projects canonical Events down to the chat Turn view.
@@ -100,6 +112,7 @@ export function turnsFromEvents(events: Event[]): Turn[] {
       role: e.role || RoleSystem,
       text: e.text,
       timestamp: e.timestamp,
+      ...(e.apiError ? { apiError: e.apiError } : {}),
     });
   }
   return out;
@@ -153,5 +166,6 @@ export function toPublicJSON(e: Event): Record<string, unknown> {
   if (e.toolInput) o.tool_input = JSON.parse(e.toolInput);
   if (e.output) o.output = e.output;
   if (e.uuid) o.uuid = e.uuid;
+  if (e.apiError) o.api_error = e.apiError;
   return o;
 }

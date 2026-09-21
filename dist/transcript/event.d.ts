@@ -21,6 +21,7 @@ export interface Event {
     toolInput?: string;
     output?: string;
     uuid?: string;
+    apiError?: string;
     schemaVersion?: number;
     source?: string;
     nativeID?: string;
@@ -30,6 +31,7 @@ export interface Turn {
     role: string;
     text: string;
     timestamp?: Date;
+    apiError?: string;
 }
 export declare function turnsFromEvents(events: Event[]): Turn[];
 export interface ParsedEvent {

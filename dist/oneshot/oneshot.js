@@ -180,6 +180,7 @@ export async function runOneShotDetailed(ctx, cfg) {
             return {
                 status: "errored",
                 reason: turn.reason,
+                ...(turn.code !== undefined ? { code: turn.code } : {}),
                 harnessSessionID,
                 workingDir,
             };

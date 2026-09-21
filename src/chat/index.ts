@@ -39,6 +39,11 @@ export {
   HistorySourceStore,
   ReasonAuthRequired,
   ReasonUsageLimited,
+  ReasonBillingWall,
+  type TurnCode,
+  CodeAuthRequired,
+  CodeUsageLimited,
+  CodeBillingWall,
 } from "./types.ts";
 
 export type { Store } from "./store.ts";

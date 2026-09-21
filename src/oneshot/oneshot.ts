@@ -18,6 +18,7 @@ import {
   type Conversation,
   type InputPolicy,
   type Turn,
+  type TurnCode,
 } from "../chat/index.ts";
 import { isClaudeNestingEnvKey } from "../chat/env.ts";
 import { Context, ctxDeadlineExceeded } from "../internal/async/index.ts";
@@ -206,6 +207,12 @@ export type OneShotOutcome =
   | {
       status: "errored";
       reason: string;
+      /**
+       * The stable wall token the harness's own verdict named — auth_required,
+       * usage_limited, billing_wall — and absent for every other failure. What a
+       * caller should switch on to raise a wall signal; `reason` is operator copy.
+       */
+      code?: TurnCode;
       harnessSessionID: string;
       workingDir: string;
     }
@@ -291,6 +298,7 @@ export async function runOneShotDetailed(
       return {
         status: "errored",
         reason: turn.reason,
+        ...(turn.code !== undefined ? { code: turn.code } : {}),
         harnessSessionID,
         workingDir,
       };

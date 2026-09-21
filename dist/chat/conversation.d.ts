@@ -1228,6 +1228,8 @@ export declare class Conversation {
     private assistantText;
     private cleanAssistantText;
     private authRelabel;
+    private relabelTerminal;
+    private apiErrorRelabel;
     private usageLimitRelabel;
     private adapterPromptNotAccepted;
     /**
@@ -1237,13 +1239,19 @@ export declare class Conversation {
      * already extraction-backed (Claude Code), and the transcript must not
      * second-guess it. Structural probes, same pattern as assistantText().
      */
+    private hasTranscriptReader;
     private transcriptOverrideEligible;
     private readTranscriptTurns;
     /**
      * The transcript turn count immediately before the in-flight submit — the
-     * pre-send watermark for transcriptProofOfCurrentTurn. readTranscript is
-     * synchronous, so send() pays no new await. Rules: not eligible → null (the
-     * proof gate declines before looking); empty harnessSessionID → 0 (fresh
+     * pre-send watermark. Two readers use it: transcriptProofOfCurrentTurn (the
+     * codex swallow override) and apiErrorRelabel (the harness's own failure tag,
+     * which claude-code writes). So it is gated on hasTranscriptReader, NOT on the
+     * override's narrower transcriptOverrideEligible — that gate excludes
+     * claude-code, and using it here silently disabled the tag relabel for the one
+     * harness that writes tags. The override still re-checks its own gate.
+     * readTranscript is synchronous, so send() pays no new await. Rules: no
+     * transcript reader → null; empty harnessSessionID → 0 (fresh
      * session, no prior history); a sentinel read failure (no rollout yet) → 0;
      * any other failure → null ("unknown" — the proof helper then declines
      * rather than guessing a lower bound). Never throws out of send().

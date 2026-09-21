@@ -245,7 +245,17 @@ describe("codex transcript-backed swallow override (real pty + fake harness)", (
   });
 
   // 7. Gate pin: claude-code's swallow verdict is extraction-backed and must
-  // never be transcript-second-guessed — its reader is not even consulted.
+  // never be transcript-OVERRIDDEN.
+  //
+  // This used to pin "its reader is not even consulted", which was a proxy that
+  // held only while the override was the reader's one consumer. The reader now
+  // has a second, legitimate one on every harness: the pre-send watermark and
+  // the harness's own API-error tag (src/chat/apierror.ts). So this pins the
+  // invariant itself, and more strongly than before: the reader answers nothing
+  // at send (watermark 0) and then a transcript that WOULD prove the prompt was
+  // accepted and answered — exactly what the codex override accepts — and the
+  // claude-code verdict must refuse it. If the override ever became reachable
+  // for claude-code, this turn would be rescued to Complete.
   test("claude-code swallow verdict is never transcript-overridden", async () => {
     const script = New("claude-code")
       .Idle()
@@ -255,20 +265,31 @@ describe("codex transcript-backed swallow override (real pty + fake harness)", (
       .Build();
     const conv = await openFake(script);
     open.add(conv);
-    let readerCalled = false;
+    const prompt = "This prompt will be swallowed";
+    let reads = 0;
     (
       conv.getAdapter() as unknown as { readTranscript: () => unknown }
     ).readTranscript = () => {
-      readerCalled = true;
-      return [];
+      reads++;
+      // First read is the pre-send watermark: nothing yet. Every later read
+      // offers positive proof beyond it.
+      return reads === 1
+        ? []
+        : [
+            { role: "user", text: prompt },
+            { role: "assistant", text: "ok" },
+          ];
     };
-    await sendOneTurn(conv, "This prompt will be swallowed");
+    await sendOneTurn(conv, prompt);
 
     const turn = await waitForTerminalTurn(conv, 4000);
     expect(turn.state).toBe(TurnStateErrored);
     expect(turn.reason).toContain("prompt not accepted");
+    expect(turn.reason).not.toContain("transcript-confirmed");
     expect(turn.text).toBe("");
-    expect(readerCalled).toBe(false);
+    // The proof was actually on offer — this is what makes the refusal above
+    // meaningful rather than vacuous.
+    expect(reads).toBeGreaterThan(1);
   });
 
   // 8. Normalization: a prompt wrapped in an IDE context tag matches the

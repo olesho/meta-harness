@@ -35,6 +35,16 @@ export interface StructuredTurnResult {
     /** Best-effort transcript read failure; present only when the read failed. */
     transcript_error?: string;
     /**
+     * The stable wall token for a turn the harness itself declared walled —
+     * "auth_required" | "usage_limited" | "billing_wall" — and ABSENT otherwise.
+     * Additive: absent means "not a wall", never "unknown", so a host that does
+     * not read it behaves exactly as before. Switch on this, not on `reason`,
+     * which is operator copy and may be reworded. Typed `string` rather than the
+     * chat TurnCode union because this file imports nothing by contract (see
+     * permission_mode). Mirrors harness-wrapper's StructuredTurnResult.Code.
+     */
+    code?: string;
+    /**
      * The permission rung the RUNNER LAUNCHED the harness at — descriptive
      * telemetry, NOT an authorization signal, and NOT a readback of the live
      * mode. A consumer asking "what is this agent allowed to do RIGHT NOW" for a

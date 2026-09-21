@@ -65,6 +65,7 @@ export function turnsFromEvents(events) {
             role: e.role || RoleSystem,
             text: e.text,
             timestamp: e.timestamp,
+            ...(e.apiError ? { apiError: e.apiError } : {}),
         });
     }
     return out;
@@ -101,6 +102,8 @@ export function toPublicJSON(e) {
         o.output = e.output;
     if (e.uuid)
         o.uuid = e.uuid;
+    if (e.apiError)
+        o.api_error = e.apiError;
     return o;
 }
 //# sourceMappingURL=event.js.map

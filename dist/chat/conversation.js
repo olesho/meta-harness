@@ -18,7 +18,8 @@ import { Context, isSentinel, wrap } from "../internal/async/index.js";
 import { ErrEmptySessionID, ErrSessionNotFound } from "../transcript/errors.js";
 import { stripIDEContextTags } from "../transcript/stripTags.js";
 import { answerKeys, findOption } from "./answerKeys.js";
-import { RoleUser, RoleAssistant, TurnStatePending, TurnStateComplete, TurnStateErrored, EventTurn, EventInputRequest, EventInputResolved, DispositionAnswer, DispositionDeny, HistorySourceTranscript, HistorySourceStore, ReasonAuthRequired, ReasonUsageLimited, newID, } from "./types.js";
+import { RoleUser, RoleAssistant, TurnStatePending, TurnStateComplete, TurnStateErrored, EventTurn, EventInputRequest, EventInputResolved, DispositionAnswer, DispositionDeny, HistorySourceTranscript, HistorySourceStore, ReasonAuthRequired, ReasonUsageLimited, CodeAuthRequired, CodeUsageLimited, newID, } from "./types.js";
+import { apiErrorVerdictFrom, turnReason } from "./apierror.js";
 import { ErrInvalidOptions, ErrUnknownHarness, ErrNoControl, ErrTurnInFlight, ErrClosed, ErrInputPending, ErrAuthRequired, ErrUnrecognizedDialog, ErrNoInputPending, ErrStaleInputRequest, ErrQuitUnsupported, ErrPermissionsUnsupported, ErrCodexPermissionsDisabled, ErrCodexHomeNotIsolated, ErrCodexPermissionsRaced, ErrPermissionPresetUnavailable, ErrPermissionModeUnsupported, ErrPermissionModeUnreachable, ErrPermissionModeStalled, ErrResumeUnsupported, ErrNoHarnessSession, } from "./errors.js";
 import { newControlQueue } from "./control.js";
 import { submitKeyForHarness, requiresPromptReadiness, readyForInput, authRequired, onboardingWall, usageLimitMessage, } from "./ready.js";
@@ -642,6 +643,11 @@ export class Conversation {
     // the sign-in menu). Returns the assistant turn id; the runTurn driver reads the
     // emitted Errored turn and surfaces its reason.
     async emitAuthRequiredTurn(text) {
+        // The prompt is deliberately NOT written to the harness here, so nothing it
+        // writes afterwards belongs to this turn. Clear the watermark rather than
+        // leave a previous turn's, which would let a stale tag speak for a turn
+        // that never reached the harness.
+        this.sentTranscriptWatermark = null;
         const now = new Date();
         const userTurn = {
             id: newID(),
@@ -664,6 +670,7 @@ export class Conversation {
             state: TurnStateErrored,
             text: "",
             reason: ReasonAuthRequired,
+            code: CodeAuthRequired,
             startedAt: now,
             completedAt: now,
             httpCode: 0,
@@ -2031,8 +2038,9 @@ export class Conversation {
                     // yielded no real reply on a logged-out / not-onboarded screen, is not a
                     // success — relabel it (usage-limit wins; its wall IS a non-empty reply,
                     // so authRelabel's empty-extraction gate would skip it).
-                    if (!this.usageLimitRelabel(turn, ev.snap))
-                        this.authRelabel(turn, ev.snap);
+                    // ...and ahead of both, whatever the harness itself recorded about
+                    // the turn (see relabelTerminal).
+                    this.relabelTerminal(turn, ev.snap);
                 }
                 break;
             case Blocked:
@@ -2052,10 +2060,20 @@ export class Conversation {
                 // status watcher pump stamps none), so fall back to the live screen, which
                 // still shows the banner after the harness exits.
                 const authText = ev.snap?.text ?? this.screen?.snapshot().text;
-                turn.reason =
-                    authText !== undefined && authRequired(this.opts.harness, authText)
-                        ? ReasonAuthRequired
-                        : ev.reason;
+                // The harness's own recorded verdict outranks the screen here too, and
+                // names the two failures no banner regex can — a billing wall and an
+                // org-policy refusal — which would otherwise arrive as "harness exited".
+                if (this.apiErrorRelabel(turn)) {
+                    // reason, code and text set by the relabel.
+                }
+                else if (authText !== undefined &&
+                    authRequired(this.opts.harness, authText)) {
+                    turn.reason = ReasonAuthRequired;
+                    turn.code = CodeAuthRequired;
+                }
+                else {
+                    turn.reason = ev.reason;
+                }
                 turn.httpCode = ev.httpCode ?? 0;
                 turn.retryAfter = ev.retryAfter ?? 0;
                 break;
@@ -2219,11 +2237,21 @@ export class Conversation {
                 // logged-out / re-auth banner, the turn didn't fail on its merits — the
                 // harness is logged out; record the canonical auth reason instead of the
                 // generic "prompt not accepted" one.
-                turn.reason = authRequired(this.opts.harness, snap.text)
-                    ? ReasonAuthRequired
-                    : this.opts.harness +
-                        ": prompt not accepted / no assistant output" +
-                        (diag !== "" ? "; " + diag : "");
+                // The harness's own tag names the failure if it recorded one; a
+                // logged-out banner is the fallback for paths with no transcript.
+                if (this.apiErrorRelabel(turn)) {
+                    // reason, code and text set by the relabel.
+                }
+                else if (authRequired(this.opts.harness, snap.text)) {
+                    turn.reason = ReasonAuthRequired;
+                    turn.code = CodeAuthRequired;
+                }
+                else {
+                    turn.reason =
+                        this.opts.harness +
+                            ": prompt not accepted / no assistant output" +
+                            (diag !== "" ? "; " + diag : "");
+                }
             }
             try {
                 await this.store.updateTurn(turn);
@@ -2250,8 +2278,7 @@ export class Conversation {
         // raw banner screen as its reply. Relabel it ReasonAuthRequired when no real
         // reply was extracted — or ReasonUsageLimited when the "reply" is a usage-limit
         // wall (which, being a non-empty extraction, would slip past authRelabel).
-        if (!this.usageLimitRelabel(turn, snap))
-            this.authRelabel(turn, snap);
+        this.relabelTerminal(turn, snap);
         try {
             await this.store.updateTurn(turn);
         }
@@ -2830,6 +2857,61 @@ export class Conversation {
             return false;
         turn.state = TurnStateErrored;
         turn.reason = ReasonAuthRequired;
+        turn.code = CodeAuthRequired;
+        turn.text = "";
+        return true;
+    }
+    // relabelTerminal applies the three relabels in STRENGTH order to a turn that
+    // reached a terminal point looking like a success, and reports whether any of
+    // them took it. The order is the whole point:
+    //   1. apiErrorRelabel — what the HARNESS recorded about its own API call. A
+    //      categorical statement, correlated to this turn by the pre-send watermark,
+    //      and the only one that can name a billing wall.
+    //   2. usageLimitRelabel — the quota wall, which claude paints as an assistant
+    //      bubble; not gated on an empty extraction, because the wall IS the
+    //      extraction, which is why it must precede the auth check.
+    //   3. authRelabel — a logged-out / onboarding screen with no real reply.
+    // Each declines cleanly, so a turn that really completed passes all three
+    // untouched. Port of harness-wrapper's relabelTerminal.
+    relabelTerminal(turn, snap) {
+        return (this.apiErrorRelabel(turn) ||
+            this.usageLimitRelabel(turn, snap) ||
+            this.authRelabel(turn, snap));
+    }
+    // apiErrorRelabel converts a turn the HARNESS tagged as failed into the
+    // matching terminal failure (see apierror.ts), and reports whether it did. It
+    // declines — leaving every existing path exactly as it was — whenever it cannot
+    // establish that a tag belongs to THIS turn: no transcript reader, no harness
+    // session id, no pre-send watermark, or no tagged entry beyond it.
+    //
+    // Deliberately synchronous, unlike harness-wrapper's, which pauses once and
+    // re-reads when the transcript READ fails. readTranscript is synchronous here,
+    // and a failed read yields no verdict — exactly the pre-existing behaviour — so
+    // the retry would buy nothing but a new await in two completion paths.
+    apiErrorRelabel(turn) {
+        if (!this.hasTranscriptReader())
+            return false;
+        const sessionID = this.session.harnessSessionID;
+        if (sessionID === "" || this.sentTranscriptWatermark === null)
+            return false;
+        let turns;
+        try {
+            turns = this.readTranscriptTurns(sessionID);
+        }
+        catch {
+            return false;
+        }
+        const v = apiErrorVerdictFrom(turns, this.sentTranscriptWatermark);
+        if (v === null)
+            return false;
+        turn.state = TurnStateErrored;
+        turn.reason = turnReason(v, this.opts.harness);
+        if (v.code !== undefined)
+            turn.code = v.code;
+        else
+            delete turn.code;
+        // The "reply" was the rendered error text; keeping it would hand the caller
+        // an error message as the turn's answer.
         turn.text = "";
         return true;
     }
@@ -2854,6 +2936,7 @@ export class Conversation {
             return false;
         turn.state = TurnStateErrored;
         turn.reason = `${ReasonUsageLimited} (${message})`;
+        turn.code = CodeUsageLimited;
         turn.text = "";
         return true;
     }
@@ -2871,6 +2954,15 @@ export class Conversation {
      * already extraction-backed (Claude Code), and the transcript must not
      * second-guess it. Structural probes, same pattern as assistantText().
      */
+    // hasTranscriptReader: the adapter can read its on-disk transcript at all.
+    // This — not transcriptOverrideEligible — gates the pre-send WATERMARK, which
+    // the API-error relabel needs on claude-code too. The swallow override keeps
+    // its own, narrower gate: transcriptProofOfCurrentTurn re-checks
+    // transcriptOverrideEligible itself, so widening this changes nothing there.
+    hasTranscriptReader() {
+        const a = this.adapter;
+        return a !== undefined && typeof a.readTranscript === "function";
+    }
     transcriptOverrideEligible() {
         // Runs on EVERY send (unlike the other structural probes, which only run
         // once a watcher is pumping), so it must tolerate adapter-less test
@@ -2886,15 +2978,20 @@ export class Conversation {
     }
     /**
      * The transcript turn count immediately before the in-flight submit — the
-     * pre-send watermark for transcriptProofOfCurrentTurn. readTranscript is
-     * synchronous, so send() pays no new await. Rules: not eligible → null (the
-     * proof gate declines before looking); empty harnessSessionID → 0 (fresh
+     * pre-send watermark. Two readers use it: transcriptProofOfCurrentTurn (the
+     * codex swallow override) and apiErrorRelabel (the harness's own failure tag,
+     * which claude-code writes). So it is gated on hasTranscriptReader, NOT on the
+     * override's narrower transcriptOverrideEligible — that gate excludes
+     * claude-code, and using it here silently disabled the tag relabel for the one
+     * harness that writes tags. The override still re-checks its own gate.
+     * readTranscript is synchronous, so send() pays no new await. Rules: no
+     * transcript reader → null; empty harnessSessionID → 0 (fresh
      * session, no prior history); a sentinel read failure (no rollout yet) → 0;
      * any other failure → null ("unknown" — the proof helper then declines
      * rather than guessing a lower bound). Never throws out of send().
      */
     captureTranscriptWatermark() {
-        if (!this.transcriptOverrideEligible())
+        if (!this.hasTranscriptReader())
             return null;
         if (this.session.harnessSessionID === "")
             return 0;
@@ -2997,6 +3094,11 @@ export class Conversation {
                 break; // stop: a later turn must not contaminate
             if (t.role !== RoleAssistant)
                 continue; // skip RoleSystem between the two
+            // A synthetic API-error entry has non-empty text — the RENDERED error — so
+            // without this it reads as proof the turn completed, and the turn is
+            // rescued into a success whose reply is "API Error: …". Not a reply.
+            if (t.apiError)
+                continue;
             if (t.text.trim() === "")
                 continue;
             replies.push(t.text);
